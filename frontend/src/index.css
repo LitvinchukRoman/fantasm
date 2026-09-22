@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  background: #f6f5f2;
+  color: #1c1b19;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: #141412;
+    color: #f3f1ea;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4rem 1.25rem;
+}
+
+.mark {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0.25rem 0 0;
+  font-size: 2.5rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.lead {
+  margin-top: 1rem;
+  font-size: 1.125rem;
+}
+
+.status,
+.hint {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.hint {
+  opacity: 0.75;
+}

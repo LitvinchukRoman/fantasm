@@ -1,0 +1,22 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Go
+backend/bin/
+*.exe
+*.test
+
+# Node
+node_modules/
+frontend/dist/
+legacy/node_modules/
+legacy/.next/
+legacy/out/
+legacy/*.tsbuildinfo
+*.log
