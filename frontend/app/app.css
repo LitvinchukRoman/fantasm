@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/*
+ * Токени теми — джерела за пріоритетом, який задав користувач:
+ * 1) raycast.com (frontend/pages/raycast.com/index.html) — головне джерело:
+ *    майже чорний фон, білий текст, нейтральні сірі D8D8D8, тонкі hairline-межі.
+ * 2) linear.app (frontend/pages/linear.app/index.html) — друге джерело:
+ *    точний near-black `#08090A` (meta theme-color), приглушений графіт
+ *    поверхонь `#2E2E32`, приглушений сірий текст `#9c9da1`.
+ * 3) Акцент — червоний Raycast `#FF6363` (rgb(255, 99, 99) з raycast.com),
+ *    не фіолетовий reflect. Hover трохи темніший, той самий відтінок.
+ *
+ * Одна тема (темна), один акцент — без інверсій секцій (frontend-design skill).
+ */
+@theme {
+  --color-bg: #08090a; /* linear.app theme-color meta */
+  --color-bg-soft: #0c0d10; /* той самий near-black, трохи світліший — для чергування секцій без стрибка теми */
+  --color-surface: #111216; /* картка — приглушений графіт linear.app (#2E2E32), затемнений під наш фон */
+  --color-surface-strong: #17181d; /* підняті картки / hover */
+  --color-border: rgb(255 255 255 / 8%); /* hairline-межа — raycast/linear */
+  --color-border-strong: rgb(255 255 255 / 14%);
+  --color-text: #edeef2; /* off-white, близько до linear.app #E2E4E7 */
+  --color-text-muted: #9ba1ac; /* linear.app #9c9da1 */
+  --color-text-faint: #6b7078;
+  --color-accent: #ff6363; /* raycast.com brand red */
+  --color-accent-strong: #ff4a4a; /* той самий відтінок, темніший hover */
+  --color-accent-soft: rgb(255 99 99 / 14%);
+  --color-negative: #ef4444; /* семантичний червоний — з паттерну clerk.com (заблоковано/недоступно), не декоративний акцент */
+
+  --radius-card: 20px;
+  --radius-control: 999px;
+
+  /* Override — Inter прийнятний, коли бриф явно просить linear/raycast-стиль
+     (frontend-design skill, розділ 4.1, override path). Системний стек без
+     зовнішнього <link> на Google Fonts. */
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Заголовок повноекранної сфери. Цифри з .t1 на Editions
+ * (National2, weight 400, line-height .96, tracking -.06em, ~80px).
+ * National2 з їхнього fonts-latin.woff2 не має кирилиці, тому сім'я тут Inter.
+ */
+.hero-display {
+  font-family: Inter, Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  font-size: clamp(3.25rem, 6.2vw, 5rem);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+}
+
+/*
+ * Текст не трансформується. Шторка — SVG: краї кривої зафіксовані на шві,
+ * прогинається лише центр (до 72px). Запас зверху дає вигин угору, не кліпаючи край.
+ */
+.page-sheet {
+  position: relative;
+  z-index: 10;
+  background: transparent;
+}
+
+.page-curtain {
+  position: absolute;
+  top: -96px;
+  right: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 96px);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.page-sheet-content {
+  position: relative;
+  z-index: 1;
+  padding-top: 18vh;
+}
+
+* {
+  border-color: var(--color-border);
+}
