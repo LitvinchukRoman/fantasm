@@ -3,15 +3,16 @@ import { useEffect, useState } from "react";
 const NAV_LINKS = [
   { href: "/ideas", label: "Ідеї" },
   { href: "/events", label: "Події" },
+  { href: "/guides", label: "Гайди" },
 ];
 
 /**
  * Навігація лежить поверх повноекранної сфери (fixed, прозора на герої).
  * Після скролу до сірої сторінки з'являється підкладка, щоб пункти не
- * зливались із контентом. Посилання "Ідеї"/"Події" з legacy nav, без "Гайди".
+ * зливались із контентом. Посилання: Ідеї, Події, Гайди.
  */
-export function Nav() {
-  const [solid, setSolid] = useState(false);
+export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
+  const [solid, setSolid] = useState(forceSolid);
 
   useEffect(() => {
     const onScroll = () => setSolid(window.scrollY > 24);
@@ -23,7 +24,7 @@ export function Nav() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-30 transition-colors duration-200 ${
-        solid
+        solid || forceSolid
           ? "border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur-md"
           : "border-b border-transparent bg-transparent"
       }`}

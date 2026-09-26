@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useRevealOnce } from "~/lib/use-reveal-once";
 
 /**
@@ -12,6 +12,19 @@ import { useRevealOnce } from "~/lib/use-reveal-once";
 
 const LINE_MS = 1400;
 const LEAD_MS = 280;
+
+/** Поява з затримкою. Ховання миттєве: інакше пізній пункт лишається читабельним крізь блюр, поки лінія ще не дійшла. */
+function revealStyle(show: boolean, delayMs: number): CSSProperties {
+  return {
+    opacity: show ? 1 : 0,
+    filter: show ? "blur(0px)" : "blur(12px)",
+    transform: show ? "translateY(0)" : "translateY(0.5rem)",
+    transitionProperty: "opacity, filter, transform",
+    transitionDuration: show ? "500ms" : "0ms",
+    transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)",
+    transitionDelay: show ? `${delayMs}ms` : "0ms",
+  };
+}
 
 type ChecklistItem = {
   title: string;
@@ -91,22 +104,14 @@ export function ChecklistX({
 
               <div className="min-w-0">
                 <p
-                  className="font-medium text-[var(--color-text)] transition-[opacity,filter] duration-500 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]"
-                  style={{
-                    opacity: show ? 1 : 0,
-                    filter: show ? "blur(0px)" : "blur(8px)",
-                    transitionDelay: `${delay}ms`,
-                  }}
+                  className="font-medium text-[var(--color-text)]"
+                  style={revealStyle(show, delay)}
                 >
                   {item.title}
                 </p>
                 <p
-                  className="mt-0.5 text-sm text-[var(--color-text-muted)] transition-[opacity,transform] duration-500 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]"
-                  style={{
-                    opacity: show ? 1 : 0,
-                    transform: show ? "translateY(0)" : "translateY(0.5rem)",
-                    transitionDelay: `${delay + 80}ms`,
-                  }}
+                  className="mt-0.5 text-sm text-[var(--color-text-muted)]"
+                  style={revealStyle(show, delay + 80)}
                 >
                   {item.caption}
                 </p>
