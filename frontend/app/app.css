@@ -160,6 +160,104 @@ body {
   border-bottom: 0;
 }
 
+/*
+ * Скло з вікна Raycast: blur 30px і внутрішня світла кромка
+ * (.styles-module__ytWjRG__material). Заливка прозора, щоб блюр було видно.
+ * Усередині картки лише два кольори тексту.
+ */
+.ray-window {
+  position: relative;
+  z-index: 0;
+  border-radius: 26px;
+  background: rgb(17 18 23 / 42%);
+  box-shadow:
+    inset 0 0.5px rgb(255 255 255 / 28%),
+    inset 0 0 0 1px rgb(255 255 255 / 10%);
+  transform: scale(1);
+  transform-origin: center center;
+  transition: transform 4s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(30px) saturate(1.25);
+}
+.ray-window.is-open {
+  z-index: 3;
+  transform: scale(1.06);
+}
+.ray-window.is-scrolling {
+  transition: none;
+}
+.ray-date {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: rgb(255 255 255 / 55%);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ray-vote {
+  display: inline-flex;
+  height: fit-content;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  color: rgb(255 255 255 / 55%);
+  font-size: 13px;
+  line-height: 16px;
+}
+.ray-vote:hover {
+  color: #fff;
+}
+.ray-kicker,
+.ray-window p,
+.ray-window footer {
+  color: rgb(255 255 255 / 55%);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ray-kicker {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ray-title,
+.ray-summary,
+.idea-head,
+.prose-guide {
+  overflow-wrap: anywhere;
+}
+.idea-head {
+  overflow: hidden;
+}
+.ray-title {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  min-height: calc(1.35em * 2);
+  max-height: calc(1.35em * 2);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  transition: color 0.45s ease;
+}
+.ray-window.is-hot .ray-title {
+  color: var(--color-accent);
+}
+.ray-summary {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  min-height: calc(1.4em * 2);
+  max-height: calc(1.4em * 2);
+}
+.ray-hit {
+  margin: -6px -18px;
+  padding: 6px 18px;
+}
+.ray-window footer {
+  margin-top: 14px;
+  font-size: 12px;
+}
+
 * {
   border-color: var(--color-border);
 }

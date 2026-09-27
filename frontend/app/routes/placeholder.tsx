@@ -1,10 +1,6 @@
 import { GuideFrame } from "~/components/guides/frame";
 
 const PAGES: Record<string, { title: string; body: string }> = {
-  "/ideas": {
-    title: "Ідеї",
-    body: "Стрічка ідей ще підключається до нового сервера. Опублікувати задум уже можна за посиланням нижче.",
-  },
   "/events": {
     title: "Події",
     body: "Список подій з’явиться тут, щойно бекенд віддасть стрічку. Поки що подій немає.",

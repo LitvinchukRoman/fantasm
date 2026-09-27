@@ -1,5 +1,6 @@
 import type { Config } from "@react-router/dev/config";
 import { getAllDocs } from "./app/lib/content";
+import { getIdeas } from "./app/lib/ideas";
 
 export default {
   // Публічні сторінки рендеряться сервером — вимога з FULL_CONTEXT.md
@@ -7,6 +8,7 @@ export default {
   ssr: true,
   async prerender() {
     const guides = getAllDocs().map((doc) => doc.path);
+    const ideas = getIdeas().map((idea) => `/ideas/${idea.slug}`);
     return [
       "/",
       "/guides",
@@ -16,6 +18,7 @@ export default {
       "/login",
       "/sitemap.xml",
       ...guides,
+      ...ideas,
     ];
   },
 } satisfies Config;
