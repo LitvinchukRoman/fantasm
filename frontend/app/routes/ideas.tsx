@@ -69,14 +69,16 @@ function FilterMenu({
         aria-expanded={open}
         onClick={onToggle}
         className={
-          "rounded-full px-3 py-1.5 text-sm " +
+          "group rounded-full px-3 py-1.5 text-sm transition-all duration-200 active:scale-[0.97] " +
           (open || value
             ? "bg-[var(--color-surface-strong)] text-[var(--color-text)]"
-            : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]")
+            : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-strong)] hover:text-[var(--color-text)]")
         }
       >
-        {label}
-        {value ? <span className="text-[var(--color-accent)]"> · {value}</span> : null}
+        <span className="inline-block transition-transform duration-200 group-hover:-translate-y-[0.5px]">
+          {label}
+          {value ? <span className="text-[var(--color-accent)]"> · {value}</span> : null}
+        </span>
       </button>
       {open && (
         <div className="absolute top-full z-30 mt-2 rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-[0_24px_48px_rgb(0_0_0/0.45)] max-sm:inset-x-0 max-sm:w-auto sm:left-0 sm:w-[min(20rem,calc(100vw-2.5rem))]">
@@ -295,8 +297,8 @@ export default function IdeasPage({ loaderData }: { loaderData: { ideas: Idea[] 
           <p className="mt-8 text-sm text-[var(--color-text-muted)]">Нічого не знайшлось за цими фільтрами.</p>
         ) : (
           <ul className="mt-8 space-y-4">
-            {ideas.map((idea) => (
-              <li key={idea.slug}>
+            {ideas.map((idea, index) => (
+              <li key={idea.slug} className="animate-fade-up" style={{ animationDelay: `${index * 60}ms` }}>
                 <IdeaCard idea={idea} />
               </li>
             ))}

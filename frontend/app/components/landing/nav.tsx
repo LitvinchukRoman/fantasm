@@ -25,7 +25,7 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
     <header
       className={`fixed inset-x-0 top-0 z-30 transition-colors duration-200 ${
         solid || forceSolid
-          ? "border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur-md"
+          ? "border-b border-[var(--color-border)] bg-[var(--color-bg)]/60 backdrop-blur-2xl saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
           : "border-b border-transparent bg-transparent"
       }`}
     >

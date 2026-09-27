@@ -16,6 +16,7 @@
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "isbot": "^5",
+    "motion": "^13.4.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

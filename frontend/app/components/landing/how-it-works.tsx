@@ -1,4 +1,5 @@
 import { IconPenLine, IconPulse, IconUsers } from "./icons";
+import { motion, useReducedMotion } from "motion/react";
 
 const STEPS = [
   {
@@ -18,14 +19,9 @@ const STEPS = [
   },
 ];
 
-/**
- * Реальна послідовність дій, тому нумерація тут доречна за змістом
- * (frontend-design skill: "numbered markers only if content really is a
- * sequence") — але без цифр-лейблів "01/02/03", які є типовим AI-тлом;
- * порядок передає сама верстка row/grid. Текст кроків — з
- * legacy/components/home/how-it-works.tsx, підпис "три кроки" звідти ж.
- */
 export function HowItWorks() {
+  const reduce = useReducedMotion();
+
   return (
     <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-24">
       <div className="flex items-end justify-between gap-4">
@@ -35,11 +31,18 @@ export function HowItWorks() {
         <span className="text-sm text-[var(--color-text-faint)]">три кроки</span>
       </div>
       <ol className="mt-8 grid gap-4 sm:grid-cols-3">
-        {STEPS.map((step) => {
+        {STEPS.map((step, index) => {
           const Icon = step.icon;
           return (
-            <li
+            <motion.li
               key={step.title}
+              animate={reduce ? undefined : { y: [0, -8, 0] }}
+              transition={{
+                duration: 6,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: index * 1.5,
+              }}
               className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6"
             >
               <span className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
@@ -51,7 +54,7 @@ export function HowItWorks() {
               <p className="mt-1.5 text-sm text-[var(--color-text-muted)]">
                 {step.body}
               </p>
-            </li>
+            </motion.li>
           );
         })}
       </ol>

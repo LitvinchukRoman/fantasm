@@ -44,10 +44,12 @@ export function HeroIntro() {
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <a
           href="/ideas/new"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] hover:scale-105 active:scale-[0.98]"
+          className="group inline-flex items-center gap-3 rounded-[var(--radius-control)] bg-[var(--color-accent)] py-2 pl-5 pr-2 text-sm font-medium text-[var(--color-bg)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-105 hover:bg-[var(--color-accent-strong)] active:scale-[0.98]"
         >
           Запропонувати ідею
-          <IconArrowRight className="size-4" />
+          <div className="flex size-7 items-center justify-center rounded-full bg-black/15 transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110">
+            <IconArrowRight className="size-4" />
+          </div>
         </a>
         <a
           href="/ideas"

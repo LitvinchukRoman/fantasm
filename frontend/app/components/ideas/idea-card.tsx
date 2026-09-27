@@ -177,16 +177,26 @@ export function IdeaCard({ idea }: { idea: Idea }) {
       </time>
       <VoteControl score={idea.votes} className="ray-vote" />
       <div className="min-w-0 flex-1 pr-24">
-        <p className="ray-kicker">
-          {CATEGORY_LABELS[idea.category]}
-          {idea.campus ? ` · ${idea.campus.label}` : ""}
-          {isEvent ? ` · ${eventWhen(idea.eventAt!)}` : ""}
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--color-text-muted)]">
+            {CATEGORY_LABELS[idea.category]}
+          </span>
+          {idea.campus && (
+            <span className="rounded-full bg-[var(--color-accent)]/15 px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--color-accent)]">
+              {idea.campus.label}
+            </span>
+          )}
+          {isEvent && (
+            <span className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--color-text-muted)]">
+              {eventWhen(idea.eventAt!)}
+            </span>
+          )}
           {idea.tags.map((tag) => (
-            <a key={tag.slug} href={`/ideas?tag=${tag.slug}`}>
-              {` · #${tag.label}`}
+            <a key={tag.slug} href={`/ideas?tag=${tag.slug}`} className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-strong)] hover:text-[var(--color-text)]">
+              #{tag.label}
             </a>
           ))}
-        </p>
+        </div>
         <a href={`/ideas/${idea.slug}`} className="block">
           <h2 className="ray-title">{idea.title}</h2>
           <p className="ray-summary">

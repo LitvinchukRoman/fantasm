@@ -17,8 +17,13 @@ const PRODUCT_LINKS = [
 export function CtaFooter() {
   return (
     <>
-      <section className="relative z-10 flex min-h-[78vh] flex-col items-center justify-center px-5 py-24 text-center sm:px-8">
-        <p className="mx-auto max-w-2xl text-2xl font-semibold text-white sm:text-3xl">
+      <section className="relative z-10 flex min-h-[78vh] flex-col items-center justify-center overflow-hidden px-5 py-24 text-center sm:px-8">
+        {/* Glow / Spotlight */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="h-[400px] w-[600px] rounded-[100%] bg-[var(--color-accent)] opacity-[0.12] blur-[120px]" />
+        </div>
+
+        <p className="relative z-10 mx-auto max-w-2xl text-2xl font-semibold text-white sm:text-3xl">
           Найкращі ідеї помирають не від браку таланту, а від браку людей
           поруч. Тут вони знаходять одне одного.
         </p>
