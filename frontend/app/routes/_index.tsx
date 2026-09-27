@@ -8,6 +8,7 @@ import { HowItWorks } from "~/components/landing/how-it-works";
 import { IdeaKinds } from "~/components/landing/idea-kinds";
 import { MohylianPerks } from "~/components/landing/mohylian-perks";
 import { Nav } from "~/components/landing/nav";
+import { PageLoader } from "~/components/ui/page-loader";
 
 export function meta() {
   return [
@@ -22,25 +23,27 @@ export function meta() {
 
 export default function Index() {
   return (
-    <div>
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <HeroBackground />
+    <PageLoader>
+      <div>
+        <div className="pointer-events-none fixed inset-0 z-0">
+          <HeroBackground />
+        </div>
+        <Nav />
+        <div className="relative z-10 h-dvh">
+          <Hero />
+        </div>
+        <CurvedSheet>
+          <HeroIntro />
+          <main>
+            <HowItWorks />
+            <HotFeedTeaser />
+            <MohylianPerks />
+            <IdeaKinds />
+            <EventsTeaser />
+          </main>
+        </CurvedSheet>
+        <CtaFooter />
       </div>
-      <Nav />
-      <div className="relative z-10 h-dvh">
-        <Hero />
-      </div>
-      <CurvedSheet>
-        <HeroIntro />
-        <main>
-          <HowItWorks />
-          <HotFeedTeaser />
-          <MohylianPerks />
-          <IdeaKinds />
-          <EventsTeaser />
-        </main>
-      </CurvedSheet>
-      <CtaFooter />
-    </div>
+    </PageLoader>
   );
 }
