@@ -327,3 +327,47 @@ body {
     animation: none;
   }
 }
+
+@keyframes input-focus-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 99, 99, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 99, 99, 0.6);
+  }
+}
+
+.input-focus-pulse:focus {
+  animation: input-focus-glow 2s ease-in-out infinite;
+  border-color: var(--color-accent) !important;
+  outline: none;
+}
+
+@keyframes btn-shimmer {
+  0% { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(150%) skewX(-20deg); }
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.25), transparent);
+  transform: translateX(-150%) skewX(-20deg);
+  transition: opacity 0.3s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn-shimmer:hover::after {
+  opacity: 1;
+  animation: btn-shimmer 1.2s ease-in-out infinite;
+}
