@@ -1,5 +1,4 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
-import { CustomCursor } from "./components/ui/cursor";
 
 import "./app.css";
 
@@ -22,7 +21,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <div className="noise-overlay" />
-        <CustomCursor />
         {children}
         <ScrollRestoration />
         <Scripts />
