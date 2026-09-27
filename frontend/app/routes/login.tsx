@@ -25,7 +25,7 @@ export default function LoginRoute() {
   };
 
   const containerVariants: Variants = {
-    hidden: { opacity: 1, y: 30, scale: 0.98 },
+    hidden: { opacity: 1, y: 0, scale: 1 },
     visible: { 
       opacity: 1, 
       y: 0, 
@@ -46,7 +46,7 @@ export default function LoginRoute() {
   };
 
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 15 },
+    hidden: { opacity: 1, y: 0 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
     shake: { opacity: 1, y: 0 }
   };
@@ -62,6 +62,7 @@ export default function LoginRoute() {
             </p>
           </motion.div>
 
+          <div className="auth-stage">
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <motion.div variants={itemVariants}>
               <label className="block text-sm font-medium text-[var(--color-text)]">
@@ -123,7 +124,7 @@ export default function LoginRoute() {
             </motion.div>
           </form>
 
-          <motion.div variants={itemVariants} className="my-6 flex items-center gap-3 text-[var(--color-text-faint)]">
+          <motion.div variants={itemVariants} className="auth-reveal my-6 flex items-center gap-3 text-[var(--color-text-faint)]">
             <div className="h-px flex-1 bg-[var(--color-border)]" />
             <span className="text-xs font-medium uppercase tracking-wider">
               або
@@ -131,7 +132,7 @@ export default function LoginRoute() {
             <div className="h-px flex-1 bg-[var(--color-border)]" />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="space-y-3">
+          <motion.div variants={itemVariants} className="auth-reveal space-y-3">
             <button
               type="button"
               className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
@@ -148,7 +149,7 @@ export default function LoginRoute() {
             </button>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="mt-8 text-center text-sm text-[var(--color-text-muted)]">
+          <motion.div variants={itemVariants} className="auth-reveal mt-8 text-center text-sm text-[var(--color-text-muted)]">
             Немає акаунту?{" "}
             <Link
               to="/register"
@@ -157,6 +158,7 @@ export default function LoginRoute() {
               Створити зараз
             </Link>
           </motion.div>
+          </div>
     </motion.div>
   );
 }

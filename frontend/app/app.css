@@ -54,7 +54,7 @@ html {
  * National2 з їхнього fonts-latin.woff2 не має кирилиці, тому сім'я тут Inter.
  */
 .hero-display {
-  font-family: Inter, Helvetica, Arial, sans-serif;
+  font-family: 'Onest', Helvetica, Arial, sans-serif;
   font-weight: 400;
   font-size: clamp(3.25rem, 6.2vw, 5rem);
   line-height: 0.96;
