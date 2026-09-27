@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
-import { motion, useMotionValue, useSpring, type Variants } from "motion/react";
+import { motion, type Variants } from "motion/react";
 import { IconArrowRight } from "../components/landing/icons";
 
 export const meta: MetaFunction = () => {
@@ -17,27 +17,6 @@ export default function RegisterRoute() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
-
-  // Spotlight mouse tracking
-  const mouseX = useMotionValue(
-    typeof window !== "undefined" ? window.innerWidth / 2 : 0
-  );
-  const mouseY = useMotionValue(
-    typeof window !== "undefined" ? window.innerHeight / 2 : 0
-  );
-
-  const springConfig = { damping: 25, stiffness: 150 };
-  const spotlightX = useSpring(mouseX, springConfig);
-  const spotlightY = useSpring(mouseY, springConfig);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX - 400);
-      mouseY.set(e.clientY - 300);
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [mouseX, mouseY]);
 
   const analyzePassword = (pass: string) => {
     if (!pass) return { score: 0, label: "", hint: "", color: "transparent", width: 0 };
@@ -85,7 +64,7 @@ export default function RegisterRoute() {
   };
 
   const containerVariants: Variants = {
-    hidden: { opacity: 0, y: 30, scale: 0.98 },
+    hidden: { opacity: 1, y: 0, scale: 1 },
     visible: { 
       opacity: 1, 
       y: 0, 
@@ -106,45 +85,13 @@ export default function RegisterRoute() {
   };
 
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 15 },
+    hidden: { opacity: 1, y: 0 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
     shake: { opacity: 1, y: 0 }
   };
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--color-bg)] py-12">
-      {/* Dynamic Background Spotlight */}
-      <motion.div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <motion.div
-          className="absolute h-[600px] w-[800px] rounded-[100%] bg-[var(--color-accent)] opacity-[0.08] blur-[120px]"
-          style={{ x: spotlightX, y: spotlightY }}
-        />
-      </motion.div>
-
-      <div className="relative z-10 w-full max-w-[400px] px-5">
-        <div className="mb-8 flex justify-center">
-          <Link
-            to="/"
-            viewTransition
-            className="flex items-center gap-2 transition-transform hover:scale-105"
-            aria-label="На головну"
-          >
-            <img
-              src="/favicon.jpg"
-              alt=""
-              width={36}
-              height={36}
-              className="size-9 rounded-xl shadow-md"
-            />
-          </Link>
-        </div>
-
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate={isShaking ? "shake" : "visible"}
-          className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[#0d0e11]/80 p-6 shadow-2xl backdrop-blur-2xl sm:p-8"
-        >
+    <motion.div variants={containerVariants} initial={false} animate={isShaking ? "shake" : "visible"}>
           <motion.div variants={itemVariants}>
             <h1 className="text-center text-xl font-semibold text-[var(--color-text)]">
               Створити акаунт
@@ -154,6 +101,7 @@ export default function RegisterRoute() {
             </p>
           </motion.div>
 
+          <div className="auth-stage">
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <motion.div variants={itemVariants}>
               <label className="block text-sm font-medium text-[var(--color-text)]">
@@ -363,7 +311,7 @@ export default function RegisterRoute() {
             </motion.div>
           </form>
 
-          <motion.div variants={itemVariants} className="my-6 flex items-center gap-3 text-[var(--color-text-faint)]">
+          <motion.div variants={itemVariants} className="auth-reveal my-6 flex items-center gap-3 text-[var(--color-text-faint)]">
             <div className="h-px flex-1 bg-[var(--color-border)]" />
             <span className="text-xs font-medium uppercase tracking-wider">
               або
@@ -371,71 +319,34 @@ export default function RegisterRoute() {
             <div className="h-px flex-1 bg-[var(--color-border)]" />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="space-y-3">
-            <MagneticButton className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]">
+          <motion.div variants={itemVariants} className="auth-reveal space-y-3">
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+            >
               <MicrosoftIcon />
               Увійти через Microsoft
-            </MagneticButton>
-            <MagneticButton className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]">
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+            >
               <GoogleIcon />
               Увійти через Google
-            </MagneticButton>
+            </button>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="mt-8 text-center text-sm text-[var(--color-text-muted)]">
+          <motion.div variants={itemVariants} className="auth-reveal mt-8 text-center text-sm text-[var(--color-text-muted)]">
             Вже маєте акаунт?{" "}
             <Link
               to="/login"
-              viewTransition
               className="inline-block font-medium text-[var(--color-text)] transition-all hover:scale-105 hover:text-[var(--color-accent)]"
             >
               Увійти
             </Link>
           </motion.div>
-        </motion.div>
-      </div>
-    </main>
-  );
-}
-
-function MagneticButton({
-  children,
-  className,
-  onClick,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  onClick?: () => void;
-}) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-
-  const handleMouse = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!ref.current) return;
-    const { clientX, clientY } = e;
-    const { height, width, left, top } = ref.current.getBoundingClientRect();
-    const middleX = clientX - (left + width / 2);
-    const middleY = clientY - (top + height / 2);
-    setPosition({ x: middleX * 0.15, y: middleY * 0.15 });
-  };
-
-  const reset = () => {
-    setPosition({ x: 0, y: 0 });
-  };
-
-  return (
-    <motion.button
-      ref={ref}
-      type="button"
-      onMouseMove={handleMouse}
-      onMouseLeave={reset}
-      animate={{ x: position.x, y: position.y }}
-      transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
-      className={className}
-      onClick={onClick}
-    >
-      {children}
-    </motion.button>
+          </div>
+    </motion.div>
   );
 }
 

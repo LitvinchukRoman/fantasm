@@ -4,7 +4,7 @@ import { getIdeas } from "~/lib/ideas";
 const siteUrl = "https://ideas.naukma.com";
 
 export function loader() {
-  const staticPaths = ["/", "/ideas", "/events", "/guides", "/login"];
+  const staticPaths = ["/", "/ideas", "/events", "/guides", "/login", "/register"];
   const ideaPaths = getIdeas().map((idea) => `/ideas/${idea.slug}`);
   const guidePaths = getAllDocs().map((doc) => ({
     path: doc.path,

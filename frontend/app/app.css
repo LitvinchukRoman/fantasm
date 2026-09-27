@@ -44,6 +44,9 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
 }
+html {
+  scrollbar-gutter: stable;
+}
 
 /*
  * Заголовок повноекранної сфери. Цифри з .t1 на Editions
@@ -161,22 +164,19 @@ body {
 }
 
 /*
- * Скло з вікна Raycast: blur 30px і внутрішня світла кромка
- * (.styles-module__ytWjRG__material). Заливка прозора, щоб блюр було видно.
+ * Картка ідеї: суцільна заливка #111217 і тонка світла кромка.
+ * Прозоре скло прибрано, бо крізь нього не читався текст.
  * Усередині картки лише два кольори тексту.
  */
 .ray-window {
   position: relative;
   z-index: 0;
   border-radius: 26px;
-  background: rgb(17 18 23 / 42%);
-  box-shadow:
-    inset 0 0.5px rgb(255 255 255 / 28%),
-    inset 0 0 0 1px rgb(255 255 255 / 10%);
+  background: #111217;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
   transform: scale(1);
   transform-origin: center center;
   transition: transform 4s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(30px) saturate(1.25);
 }
 .ray-window.is-open {
   z-index: 3;
@@ -296,13 +296,83 @@ body {
   background: var(--color-border-strong);
 }
 
-.noise-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
+/* Однаковий відступ згори і знизу. Форма лишається по центру,
+   коли панель виростає до реєстрації. */
+.auth-screen {
+  min-height: 100svh;
+  justify-content: safe center;
+  padding-top: 8.5rem;
+  padding-bottom: 8.5rem;
+}
+@media (min-width: 640px) {
+  .auth-screen {
+    padding-top: 10.5rem;
+    padding-bottom: 10.5rem;
+  }
+}
+
+/* Поле літер навколо логіну. Форма його закриває, краї згасають градієнтом. */
+.glyph-halo {
+  position: absolute;
+  z-index: 0;
+  display: grid;
+  overflow: hidden;
+  inset: -6rem -3.25rem;
+  align-content: start;
+  justify-content: center;
+  justify-items: center;
+  grid-auto-rows: 16px;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.04;
+  color: rgb(255 255 255 / 62%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  user-select: none;
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent, #000 7.5rem, #000 calc(100% - 7.5rem), transparent),
+    linear-gradient(to right, transparent, #000 4.5rem, #000 calc(100% - 4.5rem), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to bottom, transparent, #000 7.5rem, #000 calc(100% - 7.5rem), transparent),
+    linear-gradient(to right, transparent, #000 4.5rem, #000 calc(100% - 4.5rem), transparent);
+  mask-composite: intersect;
+}
+.glyph-halo .is-hot {
+  color: #ff6363;
+}
+@keyframes auth-field-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.auth-stage form > *,
+.auth-stage > .auth-reveal {
+  animation: auth-field-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.auth-stage form > *:nth-child(1) { animation-delay: 0.5s; }
+.auth-stage form > *:nth-child(2) { animation-delay: 0.58s; }
+.auth-stage form > *:nth-child(3) { animation-delay: 0.66s; }
+.auth-stage form > *:nth-child(4) { animation-delay: 0.74s; }
+.auth-stage form > *:nth-child(5) { animation-delay: 0.82s; }
+.auth-stage form > *:nth-child(6) { animation-delay: 0.9s; }
+.auth-stage > .auth-reveal:nth-child(2) { animation-delay: 0.98s; }
+.auth-stage > .auth-reveal:nth-child(3) { animation-delay: 1.06s; }
+.auth-stage > .auth-reveal:nth-child(4) { animation-delay: 1.14s; }
+@media (prefers-reduced-motion: reduce) {
+  .auth-stage form > *,
+  .auth-stage > .auth-reveal {
+    animation: none;
+  }
+}
+@media (min-width: 640px) {
+  .glyph-halo {
+    inset: -8rem -4.75rem;
+  }
 }
 
 @keyframes marquee {
