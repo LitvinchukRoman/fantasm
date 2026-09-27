@@ -30,7 +30,7 @@ export function EmptyState({
       <p className="mt-1.5 max-w-sm text-sm text-[var(--color-text-muted)]">{body}</p>
       <a
         href={actionHref}
-        className="mt-6 inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors duration-150 hover:bg-[var(--color-surface-strong)]"
+        className="mt-6 inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-150 hover:bg-[var(--color-surface-strong)] hover:scale-105"
       >
         {actionLabel}
       </a>

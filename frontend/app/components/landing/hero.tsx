@@ -44,14 +44,14 @@ export function HeroIntro() {
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <a
           href="/ideas/new"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] active:scale-[0.98]"
+          className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] hover:scale-105 active:scale-[0.98]"
         >
           Запропонувати ідею
           <IconArrowRight className="size-4" />
         </a>
         <a
           href="/ideas"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-5 py-2.5 text-sm font-medium text-[var(--color-text)] transition-colors duration-150 hover:bg-[var(--color-surface-strong)]"
+          className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-5 py-2.5 text-sm font-medium text-[var(--color-text)] transition-all duration-150 hover:bg-[var(--color-surface-strong)] hover:scale-105"
         >
           Дивитися ідеї
         </a>

@@ -42,7 +42,7 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
             <a
               key={link.href}
               href={link.href}
-              className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors duration-150 hover:text-[var(--color-text)]"
+              className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-all duration-150 hover:text-[var(--color-text)] hover:scale-105"
             >
               {link.label}
             </a>
@@ -52,13 +52,13 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
         <div className="flex items-center gap-2">
           <a
             href="/ideas/new"
-            className="hidden rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] transition-colors duration-200 hover:bg-[var(--color-accent-strong)] sm:inline-flex"
+            className="hidden rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] transition-all duration-200 hover:bg-[var(--color-accent-strong)] hover:scale-105 sm:inline-flex"
           >
             Ідея
           </a>
           <a
             href="/login"
-            className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors duration-200 hover:bg-[var(--color-surface-strong)]"
+            className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-200 hover:bg-[var(--color-surface-strong)] hover:scale-105"
           >
             Увійти
           </a>

@@ -18,7 +18,7 @@ export function HotFeedTeaser() {
         </h2>
         <a
           href="/ideas"
-          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline"
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline transition-transform hover:scale-105"
         >
           Усі ідеї
           <IconArrowRight className="size-4" />

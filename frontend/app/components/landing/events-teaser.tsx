@@ -17,7 +17,7 @@ export function EventsTeaser() {
         </h2>
         <a
           href="/events"
-          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline"
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline transition-transform hover:scale-105"
         >
           Усі події
           <IconArrowRight className="size-4" />

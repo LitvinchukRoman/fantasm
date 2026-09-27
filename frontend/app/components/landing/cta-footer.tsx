@@ -25,7 +25,7 @@ export function CtaFooter() {
         <div className="mt-8">
           <a
             href="/ideas/new"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] hover:scale-105 active:scale-[0.98]"
           >
             Поділитися ідеєю
             <IconArrowRight className="size-4" />
@@ -55,7 +55,7 @@ export function CtaFooter() {
             <ul className="space-y-2 text-sm text-[var(--color-text-muted)]">
               {PRODUCT_LINKS.map((link) => (
                 <li key={link.href}>
-                  <a href={link.href} className="transition-colors hover:text-[var(--color-text)]">
+                  <a href={link.href} className="transition-all hover:text-[var(--color-text)] hover:scale-105">
                     {link.label}
                   </a>
                 </li>
@@ -68,7 +68,7 @@ export function CtaFooter() {
           <span>© 2026 Fantasm</span>
           <a
             href="https://www.ukma.edu.ua"
-            className="transition-colors hover:text-[var(--color-text-muted)]"
+            className="transition-all hover:text-[var(--color-text-muted)] hover:scale-105"
           >
             НаУКМА
           </a>
