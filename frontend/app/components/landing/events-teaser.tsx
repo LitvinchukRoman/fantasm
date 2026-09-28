@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight, IconCalendar } from "./icons";
 
@@ -15,13 +16,14 @@ export function EventsTeaser() {
         <h2 className="text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
           Найближчі події
         </h2>
-        <a
-          href="/events"
+        <Link
+          to="/events"
+          prefetch="intent"
           className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline transition-transform hover:scale-105"
         >
           Усі події
           <IconArrowRight className="size-4" />
-        </a>
+        </Link>
       </div>
 
       <div className="mt-8">

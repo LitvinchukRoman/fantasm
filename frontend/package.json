@@ -6,16 +6,20 @@
   "scripts": {
     "dev": "react-router dev",
     "build": "react-router build",
-    "start": "react-router-serve ./build/server/index.js",
+    "build:preview": "IDEAS_SEED=true react-router build",
+    "start": "NODE_ENV=production node server.js",
     "typecheck": "react-router typegen && tsc",
     "lint": "oxlint"
   },
   "dependencies": {
+    "@react-router/express": "^7.18.4",
     "@react-router/node": "^7.9.0",
-    "@react-router/serve": "^7.9.0",
+    "compression": "^1.8.2",
+    "express": "^4.22.3",
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "isbot": "^5",
+    "morgan": "^1.12.1",
     "motion": "^13.4.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link, NavLink } from "react-router";
 
 const NAV_LINKS = [
   { href: "/ideas", label: "Ідеї" },
@@ -30,38 +31,44 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
       }`}
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-        <a href="/" className="flex items-center gap-2" aria-label="Fantasm, головна">
+        <Link to="/" prefetch="intent" className="flex items-center gap-2" aria-label="Fantasm, головна">
           <img src="/favicon.jpg" alt="" width={32} height={32} className="size-8 rounded-lg" />
           <span className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]">
             Fantasm
           </span>
-        </a>
+        </Link>
 
-        <nav className="hidden items-center gap-1 sm:flex">
+        <nav aria-label="Основна навігація" className="hidden items-center gap-1 sm:flex">
           {NAV_LINKS.map((link) => (
-            <a
+            <NavLink
               key={link.href}
-              href={link.href}
-              className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-all duration-150 hover:text-[var(--color-text)] hover:scale-105"
+              to={link.href}
+              prefetch="intent"
+              className={({ isActive }) =>
+                "rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium transition-all duration-150 hover:text-[var(--color-text)] hover:scale-105 " +
+                (isActive ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]")
+              }
             >
               {link.label}
-            </a>
+            </NavLink>
           ))}
         </nav>
 
         <div className="flex items-center gap-2">
-          <a
-            href="/ideas/new"
+          <Link
+            to="/ideas/new"
+            prefetch="intent"
             className="hidden rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] transition-all duration-200 hover:bg-[var(--color-accent-strong)] hover:scale-105 sm:inline-flex"
           >
             Ідея
-          </a>
-          <a
-            href="/login"
+          </Link>
+          <Link
+            to="/login"
+            prefetch="intent"
             className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-200 hover:bg-[var(--color-surface-strong)] hover:scale-105"
           >
             Увійти
-          </a>
+          </Link>
         </div>
       </div>
     </header>

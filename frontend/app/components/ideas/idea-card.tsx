@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { CATEGORY_LABELS, eventWhen, ideaStory, timeAgo, type Idea } from "~/lib/ideas";
+import { Link } from "react-router";
+import { RelativeTime } from "~/components/ui/relative-time";
+import { CATEGORY_LABELS, eventWhen, type IdeaCard as IdeaCardData } from "~/lib/ideas";
 
 const HOVER_PAUSE_MS = 400;
 const EXPAND_PAUSE_MS = 1500;
@@ -77,8 +79,9 @@ function IconPeople({ className }: { className?: string }) {
 /** Голос у лівому верхньому куті. Клік веде на вхід, доки немає сесії. */
 export function VoteControl({ score, className }: { score: number; className?: string }) {
   return (
-    <a
-      href="/login"
+    <Link
+      to="/login"
+      prefetch="intent"
       aria-label="Підтримати ідею"
       className={
         className ??
@@ -87,7 +90,7 @@ export function VoteControl({ score, className }: { score: number; className?: s
     >
       <IconUp className="size-5" />
       <span className="text-sm font-semibold tabular-nums">{score}</span>
-    </a>
+    </Link>
   );
 }
 
@@ -117,7 +120,7 @@ function TypedStory({ text, count }: { text: string; count: number }) {
   );
 }
 
-function AuthorRow({ idea }: { idea: Idea }) {
+function AuthorRow({ idea }: { idea: IdeaCardData }) {
   return (
     <div className="flex items-center justify-end gap-3">
       <span className="flex shrink-0 items-center gap-3 tabular-nums">
@@ -132,13 +135,13 @@ function AuthorRow({ idea }: { idea: Idea }) {
   );
 }
 
-export function IdeaCard({ idea }: { idea: Idea }) {
+export function IdeaCard({ idea }: { idea: IdeaCardData }) {
   const gate = useScrollGate();
   const [hover, setHover] = useState(false);
   const [typed, setTyped] = useState(0);
   const open = hover && gate.expand;
   const hot = hover && gate.hover;
-  const story = ideaStory(idea);
+  const { story } = idea;
   const isEvent = idea.category === "EVENT" && idea.eventAt;
 
   useEffect(() => {
@@ -172,9 +175,7 @@ export function IdeaCard({ idea }: { idea: Idea }) {
         (gate.expand ? "" : "is-scrolling")
       }
     >
-      <time className="ray-date" dateTime={idea.createdAt}>
-        {timeAgo(idea.createdAt)}
-      </time>
+      <RelativeTime className="ray-date" iso={idea.createdAt} />
       <VoteControl score={idea.votes} className="ray-vote" />
       <div className="min-w-0 flex-1 pr-24">
         <p className="ray-kicker">
@@ -182,17 +183,17 @@ export function IdeaCard({ idea }: { idea: Idea }) {
           {idea.campus ? ` · ${idea.campus.label}` : ""}
           {isEvent ? ` · ${eventWhen(idea.eventAt!)}` : ""}
           {idea.tags.map((tag) => (
-            <a key={tag.slug} href={`/ideas?tag=${tag.slug}`}>
+            <Link key={tag.slug} to={`/ideas?tag=${tag.slug}`} preventScrollReset>
               {` · #${tag.label}`}
-            </a>
+            </Link>
           ))}
         </p>
-        <a href={`/ideas/${idea.slug}`} className="block">
+        <Link to={`/ideas/${idea.slug}`} prefetch="intent" className="block">
           <h2 className="ray-title">{idea.title}</h2>
           <p className="ray-summary">
             {open && typed > 0 ? <TypedStory text={story} count={typed} /> : idea.summary}
           </p>
-        </a>
+        </Link>
         <footer>
           <AuthorRow idea={idea} />
         </footer>

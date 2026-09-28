@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight, IconFlame, IconPenLine } from "./icons";
 
@@ -16,13 +17,14 @@ export function HotFeedTeaser() {
           <IconFlame className="size-6 text-[var(--color-accent)]" />
           Гарячі зараз
         </h2>
-        <a
-          href="/ideas"
+        <Link
+          to="/ideas"
+          prefetch="intent"
           className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline transition-transform hover:scale-105"
         >
           Усі ідеї
           <IconArrowRight className="size-4" />
-        </a>
+        </Link>
       </div>
 
       <div className="mt-8">

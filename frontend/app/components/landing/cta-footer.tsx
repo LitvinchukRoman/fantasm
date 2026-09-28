@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { IconArrowRight } from "./icons";
 
 /**
@@ -23,13 +24,14 @@ export function CtaFooter() {
           поруч. Тут вони знаходять одне одного.
         </p>
         <div className="mt-8">
-          <a
-            href="/ideas/new"
+          <Link
+            to="/ideas/new"
+            prefetch="intent"
             className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-transform duration-150 hover:bg-[var(--color-accent-strong)] hover:scale-105 active:scale-[0.98]"
           >
             Поділитися ідеєю
             <IconArrowRight className="size-4" />
-          </a>
+          </Link>
         </div>
       </section>
 
@@ -55,9 +57,13 @@ export function CtaFooter() {
             <ul className="space-y-2 text-sm text-[var(--color-text-muted)]">
               {PRODUCT_LINKS.map((link) => (
                 <li key={link.href}>
-                  <a href={link.href} className="transition-all hover:text-[var(--color-text)] hover:scale-105">
+                  <Link
+                    to={link.href}
+                    prefetch="intent"
+                    className="transition-all hover:text-[var(--color-text)] hover:scale-105"
+                  >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

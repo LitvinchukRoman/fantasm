@@ -3,10 +3,14 @@ import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
 import { motion, type Variants } from "motion/react";
 import { IconArrowRight } from "../components/landing/icons";
+import { noindexSeo } from "~/lib/seo";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Створити акаунт | Fantasm" }];
-};
+export const meta: MetaFunction = () =>
+  noindexSeo({
+    title: "Створити акаунт, Fantasm",
+    description: "Реєстрація на Fantasm, платформі ідей НаУКМА.",
+    path: "/register",
+  });
 
 export default function RegisterRoute() {
   const [name, setName] = useState("");

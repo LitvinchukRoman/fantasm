@@ -1,44 +1,78 @@
+import { data, Link } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { VoteControl } from "~/components/ideas/idea-card";
-import { CATEGORY_LABELS, eventWhen, getIdea, timeAgo, type Idea } from "~/lib/ideas";
+import { RelativeTime } from "~/components/ui/relative-time";
+import { CATEGORY_LABELS, eventWhen } from "~/lib/ideas";
+import { getIdea, toView } from "~/lib/ideas.server";
+import { seo } from "~/lib/seo";
+import { breadcrumbList, compact, event } from "~/lib/structured-data";
+import type { Route } from "./+types/idea";
 
-export function loader({ params }: { params: { slug?: string } }) {
-  const idea = getIdea(params.slug ?? "");
-  if (!idea) throw new Response("Not found", { status: 404 });
-  return { idea };
+export function loader({ params }: Route.LoaderArgs) {
+  const idea = getIdea(params.slug);
+  if (!idea) throw data("Not found", { status: 404 });
+  return { idea: toView(idea) };
 }
 
-export function meta({ data }: { data: { idea: Idea } | undefined }) {
-  if (!data) return [{ title: "Ідею не знайдено" }];
-  return [
-    { title: data.idea.title },
-    { name: "description", content: data.idea.summary },
-  ];
+export function meta({ data }: Route.MetaArgs) {
+  if (!data) return [];
+  const { idea } = data;
+  const path = `/ideas/${idea.slug}`;
+  return seo({
+    title: `${idea.title}, Fantasm`,
+    description: idea.summary,
+    path,
+    type: "article",
+    publishedTime: idea.createdAt,
+    modifiedTime: idea.updatedAt,
+    noindex: idea.fixture,
+    jsonLd: compact([
+      breadcrumbList([
+        { name: "Головна", path: "/" },
+        { name: "Ідеї", path: "/ideas" },
+        { name: idea.title, path },
+      ]),
+      event(idea),
+    ]),
+  });
 }
 
-export default function IdeaPage({ loaderData }: { loaderData: { idea: Idea } }) {
+export default function IdeaPage({ loaderData }: Route.ComponentProps) {
   const { idea } = loaderData;
   const isEvent = idea.category === "EVENT" && idea.eventAt;
 
   return (
     <GuideFrame>
+      <nav aria-label="Хлібні крихти" className="mb-4 flex flex-wrap gap-x-2 text-sm text-[var(--color-text-faint)]">
+        <Link to="/" prefetch="intent" className="hover:text-[var(--color-text)]">
+          Головна
+        </Link>
+        <span aria-hidden="true">/</span>
+        <Link to="/ideas" prefetch="intent" className="hover:text-[var(--color-text)]">
+          Ідеї
+        </Link>
+      </nav>
       <article className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
           <section className="idea-head relative flex items-start gap-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 sm:p-7">
-            <time className="ray-date" dateTime={idea.createdAt}>
-              {timeAgo(idea.createdAt)}
-            </time>
+            <RelativeTime className="ray-date" iso={idea.createdAt} />
             <VoteControl score={idea.votes} className="ray-vote" />
             <div className="min-w-0 flex-1 pr-24">
               <p className="ray-kicker">
                 {CATEGORY_LABELS[idea.category]}
                 {idea.campus ? ` · ${idea.campus.label}` : ""}
-                {isEvent ? ` · ${eventWhen(idea.eventAt!)}` : ""}
+                {isEvent ? (
+                  <>
+                    {" · "}
+                    <time dateTime={idea.eventAt}>{eventWhen(idea.eventAt!)}</time>
+                  </>
+                ) : null}
+                {isEvent && idea.eventLocation ? ` · ${idea.eventLocation}` : ""}
                 {idea.tags.map((tag) => (
-                  <a key={tag.slug} href={`/ideas?tag=${tag.slug}`}>
+                  <Link key={tag.slug} to={`/ideas?tag=${tag.slug}`}>
                     {` · #${tag.label}`}
-                  </a>
+                  </Link>
                 ))}
               </p>
               <h1 className="ray-title">{idea.title}</h1>
@@ -47,15 +81,15 @@ export default function IdeaPage({ loaderData }: { loaderData: { idea: Idea } })
           </section>
 
           <section className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 sm:p-7">
-            <GuideMarkdown source={idea.body} />
+            <GuideMarkdown html={idea.html} />
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-[var(--color-text)]">Обговорення</h2>
             <p className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-text-muted)]">
-              <a href="/login" className="font-medium text-[var(--color-accent)] hover:underline">
+              <Link to="/login" prefetch="intent" className="font-medium text-[var(--color-accent)] hover:underline">
                 Увійдіть
-              </a>
+              </Link>
               , щоб долучитися до обговорення.
             </p>
             <p className="text-sm text-[var(--color-text-faint)]">Ще немає коментарів.</p>
@@ -71,12 +105,13 @@ export default function IdeaPage({ loaderData }: { loaderData: { idea: Idea } })
                   Шукають: <span className="text-[var(--color-text)]">{idea.needsRoles}</span>
                 </p>
               )}
-              <a
-                href="/login"
+              <Link
+                to="/login"
+                prefetch="intent"
                 className="inline-flex rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] hover:bg-[var(--color-accent-strong)]"
               >
                 Долучитися
-              </a>
+              </Link>
             </section>
           )}
           <section className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">

@@ -1,33 +1,23 @@
-import ReactMarkdown from "react-markdown";
-import rehypeSlug from "rehype-slug";
-import remarkGfm from "remark-gfm";
+import type { MouseEvent } from "react";
+import { useNavigate } from "react-router";
 
-export function GuideMarkdown({ source }: { source: string }) {
-  return (
-    <div className="prose-guide">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSlug]}
-        components={{
-          table: ({ children }) => (
-            <div className="guide-table">
-              <table>{children}</table>
-            </div>
-          ),
-          a: ({ href = "", children }) => {
-            const internal = href.startsWith("/") || href.startsWith("#");
-            return internal ? (
-              <a href={href}>{children}</a>
-            ) : (
-              <a href={href} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            );
-          },
-        }}
-      >
-        {source}
-      </ReactMarkdown>
-    </div>
-  );
+/**
+ * Готовий HTML з лоадера (див. lib/markdown.server.tsx). Внутрішні посилання
+ * в тексті — звичайні <a>, тому клік перехоплюється і йде через роутер,
+ * інакше кожен перехід між гайдами перезавантажував би сторінку повністю.
+ */
+export function GuideMarkdown({ html }: { html: string }) {
+  const navigate = useNavigate();
+
+  function onClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = (event.target as HTMLElement).closest("a");
+    const href = anchor?.getAttribute("href");
+    if (!anchor || !href || !href.startsWith("/") || href.startsWith("//") || anchor.target) return;
+    event.preventDefault();
+    navigate(href);
+  }
+
+  return <div className="prose-guide" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }

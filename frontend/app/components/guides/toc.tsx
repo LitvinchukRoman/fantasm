@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { TocItem } from "~/lib/content";
+import type { TocItem } from "~/lib/content-meta";
 
 /** Зміст: клік плавно веде до розділу, риска їде за активним пунктом із зазором до тексту. */
 export function Toc({ items }: { items: TocItem[] }) {
@@ -19,15 +19,28 @@ export function Toc({ items }: { items: TocItem[] }) {
         if (!el) continue;
         if (el.getBoundingClientRect().top <= offset) current = item.id;
       }
+      // Останні розділи часто коротші за екран і ніколи не доходять до лінії
+      // offset: внизу сторінки активний останній пункт, який уже видно.
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (atBottom) {
+        for (const item of items) {
+          const el = document.getElementById(item.id);
+          if (el && el.getBoundingClientRect().top < window.innerHeight) current = item.id;
+        }
+      }
       setActive(current);
     };
 
     pick();
     window.addEventListener("scroll", pick, { passive: true });
     window.addEventListener("resize", pick);
+    // Розгорнуте питання FAQ чи підвантажений шрифт змінюють висоту без події scroll.
+    const observer = new ResizeObserver(pick);
+    observer.observe(document.body);
     return () => {
       window.removeEventListener("scroll", pick);
       window.removeEventListener("resize", pick);
+      observer.disconnect();
     };
   }, [items]);
 

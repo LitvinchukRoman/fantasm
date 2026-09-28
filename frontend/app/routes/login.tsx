@@ -3,10 +3,10 @@ import { Link } from "react-router";
 import { useState } from "react";
 import { motion, type Variants } from "motion/react";
 import { IconArrowRight } from "../components/landing/icons";
+import { noindexSeo } from "~/lib/seo";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Увійти | Fantasm" }];
-};
+export const meta: MetaFunction = () =>
+  noindexSeo({ title: "Увійти, Fantasm", description: "Вхід до Fantasm, платформи ідей НаУКМА.", path: "/login" });
 
 export default function LoginRoute() {
   const [email, setEmail] = useState("");

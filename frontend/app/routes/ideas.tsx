@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { IdeaCard } from "~/components/ideas/idea-card";
-import { CATEGORY_LABELS, getIdeas, NAUKMA, type Idea, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
+import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
+import { getIdeas, toCard } from "~/lib/ideas.server";
+import { seo } from "~/lib/seo";
+import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
+import { useHydrated } from "~/lib/use-hydrated";
+import type { Route } from "./+types/ideas";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as IdeaCategory[];
 
@@ -126,25 +132,90 @@ function SpaceLines() {
   );
 }
 
+const TITLE = "Ідеї, Fantasm";
+const DESCRIPTION = "Стрічка ідей спільноти: стартапи, події, клуби й волонтерство.";
+
 export function loader() {
-  return { ideas: getIdeas() };
+  return { ideas: getIdeas().map(toCard) };
 }
 
-export function meta() {
-  return [
-    { title: "Ідеї, Fantasm" },
-    { name: "description", content: "Стрічка ідей спільноти: стартапи, події, клуби й волонтерство." },
-  ];
+/** Фільтри живуть у query-рядку і застосовуються на клієнті: лоадер від них не залежить. */
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (currentUrl.pathname === nextUrl.pathname) return false;
+  return defaultShouldRevalidate;
 }
 
-export default function IdeasPage({ loaderData }: { loaderData: { ideas: Idea[] } }) {
+export function meta({ data }: Route.MetaArgs) {
+  const indexable = data?.ideas.filter((idea) => !idea.fixture) ?? [];
+  return seo({
+    title: TITLE,
+    description: DESCRIPTION,
+    // Відфільтровані варіанти (?tag=…) — та сама сторінка, canonical завжди без query.
+    path: "/ideas",
+    jsonLd: [
+      collectionPage({ name: TITLE, description: DESCRIPTION, path: "/ideas" }),
+      breadcrumbList([
+        { name: "Головна", path: "/" },
+        { name: "Ідеї", path: "/ideas" },
+      ]),
+      ...(indexable.length > 0
+        ? [itemList(indexable.map((idea) => ({ name: idea.title, path: `/ideas/${idea.slug}` })))]
+        : []),
+    ],
+  });
+}
+
+const SORT_KEYS: SortKey[] = ["new", "old", "votes"];
+
+function readFilters(params: URLSearchParams) {
+  const type = params.get("type")?.toUpperCase() as IdeaCategory | undefined;
+  const date = params.get("date");
+  const campus = params.get("campus");
+  const sort = params.get("sort") as SortKey | null;
+  return {
+    category: type && CATEGORIES.includes(type) ? type : null,
+    dateWindow: (date === "7" || date === "30" ? date : "all") as DateWindow,
+    campus: (campus === "naukma" || campus === "none" ? campus : "all") as CampusFilter,
+    sort: sort && SORT_KEYS.includes(sort) ? sort : ("new" as SortKey),
+    tags: params.getAll("tag"),
+  };
+}
+
+type Filters = ReturnType<typeof readFilters>;
+
+function writeFilters(filters: Filters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.category) params.set("type", filters.category.toLowerCase());
+  if (filters.dateWindow !== "all") params.set("date", filters.dateWindow);
+  if (filters.campus !== "all") params.set("campus", filters.campus);
+  if (filters.sort !== "new") params.set("sort", filters.sort);
+  for (const tag of filters.tags) params.append("tag", tag);
+  return params;
+}
+
+const EMPTY_FILTERS = readFilters(new URLSearchParams());
+
+export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuId | null>(null);
-  const [category, setCategory] = useState<IdeaCategory | null>(null);
-  const [dateWindow, setDateWindow] = useState<DateWindow>("all");
-  const [campus, setCampus] = useState<CampusFilter>("all");
-  const [sort, setSort] = useState<SortKey>("new");
-  const [tags, setTags] = useState<string[]>([]);
+  // Точка відліку для «за 7/30 днів»; фільтр дати діє лише після гідрації.
+  const [now] = useState(() => Date.now());
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Пререндерений HTML зібраний без query: до гідрації рендеримо стрічку без
+  // фільтрів, щоб розмітка збіглася, а фільтри з URL застосовуємо одразу після.
+  const hydrated = useHydrated();
+  const filters = hydrated ? readFilters(searchParams) : EMPTY_FILTERS;
+  const { category, dateWindow, campus, sort, tags } = filters;
+
+  function update(patch: Partial<Filters>) {
+    setSearchParams(writeFilters({ ...filters, ...patch }), { replace: true, preventScrollReset: true });
+  }
+  const setCategory = (value: IdeaCategory | null) => update({ category: value });
+  const setDateWindow = (value: DateWindow) => update({ dateWindow: value });
+  const setCampus = (value: CampusFilter) => update({ campus: value });
+  const setSort = (value: SortKey) => update({ sort: value });
+  const setTags = (next: string[] | ((current: string[]) => string[])) =>
+    update({ tags: typeof next === "function" ? next(tags) : next });
 
   const tagOptions: IdeaTag[] = [
     ...new Map(loaderData.ideas.flatMap((idea) => idea.tags).map((tag) => [tag.slug, tag])).values(),
@@ -176,7 +247,6 @@ export default function IdeasPage({ loaderData }: { loaderData: { ideas: Idea[] 
     };
   }
 
-  const now = Date.now();
   const ideas = loaderData.ideas
     .filter((idea) => {
       if (category && idea.category !== category) return false;
@@ -278,11 +348,7 @@ export default function IdeasPage({ loaderData }: { loaderData: { ideas: Idea[] 
             <button
               type="button"
               onClick={() => {
-                setCategory(null);
-                setDateWindow("all");
-                setCampus("all");
-                setSort("new");
-                setTags([]);
+                setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
                 setMenu(null);
               }}
               className="px-3 py-1.5 text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text)]"

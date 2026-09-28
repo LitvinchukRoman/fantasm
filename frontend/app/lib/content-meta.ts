@@ -14,3 +14,50 @@ export const HUBS: Record<HubSlug, { label: string; tagline: string }> = {
 export function isHubSlug(value: string): value is HubSlug {
   return (HUB_SLUGS as readonly string[]).includes(value);
 }
+
+export interface Faq {
+  q: string;
+  a: string;
+}
+export interface Cta {
+  label: string;
+  href: string;
+  note?: string;
+}
+export interface Frontmatter {
+  title: string;
+  description: string;
+  publishedAt: string;
+  updatedAt: string;
+  keywords?: string[];
+  faq?: Faq[];
+  cta?: Cta;
+  related?: string[];
+  order?: number;
+  widget?: string;
+}
+export interface TocItem {
+  depth: 2 | 3;
+  text: string;
+  id: string;
+}
+export interface DocLink {
+  title: string;
+  description: string;
+  path: string;
+}
+
+/**
+ * Те, що лоадер статті віддає клієнту: markdown уже відрендерений у `html`,
+ * сирий `body` не серіалізується вдруге поруч із готовою розміткою.
+ */
+export interface DocView {
+  hub: HubSlug;
+  slug: string;
+  isPillar: boolean;
+  path: string;
+  frontmatter: Frontmatter;
+  html: string;
+  readingMinutes: number;
+  toc: TocItem[];
+}

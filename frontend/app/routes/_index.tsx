@@ -9,16 +9,17 @@ import { IdeaKinds } from "~/components/landing/idea-kinds";
 import { MohylianPerks } from "~/components/landing/mohylian-perks";
 import { Nav } from "~/components/landing/nav";
 import { PageLoader } from "~/components/ui/page-loader";
+import { seo } from "~/lib/seo";
+import { organization, website } from "~/lib/structured-data";
 
 export function meta() {
-  return [
-    { title: "Fantasm, платформа ідей Києво-Могилянської академії" },
-    {
-      name: "description",
-      content:
-        "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
-    },
-  ];
+  return seo({
+    title: "Fantasm, платформа ідей Києво-Могилянської академії",
+    description:
+      "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
+    path: "/",
+    jsonLd: [website(), organization()],
+  });
 }
 
 export default function Index() {
