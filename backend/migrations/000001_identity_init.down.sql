@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS external_identities;
+DROP TABLE IF EXISTS users;
