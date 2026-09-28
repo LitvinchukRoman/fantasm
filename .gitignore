@@ -20,3 +20,5 @@ legacy/.next/
 legacy/out/
 legacy/*.tsbuildinfo
 *.log
+
+CLAUDE.md

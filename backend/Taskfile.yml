@@ -1,0 +1,29 @@
+version: "3"
+
+dotenv: [".env"]
+
+tasks:
+  run:
+    cmds:
+      - go run ./cmd/api
+
+  db-up:
+    cmds:
+      - docker compose up -d --wait postgres
+
+  db-down:
+    cmds:
+      - docker compose down
+
+  migrate-up:
+    cmds:
+      - migrate -path {{.MIGRATIONS_DIR | default "migrations"}} -database "$DATABASE_URL" up
+
+  migrate-down:
+    cmds:
+      - migrate -path {{.MIGRATIONS_DIR | default "migrations"}} -database "$DATABASE_URL" down 1
+
+  migrate-new:
+    desc: "task migrate-new -- <name>"
+    cmds:
+      - migrate create -ext sql -dir migrations -seq {{.CLI_ARGS}}
