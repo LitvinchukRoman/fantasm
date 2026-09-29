@@ -1,7 +1,7 @@
 import type { DocView, Faq } from "./content-meta";
 import { HUBS } from "./content-meta";
 import { NAUKMA, type IdeaView } from "./ideas";
-import { SITE_LANGUAGE, SITE_LOGO, SITE_NAME, SITE_URL, absoluteUrl, type JsonLd } from "./seo";
+import { DEFAULT_OG_BASE, OG_SIZES, SITE_LANGUAGE, SITE_LOGO, SITE_LOGO_SIZE, SITE_NAME, SITE_URL, absoluteUrl, ogBase, type JsonLd, type OgRatio } from "./site";
 
 /**
  * Schema.org розмітка з тих самих даних лоадера, що й сторінка. Правило Google:
@@ -11,6 +11,7 @@ import { SITE_LANGUAGE, SITE_LOGO, SITE_NAME, SITE_URL, absoluteUrl, type JsonLd
 const CONTEXT = "https://schema.org";
 const ORG_ID = `${SITE_URL}/#organization`;
 const SITE_ID = `${SITE_URL}/#website`;
+const NAUKMA_ID = `${SITE_URL}/#naukma`;
 
 const NAUKMA_ADDRESS = {
   "@type": "PostalAddress",
@@ -24,15 +25,33 @@ function organizationRef() {
   return { "@id": ORG_ID };
 }
 
+/** Google радить для Article три пропорції зображення (16:9, 4:3, 1:1) шириною від 1200 px. */
+function imageObjects(base: string): JsonLd[] {
+  return (["16x9", "4x3", "1x1"] as OgRatio[]).map((ratio) => ({
+    "@type": "ImageObject",
+    url: absoluteUrl(`${base}-${ratio}.jpg`),
+    width: OG_SIZES[ratio].width,
+    height: OG_SIZES[ratio].height,
+  }));
+}
+
 export function organization(): JsonLd {
   return {
     "@context": CONTEXT,
     "@type": "Organization",
     "@id": ORG_ID,
     name: SITE_NAME,
+    alternateName: ["Fantasm NaUKMA", "Ideas NaUKMA"],
     url: `${SITE_URL}/`,
-    logo: absoluteUrl(SITE_LOGO),
+    logo: {
+      "@type": "ImageObject",
+      url: absoluteUrl(SITE_LOGO),
+      width: SITE_LOGO_SIZE,
+      height: SITE_LOGO_SIZE,
+    },
     description: "Платформа ідей спільноти Києво-Могилянської академії.",
+    areaServed: "UA",
+    knowsLanguage: SITE_LANGUAGE,
   };
 }
 
@@ -42,10 +61,81 @@ export function website(): JsonLd {
     "@type": "WebSite",
     "@id": SITE_ID,
     name: SITE_NAME,
+    alternateName: ["NaUKMA Ideas", "ideas.naukma.com"],
     url: `${SITE_URL}/`,
     inLanguage: SITE_LANGUAGE,
     publisher: organizationRef(),
   };
+}
+
+/**
+ * Сутність, про яку розділ «Кампус»: допомагає Google звʼязати сторінки з
+ * університетом. `sameAs` лише на Вікіпедію, інших офіційних URL не вигадуємо.
+ */
+export function naukma(): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "CollegeOrUniversity",
+    "@id": NAUKMA_ID,
+    name: "Національний університет «Києво-Могилянська академія»",
+    alternateName: ["НаУКМА", "Києво-Могилянська академія", "NaUKMA"],
+    address: NAUKMA_ADDRESS,
+    sameAs: ["https://uk.wikipedia.org/wiki/Національний_університет_«Києво-Могилянська_академія»"],
+  };
+}
+
+/** Вузол самої сторінки: звʼязує крихти, головне зображення і сайт. */
+export function webPage({
+  path,
+  name,
+  description,
+  base = DEFAULT_OG_BASE,
+  type = "WebPage",
+  datePublished,
+  dateModified,
+  breadcrumb = true,
+}: {
+  path: string;
+  name: string;
+  description: string;
+  base?: string;
+  type?: "WebPage" | "CollectionPage" | "ProfilePage";
+  datePublished?: string;
+  dateModified?: string;
+  breadcrumb?: boolean;
+}): JsonLd {
+  const url = absoluteUrl(path);
+  const [primary] = imageObjects(base);
+  return {
+    "@context": CONTEXT,
+    "@type": type,
+    "@id": url,
+    url,
+    name,
+    description,
+    inLanguage: SITE_LANGUAGE,
+    isPartOf: { "@id": SITE_ID },
+    primaryImageOfPage: primary,
+    ...(breadcrumb ? { breadcrumb: { "@id": `${url}#breadcrumb` } } : {}),
+    ...(datePublished ? { datePublished } : {}),
+    ...(dateModified ? { dateModified } : {}),
+  };
+}
+
+/** Один `@graph` на сторінку: `@id` не резолвиться між різними сторінками, тож вузли сайту йдуть у кожну. */
+export function graph(items: JsonLd[]): JsonLd {
+  const seen = new Set<string>();
+  const nodes: JsonLd[] = [];
+  for (const item of items) {
+    const { "@context": _context, ...node } = item;
+    const id = typeof node["@id"] === "string" ? node["@id"] : null;
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    nodes.push(node);
+  }
+  return { "@context": CONTEXT, "@graph": nodes };
 }
 
 export type Crumb = { name: string; path: string };
@@ -54,6 +144,7 @@ export function breadcrumbList(crumbs: Crumb[]): JsonLd {
   return {
     "@context": CONTEXT,
     "@type": "BreadcrumbList",
+    "@id": `${absoluteUrl(crumbs[crumbs.length - 1]?.path ?? "/")}#breadcrumb`,
     itemListElement: crumbs.map((crumb, index) => ({
       "@type": "ListItem",
       position: index + 1,
@@ -80,21 +171,47 @@ export function article(doc: DocView): JsonLd {
     "@context": CONTEXT,
     "@type": "Article",
     "@id": `${url}#article`,
-    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    mainEntityOfPage: { "@id": url },
     // Google обрізає headline довше 110 символів.
     headline: fm.title.slice(0, 110),
+    ...(fm.seoTitle ? { alternativeHeadline: fm.seoTitle } : {}),
     description: fm.description,
     inLanguage: SITE_LANGUAGE,
     datePublished: fm.publishedAt,
     dateModified: fm.updatedAt ?? fm.publishedAt,
-    image: [absoluteUrl(SITE_LOGO)],
+    image: imageObjects(ogBase(doc.path, doc.isPillar)),
+    thumbnailUrl: absoluteUrl(`${ogBase(doc.path, doc.isPillar)}-16x9.jpg`),
     author: organizationRef(),
     publisher: organizationRef(),
     isPartOf: { "@id": SITE_ID },
+    isAccessibleForFree: true,
     articleSection: HUBS[doc.hub].label,
     ...(fm.keywords?.length ? { keywords: fm.keywords.join(", ") } : {}),
+    wordCount: doc.words,
     timeRequired: `PT${doc.readingMinutes}M`,
+    ...(doc.sources.length ? { citation: doc.sources } : {}),
+    ...(doc.hub === "campus" ? { about: { "@id": NAUKMA_ID } } : {}),
   };
+}
+
+/** Усі вузли статті чи хабу одним викликом; роути лише додають специфічне (ItemList). */
+export function docNodes(doc: DocView): JsonLd[] {
+  const fm = doc.frontmatter;
+  return compact([
+    webPage({
+      path: doc.path,
+      name: fm.seoTitle ?? fm.title,
+      description: fm.description,
+      base: ogBase(doc.path, doc.isPillar),
+      type: doc.isPillar ? "CollectionPage" : "WebPage",
+      datePublished: fm.publishedAt,
+      dateModified: fm.updatedAt ?? fm.publishedAt,
+    }),
+    article(doc),
+    breadcrumbList(docCrumbs(doc)),
+    doc.hub === "campus" ? naukma() : null,
+    faqPage(fm.faq ?? []),
+  ]);
 }
 
 export function faqPage(items: Faq[]): JsonLd | null {
@@ -124,15 +241,7 @@ export function itemList(items: { name: string; path: string }[]): JsonLd {
 }
 
 export function collectionPage({ name, description, path }: { name: string; description: string; path: string }): JsonLd {
-  return {
-    "@context": CONTEXT,
-    "@type": "CollectionPage",
-    name,
-    description,
-    url: absoluteUrl(path),
-    inLanguage: SITE_LANGUAGE,
-    isPartOf: { "@id": SITE_ID },
-  };
+  return webPage({ path, name, description, type: "CollectionPage" });
 }
 
 /**
@@ -155,7 +264,7 @@ export function event(idea: IdeaView): JsonLd | null {
     eventStatus: "https://schema.org/EventScheduled",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     inLanguage: SITE_LANGUAGE,
-    image: [absoluteUrl(SITE_LOGO)],
+    image: imageObjects(DEFAULT_OG_BASE).map((image) => image.url as string),
     location: {
       "@type": "Place",
       name: idea.eventLocation || "Національний університет «Києво-Могилянська академія»",

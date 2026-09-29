@@ -18,6 +18,8 @@ export interface Doc {
   frontmatter: Frontmatter;
   body: string;
   readingMinutes: number;
+  words: number;
+  sources: string[];
   toc: TocItem[];
 }
 
@@ -51,9 +53,20 @@ function buildToc(body: string): TocItem[] {
   return out;
 }
 
+function countWords(content: string) {
+  return content.trim().split(/\s+/).filter(Boolean).length;
+}
+
 function readingMinutes(content: string) {
-  const words = content.trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words / 180));
+  return Math.max(1, Math.round(countWords(content) / 180));
+}
+
+/** Зовнішні посилання з розділу «Джерела» / «Рекомендовані джерела» (до наступного `## `). */
+function extractSources(body: string): string[] {
+  const match = /^##\s+(?:Рекомендовані\s+)?джерела\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/im.exec(body);
+  if (!match) return [];
+  const urls = match[1].match(/https?:\/\/[^\s)>\]]+/g) ?? [];
+  return [...new Set(urls.map((url) => url.replace(/[.,;]+$/, "")))];
 }
 
 // Пререндер викликає ті самі файли з кожної сторінки (related, списки хабу).
@@ -73,6 +86,8 @@ function parseFile(hub: HubSlug, slug: string, file: string): Doc {
     frontmatter: data as Frontmatter,
     body: content,
     readingMinutes: readingMinutes(content),
+    words: countWords(content),
+    sources: extractSources(content),
     toc: buildToc(content),
   };
   cache.set(file, { mtimeMs, doc });

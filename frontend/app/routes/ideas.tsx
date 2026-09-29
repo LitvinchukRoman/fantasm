@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
-import { GuideFrame } from "~/components/guides/frame";
-import { IdeaCard } from "~/components/ideas/idea-card";
+import { CurvedRows } from "~/components/ideas/curved-rows";
+import { IdeaRow } from "~/components/ideas/idea-row";
+import { IdeasBackground } from "~/components/ideas/ideas-background";
+import { Nav } from "~/components/landing/nav";
 import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
 import { getIdeas, toCard } from "~/lib/ideas.server";
 import { seo } from "~/lib/seo";
@@ -60,12 +62,15 @@ function FilterMenu({
   value,
   open,
   onToggle,
+  up = false,
   children,
 }: {
   label: string;
   value?: string;
   open: boolean;
   onToggle: () => void;
+  /** Випадає вгору й вирівнюється по правому краю: для панелі в нижньому правому куті. */
+  up?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -85,7 +90,7 @@ function FilterMenu({
         {value ? <span className="text-[var(--color-accent)]"> · {value}</span> : null}
       </button>
       {open && (
-        <div className="absolute top-full z-30 mt-2 rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-[0_24px_48px_rgb(0_0_0/0.45)] max-sm:inset-x-0 max-sm:w-auto sm:left-0 sm:w-[min(20rem,calc(100vw-2.5rem))]">
+        <div data-curve-ignore className={(up ? "absolute bottom-full right-0 z-30 mb-3" : "absolute top-full z-30 mt-2 sm:left-0") + " rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-[0_24px_48px_rgb(0_0_0/0.45)] max-sm:inset-x-0 max-sm:w-auto sm:w-[min(20rem,calc(100vw-2.5rem))]"}>
           {children}
         </div>
       )}
@@ -93,43 +98,25 @@ function FilterMenu({
   );
 }
 
-/** Площина з прямих ліній. Сірий той самий, що ореол сфери на головній. */
-function SpaceLines() {
-  const vanishX = 68;
-  const vanishY = 34;
-  const across = [96, 86, 77, 69, 62, 56, 51, 46, 42, 38];
-  const depth = [-8, 8, 22, 36, 50, 64, 78, 92, 108];
-  const stroke = {
-    stroke: "#d8d8d8",
-    strokeWidth: 0.06,
-  };
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="pointer-events-none fixed inset-0 z-0 h-dvh w-full"
-    >
-      <defs>
-        <linearGradient id="ideas-plane-fade" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="white" stopOpacity="0.55" />
-          <stop offset="0.45" stopColor="white" stopOpacity="0.22" />
-          <stop offset="0.72" stopColor="white" stopOpacity="0" />
-        </linearGradient>
-        <mask id="ideas-plane">
-          <rect width="100" height="100" fill="url(#ideas-plane-fade)" />
-        </mask>
-      </defs>
-      <g mask="url(#ideas-plane)" fill="none" {...stroke}>
-        {across.map((y) => (
-          <line key={`h-${y}`} x1="0" y1={y} x2="100" y2={y} />
-        ))}
-        {depth.map((x) => (
-          <line key={`d-${x}`} x1={x} y1="100" x2={vanishX} y2={vanishY} />
-        ))}
-      </g>
-    </svg>
-  );
+/**
+ * Вигнута нескінченна стрічка потрібна лише там, де є колесо й наведення, і тільки без reduced motion.
+ * Пререндер і мобільні отримують звичайний список тих самих рядків.
+ */
+function useCurvedMode(): boolean {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 1024px) and (hover: hover) and (pointer: fine)");
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setEnabled(wide.matches && !calm.matches);
+    update();
+    wide.addEventListener("change", update);
+    calm.addEventListener("change", update);
+    return () => {
+      wide.removeEventListener("change", update);
+      calm.removeEventListener("change", update);
+    };
+  }, []);
+  return enabled;
 }
 
 const TITLE = "Ідеї, Fantasm";
@@ -266,109 +253,148 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
 
   const dirty = category !== null || dateWindow !== "all" || campus !== "all" || sort !== "new" || tags.length > 0;
 
-  return (
-    <GuideFrame>
-      <SpaceLines />
-      <div className="relative z-10 mx-auto max-w-3xl">
-        <h1 className="text-3xl font-semibold text-[var(--color-text)]">Ідеї</h1>
-        <div ref={barRef} className="relative mt-5 flex flex-wrap items-center gap-1">
-          <FilterMenu
-            label="Тип"
-            value={category ? CATEGORY_LABELS[category] : undefined}
-            open={menu === "type"}
-            onToggle={() => toggleMenu("type")}
-          >
-            <FilterOption title="Усі" hint="Без обмеження за видом" selected={category === null} onClick={() => choose("type", setCategory)(null)} />
-            {CATEGORIES.map((item) => (
+  const curved = useCurvedMode() && ideas.length >= 2;
+
+  useEffect(() => {
+    if (!curved) return;
+    document.documentElement.classList.add("ideas-curved");
+    return () => document.documentElement.classList.remove("ideas-curved");
+  }, [curved]);
+
+  const filterBar = (
+    <div ref={barRef} className="relative flex flex-wrap items-center gap-1">
+      <FilterMenu
+        up={curved}
+        label="Тип"
+        value={category ? CATEGORY_LABELS[category] : undefined}
+        open={menu === "type"}
+        onToggle={() => toggleMenu("type")}
+      >
+        <FilterOption title="Усі" hint="Без обмеження за видом" selected={category === null} onClick={() => choose("type", setCategory)(null)} />
+        {CATEGORIES.map((item) => (
+          <FilterOption
+            key={item}
+            title={CATEGORY_LABELS[item]}
+            hint={TYPE_HINTS[item]}
+            selected={category === item}
+            onClick={() => choose("type", setCategory)(item)}
+          />
+        ))}
+      </FilterMenu>
+      <FilterMenu
+        up={curved}
+        label="Дата"
+        value={dateWindow === "7" ? "7 днів" : dateWindow === "30" ? "30 днів" : undefined}
+        open={menu === "date"}
+        onToggle={() => toggleMenu("date")}
+      >
+        <FilterOption title="Будь-коли" hint="Вся стрічка" selected={dateWindow === "all"} onClick={() => choose("date", setDateWindow)("all")} />
+        <FilterOption title="За 7 днів" hint="Опубліковані цього тижня" selected={dateWindow === "7"} onClick={() => choose("date", setDateWindow)("7")} />
+        <FilterOption title="За 30 днів" hint="Опубліковані цього місяця" selected={dateWindow === "30"} onClick={() => choose("date", setDateWindow)("30")} />
+      </FilterMenu>
+      <FilterMenu
+        up={curved}
+        label="Кампус"
+        value={campus === "naukma" ? NAUKMA.label : campus === "none" ? "Без кампусу" : undefined}
+        open={menu === "campus"}
+        onToggle={() => toggleMenu("campus")}
+      >
+        <FilterOption title="Усі" hint="З кампусом і без нього" selected={campus === "all"} onClick={() => choose("campus", setCampus)("all")} />
+        <FilterOption title={NAUKMA.label} hint="Лише ідеї цього кампусу" selected={campus === "naukma"} onClick={() => choose("campus", setCampus)("naukma")} />
+        <FilterOption title="Без кампусу" hint="Відкриті ідеї без печатки кампусу" selected={campus === "none"} onClick={() => choose("campus", setCampus)("none")} />
+      </FilterMenu>
+      <FilterMenu
+        up={curved}
+        label="Теги"
+        value={tags.length > 0 ? String(tags.length) : undefined}
+        open={menu === "tags"}
+        onToggle={() => toggleMenu("tags")}
+      >
+        <FilterOption title="Усі" hint="Без обмеження за тегами" selected={tags.length === 0} onClick={() => setTags([])} />
+        <div className="grid grid-cols-2 gap-1">
+          {tagOptions.map((tag) => {
+            const on = tags.includes(tag.slug);
+            const count = loaderData.ideas.filter((idea) => idea.tags.some((item) => item.slug === tag.slug)).length;
+            return (
               <FilterOption
-                key={item}
-                title={CATEGORY_LABELS[item]}
-                hint={TYPE_HINTS[item]}
-                selected={category === item}
-                onClick={() => choose("type", setCategory)(item)}
+                key={tag.slug}
+                title={`#${tag.label}`}
+                hint={`${count} у стрічці`}
+                selected={on}
+                onClick={() =>
+                  setTags((current) => (on ? current.filter((slug) => slug !== tag.slug) : [...current, tag.slug]))
+                }
               />
-            ))}
-          </FilterMenu>
-          <FilterMenu
-            label="Дата"
-            value={dateWindow === "7" ? "7 днів" : dateWindow === "30" ? "30 днів" : undefined}
-            open={menu === "date"}
-            onToggle={() => toggleMenu("date")}
-          >
-            <FilterOption title="Будь-коли" hint="Вся стрічка" selected={dateWindow === "all"} onClick={() => choose("date", setDateWindow)("all")} />
-            <FilterOption title="За 7 днів" hint="Опубліковані цього тижня" selected={dateWindow === "7"} onClick={() => choose("date", setDateWindow)("7")} />
-            <FilterOption title="За 30 днів" hint="Опубліковані цього місяця" selected={dateWindow === "30"} onClick={() => choose("date", setDateWindow)("30")} />
-          </FilterMenu>
-          <FilterMenu
-            label="Кампус"
-            value={campus === "naukma" ? NAUKMA.label : campus === "none" ? "Без кампусу" : undefined}
-            open={menu === "campus"}
-            onToggle={() => toggleMenu("campus")}
-          >
-            <FilterOption title="Усі" hint="З кампусом і без нього" selected={campus === "all"} onClick={() => choose("campus", setCampus)("all")} />
-            <FilterOption title={NAUKMA.label} hint="Лише ідеї цього кампусу" selected={campus === "naukma"} onClick={() => choose("campus", setCampus)("naukma")} />
-            <FilterOption title="Без кампусу" hint="Відкриті ідеї без печатки кампусу" selected={campus === "none"} onClick={() => choose("campus", setCampus)("none")} />
-          </FilterMenu>
-          <FilterMenu
-            label="Теги"
-            value={tags.length > 0 ? String(tags.length) : undefined}
-            open={menu === "tags"}
-            onToggle={() => toggleMenu("tags")}
-          >
-            <FilterOption title="Усі" hint="Без обмеження за тегами" selected={tags.length === 0} onClick={() => setTags([])} />
-            <div className="grid grid-cols-2 gap-1">
-              {tagOptions.map((tag) => {
-                const on = tags.includes(tag.slug);
-                const count = loaderData.ideas.filter((idea) => idea.tags.some((item) => item.slug === tag.slug)).length;
-                return (
-                  <FilterOption
-                    key={tag.slug}
-                    title={`#${tag.label}`}
-                    hint={`${count} у стрічці`}
-                    selected={on}
-                    onClick={() =>
-                      setTags((current) => (on ? current.filter((slug) => slug !== tag.slug) : [...current, tag.slug]))
-                    }
-                  />
-                );
-              })}
-            </div>
-          </FilterMenu>
-          <FilterMenu
-            label="Порядок"
-            value={sort === "old" ? "Старіші" : sort === "votes" ? "Голоси" : undefined}
-            open={menu === "sort"}
-            onToggle={() => toggleMenu("sort")}
-          >
-            <FilterOption title="Новіші" hint="Спочатку щойно опубліковані" selected={sort === "new"} onClick={() => choose("sort", setSort)("new")} />
-            <FilterOption title="Старіші" hint="Спочатку давніші" selected={sort === "old"} onClick={() => choose("sort", setSort)("old")} />
-            <FilterOption title="Голоси" hint="Спочатку з більшою підтримкою" selected={sort === "votes"} onClick={() => choose("sort", setSort)("votes")} />
-          </FilterMenu>
-          {dirty && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
-                setMenu(null);
-              }}
-              className="px-3 py-1.5 text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
-            >
-              Скинути
-            </button>
-          )}
+            );
+          })}
         </div>
-        {ideas.length === 0 ? (
-          <p className="mt-8 text-sm text-[var(--color-text-muted)]">Нічого не знайшлось за цими фільтрами.</p>
-        ) : (
-          <ul className="mt-8 space-y-4">
-            {ideas.map((idea) => (
-              <li key={idea.slug}>
-                <IdeaCard idea={idea} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </GuideFrame>
+      </FilterMenu>
+      <FilterMenu
+        up={curved}
+        label="Порядок"
+        value={sort === "old" ? "Старіші" : sort === "votes" ? "Голоси" : undefined}
+        open={menu === "sort"}
+        onToggle={() => toggleMenu("sort")}
+      >
+        <FilterOption title="Новіші" hint="Спочатку щойно опубліковані" selected={sort === "new"} onClick={() => choose("sort", setSort)("new")} />
+        <FilterOption title="Старіші" hint="Спочатку давніші" selected={sort === "old"} onClick={() => choose("sort", setSort)("old")} />
+        <FilterOption title="Голоси" hint="Спочатку з більшою підтримкою" selected={sort === "votes"} onClick={() => choose("sort", setSort)("votes")} />
+      </FilterMenu>
+      {dirty && (
+        <button
+          type="button"
+          onClick={() => {
+            setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
+            setMenu(null);
+          }}
+          className="px-3 py-1.5 text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
+        >
+          Скинути
+        </button>
+      )}
+    </div>
+  );
+  const numberOf = (index: number) => String(index + 1).padStart(2, "0");
+
+  return (
+    <div className="min-h-dvh">
+      <IdeasBackground />
+      <Nav key={curved ? "overlay" : "solid"} forceSolid={!curved} />
+      {curved ? (
+        <>
+          <div className="ideas-overlay-top" aria-hidden="true" />
+          <div className="ideas-overlay-bottom" aria-hidden="true" />
+          <div className="pointer-events-none fixed inset-x-0 top-16 z-20">
+            <div className="idea-rail">
+              <h1 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Ідеї · {ideas.length}</h1>
+            </div>
+          </div>
+          <div className="fixed right-6 bottom-6 z-30 max-w-[calc(100vw-3rem)] rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg)]/80 px-2 py-1.5 backdrop-blur-md">
+            {filterBar}
+          </div>
+          <CurvedRows
+            items={ideas}
+            keyOf={(idea) => idea.slug}
+            renderRow={(idea, index, decorative) => <IdeaRow idea={idea} number={numberOf(index)} decorative={decorative} />}
+          />
+        </>
+      ) : (
+        <main className="relative z-10 mx-auto max-w-3xl px-5 pt-24 pb-20 sm:px-8">
+          <h1 className="text-3xl font-semibold text-[var(--color-text)]">Ідеї</h1>
+          <div className="mt-5">{filterBar}</div>
+          {ideas.length === 0 ? (
+            <p className="mt-8 text-sm text-[var(--color-text-muted)]">Нічого не знайшлось за цими фільтрами.</p>
+          ) : (
+            <ul className="idea-rows idea-rows--flow mt-8">
+              {ideas.map((idea, index) => (
+                <li key={idea.slug}>
+                  <IdeaRow idea={idea} number={numberOf(index)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </main>
+      )}
+    </div>
   );
 }

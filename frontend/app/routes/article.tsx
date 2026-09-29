@@ -2,8 +2,9 @@ import { data } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { ArticleView } from "~/components/guides/article";
 import { getArticle, getRelated, isHubSlug, toView } from "~/lib/content.server";
-import { seo } from "~/lib/seo";
-import { article, breadcrumbList, compact, docCrumbs, faqPage } from "~/lib/structured-data";
+import { ogBase, seo } from "~/lib/seo";
+import { docNodes } from "~/lib/structured-data";
+import { HUBS } from "~/lib/content-meta";
 import type { Route } from "./+types/article";
 
 export function loader({ params }: Route.LoaderArgs) {
@@ -18,13 +19,17 @@ export function meta({ data }: Route.MetaArgs) {
   const { doc } = data;
   const fm = doc.frontmatter;
   return seo({
-    title: fm.title,
+    title: fm.seoTitle ?? fm.title,
     description: fm.description,
     path: doc.path,
     type: "article",
     publishedTime: fm.publishedAt,
     modifiedTime: fm.updatedAt,
-    jsonLd: compact([article(doc), breadcrumbList(docCrumbs(doc)), faqPage(fm.faq ?? [])]),
+    ogBase: ogBase(doc.path),
+    imageAlt: fm.title,
+    section: HUBS[doc.hub].label,
+    tags: fm.keywords,
+    jsonLd: docNodes(doc),
   });
 }
 

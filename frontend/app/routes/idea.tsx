@@ -6,7 +6,7 @@ import { RelativeTime } from "~/components/ui/relative-time";
 import { CATEGORY_LABELS, eventWhen } from "~/lib/ideas";
 import { getIdea, toView } from "~/lib/ideas.server";
 import { seo } from "~/lib/seo";
-import { breadcrumbList, compact, event } from "~/lib/structured-data";
+import { breadcrumbList, compact, event, webPage } from "~/lib/structured-data";
 import type { Route } from "./+types/idea";
 
 export function loader({ params }: Route.LoaderArgs) {
@@ -28,6 +28,7 @@ export function meta({ data }: Route.MetaArgs) {
     modifiedTime: idea.updatedAt,
     noindex: idea.fixture,
     jsonLd: compact([
+      webPage({ path, name: idea.title, description: idea.summary, datePublished: idea.createdAt, dateModified: idea.updatedAt }),
       breadcrumbList([
         { name: "Головна", path: "/" },
         { name: "Ідеї", path: "/ideas" },

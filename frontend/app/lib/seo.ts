@@ -1,36 +1,21 @@
 import type { MetaDescriptor } from "react-router";
+import { DEFAULT_OG_BASE, SITE_LOCALE, SITE_NAME, absoluteUrl, ogImage, type JsonLd } from "./site";
+import { graph, organization, website } from "./structured-data";
 
-/**
- * Єдине джерело абсолютних URL для canonical, OG, sitemap і robots.
- * `VITE_` потрібен, бо meta() виконується і на сервері, і в браузері
- * (клієнтські переходи), а Vite вшиває в клієнт лише змінні з цим префіксом.
- */
-export const SITE_URL = (import.meta.env.VITE_SITE_URL || "https://ideas.naukma.com").replace(/\/+$/, "");
-export const SITE_NAME = "Fantasm";
-export const SITE_LOCALE = "uk_UA";
-export const SITE_LANGUAGE = "uk";
-export const SITE_LOGO = "/favicon.jpg";
-
-/** Шлях без кінцевого слеша (крім кореня): так віддає сервер і так посилаються сторінки. */
-export function normalizePath(path: string): string {
-  const clean = path.split(/[?#]/)[0] || "/";
-  return clean.length > 1 ? clean.replace(/\/+$/, "") : "/";
-}
-
-export function absoluteUrl(path: string): string {
-  if (/^https?:\/\//.test(path)) return path;
-  const normalized = normalizePath(path.startsWith("/") ? path : `/${path}`);
-  return normalized === "/" ? `${SITE_URL}/` : `${SITE_URL}${normalized}`;
-}
-
-export type JsonLd = Record<string, unknown>;
+// Решта модулів імпортує ці речі з "~/lib/seo", тож лишаємо реекспорт.
+export * from "./site";
 
 export interface SeoInput {
   title: string;
   description: string;
   path: string;
   type?: "website" | "article";
-  image?: string;
+  /** База шляху превʼю без пропорції й розширення, напр. "/og/campus/karta-kampusu". */
+  ogBase?: string;
+  imageAlt?: string;
+  /** Розділ і теги для article:section / article:tag. */
+  section?: string;
+  tags?: string[];
   noindex?: boolean;
   publishedTime?: string;
   modifiedTime?: string;
@@ -42,14 +27,19 @@ export function seo({
   description,
   path,
   type = "website",
-  image = SITE_LOGO,
+  ogBase: base = DEFAULT_OG_BASE,
+  imageAlt,
+  section,
+  tags: tagList = [],
   noindex = false,
   publishedTime,
   modifiedTime,
   jsonLd = [],
 }: SeoInput): MetaDescriptor[] {
   const url = absoluteUrl(path);
-  const imageUrl = absoluteUrl(image);
+  const og = ogImage(base);
+  const imageUrl = absoluteUrl(og.path);
+  const alt = imageAlt ?? title;
   const tags: MetaDescriptor[] = [
     { title },
     { name: "description", content: description },
@@ -65,11 +55,15 @@ export function seo({
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:image", content: imageUrl },
-    // Єдине зображення бренду квадратне (564×564), тому summary, а не summary_large_image.
-    { name: "twitter:card", content: "summary" },
+    { property: "og:image:width", content: String(og.width) },
+    { property: "og:image:height", content: String(og.height) },
+    { property: "og:image:type", content: "image/jpeg" },
+    { property: "og:image:alt", content: alt },
+    { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: imageUrl },
+    { name: "twitter:image:alt", content: alt },
   ];
   if (type === "article" && publishedTime) {
     tags.push({ property: "article:published_time", content: publishedTime });
@@ -77,7 +71,11 @@ export function seo({
   if (type === "article" && modifiedTime) {
     tags.push({ property: "article:modified_time", content: modifiedTime });
   }
-  for (const item of jsonLd) tags.push({ "script:ld+json": item });
+  if (type === "article" && section) tags.push({ property: "article:section", content: section });
+  if (type === "article") for (const tag of tagList) tags.push({ property: "article:tag", content: tag });
+  // Один @graph на сторінку: Organization і WebSite входять у кожен, бо @id-посилання
+  // з Article/WebPage не резолвляться між різними сторінками.
+  if (!noindex) tags.push({ "script:ld+json": graph([organization(), website(), ...jsonLd]) });
   return tags;
 }
 

@@ -10,7 +10,7 @@ import { MohylianPerks } from "~/components/landing/mohylian-perks";
 import { Nav } from "~/components/landing/nav";
 import { PageLoader } from "~/components/ui/page-loader";
 import { seo } from "~/lib/seo";
-import { organization, website } from "~/lib/structured-data";
+import { webPage } from "~/lib/structured-data";
 
 export function meta() {
   return seo({
@@ -18,7 +18,16 @@ export function meta() {
     description:
       "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
     path: "/",
-    jsonLd: [website(), organization()],
+    // organization і website seo() додає сам, у кожен граф.
+    jsonLd: [
+      webPage({
+        path: "/",
+        name: "Fantasm, платформа ідей Києво-Могилянської академії",
+        description:
+          "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
+        breadcrumb: false,
+      }),
+    ],
   });
 }
 

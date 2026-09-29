@@ -34,7 +34,7 @@
      (frontend-design skill, розділ 4.1, override path). Системний стек без
      зовнішнього <link> на Google Fonts. */
   --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
 }
 
@@ -46,6 +46,21 @@ body {
 }
 html {
   scrollbar-gutter: stable;
+}
+
+/*
+ * Заголовки на всьому сайті в стилі назв ідей: Onest 500, ВЕЛИКІ літери, невеликий позитивний
+ * трекінг. Не в шарі, щоб перебити утиліти на кшталт font-semibold і tracking-tight.
+ * Винятки: .hero-display (власний брендовий напис) і .idea-title (вже такий).
+ */
+h1,
+h2,
+h3 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.15;
 }
 
 /*
@@ -78,6 +93,7 @@ html {
   font-size: clamp(3.25rem, 6.2vw, 5rem);
   line-height: 0.96;
   letter-spacing: -0.06em;
+  text-transform: none;
 }
 
 /*
@@ -115,17 +131,17 @@ html {
 .prose-guide h2,
 .prose-guide h3 {
   color: var(--color-text);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   scroll-margin-top: 6rem;
 }
 .prose-guide h2 {
   margin-top: 2.5rem;
-  font-size: 1.5rem;
+  font-size: 1.375rem;
 }
 .prose-guide h3 {
   margin-top: 1.75rem;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 .prose-guide p,
 .prose-guide ul,
@@ -279,6 +295,26 @@ html {
 
 * {
   border-color: var(--color-border);
+}
+
+/* Календар подій: кружок нового кінця проміжку зʼявляється, коли фігура контуру до нього дійшла (сама фігура анімується в calendar.tsx). */
+@keyframes cal-edge-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.cal-edge {
+  animation: cal-edge-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-edge {
+    animation: none;
+  }
 }
 
 @keyframes fade-up {
@@ -485,4 +521,411 @@ html {
   .bento-rings {
     transition: none;
   }
+}
+
+/* ========================================================================
+ * Сторінка ідей: темний чіткий фон із сіткою + нескінченна стрічка з вигином.
+ * ===================================================================== */
+.ideas-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+  pointer-events: none;
+}
+.ideas-grid-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ideas-grid-canvas[data-ready="true"] {
+  opacity: 1;
+}
+/* Без WebGL або при reduced motion: та сама сітка з діагоналями, але статична. */
+.ideas-grid-static {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px),
+    linear-gradient(45deg, transparent 49%, rgb(255 255 255 / 3.5%) 50%, transparent 51%);
+  background-size: 14px 14px;
+}
+.ideas-overlay-top,
+.ideas-overlay-bottom {
+  pointer-events: none;
+  position: fixed;
+  inset-inline: 0;
+  z-index: 10;
+  height: 8rem;
+}
+.ideas-overlay-top {
+  top: 0;
+  background-image: linear-gradient(to bottom, var(--color-bg), rgb(8 9 10 / 0%));
+}
+.ideas-overlay-bottom {
+  bottom: 0;
+  background-image: linear-gradient(to top, var(--color-bg), rgb(8 9 10 / 0%));
+}
+
+/* Стрічка: на весь екран, документ не скролиться, рухом керує CurvedRows. */
+.ideas-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+.idea-rows--curved {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.idea-abs-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 0;
+  will-change: transform, opacity;
+  transform-origin: center center;
+}
+.idea-rail {
+  width: 100%;
+  padding-inline: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .idea-rail {
+    margin-left: 17%;
+    width: 58%;
+    padding-inline: 0;
+  }
+}
+@media (min-width: 1280px) {
+  .idea-rail {
+    margin-left: 20%;
+    width: 52%;
+  }
+}
+.idea-rows--curved .idea-row {
+  height: clamp(13.5rem, 24dvh, 18.5rem);
+}
+
+.idea-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: -1px;
+  border-block: 1px solid var(--color-border-strong);
+  padding-block: 1.75rem;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (min-width: 1024px) {
+  .idea-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+}
+/* Лінії навколо ідеї при наведенні: верхня (акцент) і нижня ростуть зліва направо. */
+.idea-row::before,
+.idea-row::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  z-index: 2;
+  width: 0;
+  transform-origin: left;
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.idea-row::before {
+  top: -1px;
+  height: 1.5px;
+  background: #fff;
+}
+.idea-row::after {
+  bottom: -1px;
+  height: 1px;
+  background: rgb(255 255 255 / 30%);
+}
+.idea-row:hover::before,
+.idea-row:hover::after,
+.idea-row:focus-visible::before,
+.idea-row:focus-visible::after {
+  width: 100%;
+}
+
+.idea-row-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2.5rem;
+}
+.idea-num {
+  display: none;
+  flex: none;
+  font-family: "Onest", system-ui, sans-serif;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  letter-spacing: 0.025em;
+  color: var(--color-text);
+  opacity: 0.2;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (min-width: 1024px) {
+  .idea-num {
+    display: block;
+  }
+}
+.idea-row:hover .idea-num,
+.idea-row:focus-visible .idea-num {
+  opacity: 1;
+}
+.idea-meta {
+  display: grid;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+.idea-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: "Onest", system-ui, sans-serif;
+  font-size: clamp(1.5rem, 2.3vw, 2.6rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  transition: color 0.4s ease;
+}
+.idea-row:hover .idea-title,
+.idea-row:focus-visible .idea-title {
+  color: #fff;
+}
+.idea-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.idea-tag {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.idea-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 34rem;
+  margin-top: 0.875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 300;
+  line-height: 1.1rem;
+  color: var(--color-text-muted);
+}
+
+/* Панель справа: сигнал замість картинки. */
+.idea-media {
+  position: relative;
+  flex: none;
+  width: 11rem;
+}
+.idea-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgb(255 255 255 / 8%), transparent 62%),
+    radial-gradient(rgb(255 255 255 / 9%) 1px, transparent 1px) 0 0 / 12px 12px,
+    var(--color-surface);
+  transition:
+    border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.idea-row:hover .idea-frame,
+.idea-row:focus-visible .idea-frame {
+  border-color: rgb(255 255 255 / 30%);
+  box-shadow: 0 0 30px rgb(255 255 255 / 5%);
+}
+.idea-zoom {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.idea-row:hover .idea-zoom {
+  transform: scale(1.05);
+}
+.idea-score {
+  font-family: "Onest", system-ui, sans-serif;
+  font-size: 2.25rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.idea-score-label {
+  margin-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-text-faint);
+}
+.idea-scanline {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  height: 1px;
+  background: rgb(255 255 255 / 30%);
+  box-shadow: 0 0 8px rgb(255 255 255 / 20%);
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+.idea-row:hover .idea-scanline {
+  opacity: 1;
+  animation: idea-scan 8s linear infinite;
+}
+@keyframes idea-scan {
+  0% { top: -10%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 110%; opacity: 0; }
+}
+.idea-hud {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+.idea-row:hover .idea-hud {
+  opacity: 1;
+}
+.idea-hud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.idea-hud-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+}
+
+/* Плашка «Відкрити» їздить за курсором. */
+.idea-pill {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  display: none;
+  width: 8rem;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 10%);
+  padding-block: 0.5rem;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-text);
+  box-shadow: 0 0 10px rgb(255 255 255 / 5%);
+  opacity: 0;
+  scale: 0.5;
+  transition:
+    opacity 0.4s ease,
+    scale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform, opacity;
+}
+@media (hover: hover) and (pointer: fine) {
+  .idea-pill {
+    display: block;
+  }
+  .idea-row:hover .idea-pill {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Під час прокрутки: без hover-ефектів і кліків, усі рядки повністю видимі. */
+/* Лінії скидаються в 0 миттєво (не ховаються), тож коли прокрутка зупиниться на ідеї під курсором,
+   вони вимальовуються з нуля, а не «спалахують» одразу на всю ширину. */
+.ideas-stage.is-scrolling .idea-row::before,
+.ideas-stage.is-scrolling .idea-row::after {
+  width: 0 !important;
+  transition: none !important;
+}
+.ideas-stage.is-scrolling .idea-row {
+  opacity: 1 !important;
+  pointer-events: none;
+}
+.ideas-stage.is-scrolling .idea-hud,
+.ideas-stage.is-scrolling .idea-scanline,
+.ideas-stage.is-scrolling .idea-pill {
+  opacity: 0 !important;
+  visibility: hidden;
+}
+.ideas-stage:not(.is-scrolling) .idea-rows:has(.idea-row:hover) .idea-row:not(:hover) {
+  opacity: 0.6;
+}
+
+/* Плоский режим (мобільні, reduced motion, SSR): той самий рядок без 3D. */
+.idea-rows--flow {
+  display: block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .idea-row:hover .idea-scanline {
+    animation: none;
+  }
+}
+
+html.ideas-curved,
+html.ideas-curved body {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+  background: var(--color-bg);
 }

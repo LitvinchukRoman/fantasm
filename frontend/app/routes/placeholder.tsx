@@ -4,11 +4,6 @@ import { noindexSeo } from "~/lib/seo";
 import type { Route } from "./+types/placeholder";
 
 const PAGES: Record<string, { title: string; body: string; description: string }> = {
-  "/events": {
-    title: "Події",
-    body: "Список подій з’явиться тут, щойно бекенд віддасть стрічку. Поки що подій немає.",
-    description: "Події спільноти НаУКМА на Fantasm.",
-  },
   "/ideas/new": {
     title: "Запропонувати ідею",
     body: "Форма публікації з’явиться разом зі стрічкою. Вид ідеї: стартап, проєкт, подія, книжковий клуб, волонтерство або інше.",

@@ -25,7 +25,10 @@ export interface Cta {
   note?: string;
 }
 export interface Frontmatter {
+  /** H1 сторінки. */
   title: string;
+  /** Окремий `<title>` для видачі (до ~60 символів); якщо не заданий, береться `title`. */
+  seoTitle?: string;
   description: string;
   publishedAt: string;
   updatedAt: string;
@@ -59,5 +62,9 @@ export interface DocView {
   frontmatter: Frontmatter;
   html: string;
   readingMinutes: number;
+  /** Слів у тілі статті: для `wordCount` в Article-розмітці. */
+  words: number;
+  /** Зовнішні URL з розділу «Джерела»: для `citation`, вони й на сторінці видимі. */
+  sources: string[];
   toc: TocItem[];
 }

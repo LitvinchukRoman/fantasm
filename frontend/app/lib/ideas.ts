@@ -85,3 +85,20 @@ export function timeAgo(iso: string, now = Date.now()): string {
 export function eventWhen(iso: string): string {
   return eventDate.format(new Date(iso));
 }
+
+const dayKeyFormat = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: TIME_ZONE,
+});
+const timeFormat = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: TIME_ZONE });
+
+/** Календарний день події за київським часом: "2026-10-02". Рядки цього виду порівнюються як дати. */
+export function kyivDayKey(iso: string | number): string {
+  return dayKeyFormat.format(new Date(iso));
+}
+
+export function eventTime(iso: string): string {
+  return timeFormat.format(new Date(iso));
+}

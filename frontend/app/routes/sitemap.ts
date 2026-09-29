@@ -28,10 +28,15 @@ export function loader() {
   const ideaDates = ideas.map((idea) => idea.updatedAt ?? idea.createdAt);
   const docDates = docs.map((doc) => doc.frontmatter.updatedAt ?? doc.frontmatter.publishedAt);
 
+  const events = ideas.filter((idea) => idea.category === "EVENT" && idea.eventAt);
+  const eventDates = events.map((idea) => idea.updatedAt ?? idea.createdAt);
+
   const entries: Entry[] = [
     { path: "/", lastmod: latest([...ideaDates, ...docDates]) },
     { path: "/ideas", lastmod: latest(ideaDates) },
     { path: "/guides", lastmod: latest(docDates) },
+    // /events без жодної справжньої події noindex, тож у sitemap її теж немає.
+    ...(events.length > 0 ? [{ path: "/events", lastmod: latest(eventDates) }] : []),
     ...docs.map((doc) => ({ path: doc.path, lastmod: doc.frontmatter.updatedAt ?? doc.frontmatter.publishedAt })),
     ...ideas.map((idea) => ({ path: `/ideas/${idea.slug}`, lastmod: idea.updatedAt ?? idea.createdAt })),
   ];

@@ -6,7 +6,7 @@ export default [
   route("ideas", "routes/ideas.tsx"),
   route("ideas/new", "routes/placeholder.tsx", { id: "ideas-new" }),
   route("ideas/:slug", "routes/idea.tsx"),
-  route("events", "routes/placeholder.tsx", { id: "events" }),
+  route("events", "routes/events.tsx"),
   layout("routes/auth-layout.tsx", [
     route("login", "routes/login.tsx"),
     route("register", "routes/register.tsx"),
