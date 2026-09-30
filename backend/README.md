@@ -1,23 +1,27 @@
 # backend
 
-Go-сервер Fantasm: модульний моноліт з гексагональною архітектурою. Перший реалізований контекст — [identity](internal/identity/README.md): вхід через Google/Entra, афіліація, сесії та поточний користувач. Інші контексти поки лишаються каркасом.
+Go-сервер Fantasm: модульний моноліт з гексагональною архітектурою. Перший реалізований контекст — [identity](internal/identity/README.md): вхід через Google/Microsoft, сесії та поточний користувач. Інші контексти поки лишаються каркасом.
 
 Правила продукту — у `../FULL_CONTEXT.md`.
 
 ## Запуск
 
-Потрібні [Task](https://taskfile.dev) і [golang-migrate CLI](https://github.com/golang-migrate/migrate).
-
 ```bash
 cp .env.example .env
-task db-up
-task migrate-up
-task run
+docker compose up -d --build
 ```
 
-`task migrate-down` відкочує одну міграцію, `task migrate-new -- <назва>` створює нову. `MIGRATE_ON_START=true` застосовує міграції на старті сервера.
+Compose запускає PostgreSQL і API на `http://localhost:8080`, чекає готовності бази та застосовує міграції. Перед запуском заповни `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` та/або `ENTRA_CLIENT_ID` / `ENTRA_CLIENT_SECRET` у `.env`. Без параметрів провайдер вимкнений: його маршрут входу повертає 404. Прив’язки до університету немає; об’єднання акаунтів Google і Microsoft відкладене.
 
-Для входу заповни параметри провайдерів у `.env` за [інструкцією identity](internal/identity/README.md). Без налаштованих провайдерів сервер запускається, але маршрути входу повертають 404.
+Для frontend development `.env.example` задає `PUBLIC_URL=http://localhost:5173`. Зареєструй callback URL `http://localhost:5173/api/auth/google/callback` та/або `http://localhost:5173/api/auth/entra/callback`, запусти `npm run dev` у `frontend` і починай вхід через `http://localhost:5173/api/auth/google/login` або `/api/auth/entra/login`. Vite вже проксіює `/api` на backend. Кнопки frontend підключені до цих маршрутів; сторінка входу показує увімкнених провайдерів, поточного користувача та його організаційні бейджі. Для прямого використання API зміни `PUBLIC_URL` на `http://localhost:8080` і відповідно онови callback URL.
+
+Налаштування callback URL, перевірка через curl та робота з frontend proxy описані в [identity](internal/identity/README.md#local-startup-and-curl-checks).
+
+Для запуску Go поза Docker залишаються команди Task і golang-migrate CLI: `task db-up`, `task migrate-up`, `task run`. `task migrate-down` відкочує одну міграцію. `MIGRATE_ON_START=true` застосовує міграції на старті сервера.
+
+## Правила організацій
+
+Університетські бейджі, членство, дозволи та параметри переваг задаються у `config/organizations.json`. За замовчуванням правил немає. Готовий приклад НаУКМА — `config/organizations.example.json`; для ввімкнення потрібен справжній tenant ID. Після зміни правил перезапусти API. Формат, перевірка доказів та межі реалізації описані в [organization rules](internal/organizations/README.md).
 
 ## Структура
 
@@ -25,7 +29,7 @@ task run
 cmd/api/           точка входу
 migrations/        golang-migrate
 internal/platform/ apperr, config, postgres, migrate
-internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifications
+internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifications, organizations
   service.go
   domain/
   ports/

@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: Fantasm Identity API
+  version: 1.0.0
+  description: Authentication and identity management API.
+paths:
+  /api/auth/providers:
+    get:
+      summary: List available OAuth providers
+      description: Returns a list of configured and enabled identity providers.
+      responses:
+        '200':
+          description: List of available providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: string
+                      example: google
+  /api/auth/{provider}/login:
+    get:
+      summary: Initiate authorization flow
+      description: Sets the login verification cookie and redirects the client to the identity provider.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, entra]
+      responses:
+        '302':
+          description: Redirect to the provider's authorization screen.
+        '303':
+          description: Redirect to frontend /login?error=provider_unavailable (for browser HTML navigation).
+        '404':
+          description: Provider not found (JSON requests).
+  /api/auth/{provider}/callback:
+    get:
+      summary: Complete authorization callback
+      description: Validates provider response code and state, then creates a session cookie.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, entra]
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '303':
+          description: Redirects to origin root (/) on success, or to /login?error=... on browser failure.
+        '401':
+          description: Unauthorized / invalid credentials (JSON requests).
+  /api/auth/logout:
+    post:
+      summary: Logout
+      description: Revokes current session and clears session cookies. Requires Origin header verification.
+      responses:
+        '204':
+          description: Successfully logged out.
+        '403':
+          description: Invalid Origin header.
+  /api/me:
+    get:
+      summary: Get current authenticated profile
+      description: Returns profile details and active organization memberships.
+      responses:
+        '200':
+          description: Current user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Authentication required or session expired.
+components:
+  schemas:
+    Membership:
+      type: object
+      properties:
+        organizationId:
+          type: string
+          example: naukma
+        name:
+          type: string
+          example: НаУКМА
+        badge:
+          type: string
+          example: Могилянець
+        capabilities:
+          type: array
+          items:
+            type: string
+          example: ["ideas.read_internal", "ideas.create_internal"]
+        benefits:
+          type: object
+          properties:
+            voteWeight:
+              type: integer
+              example: 2
+            rankingMultiplier:
+              type: number
+              format: float
+              example: 1.5
+            karmaMultiplier:
+              type: number
+              format: float
+              example: 1.5
+            skipPremoderation:
+              type: boolean
+              example: true
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        avatarUrl:
+          type: string
+        bio:
+          type: string
+        faculty:
+          type: string
+        role:
+          type: string
+          enum: [USER, MODERATOR, ADMIN]
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Membership'
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - handle
+        - name
+        - email
+        - role
+        - createdAt
