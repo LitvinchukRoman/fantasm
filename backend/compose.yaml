@@ -1,5 +1,34 @@
 services:
-  postgres:
+  fantasm-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ADDR: :8080
+      DATABASE_URL: postgres://fantasm:fantasm@fantasm-postgres:5432/fantasm?sslmode=disable
+      MIGRATIONS_DIR: /app/migrations
+      MIGRATE_ON_START: "true"
+      ORGANIZATION_RULES_FILE: ${ORGANIZATION_RULES_FILE:-/app/config/organizations.json}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-your-google-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-your-google-client-secret}
+
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-your-entra-client-id}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-your-entra-client-secret}
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      fantasm-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  fantasm-postgres:
     image: postgres:17
     environment:
       POSTGRES_USER: fantasm
@@ -10,7 +39,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fantasm -d fantasm"]
+      test: [ "CMD-SHELL", "pg_isready -U fantasm -d fantasm" ]
       interval: 5s
       timeout: 3s
       retries: 10
