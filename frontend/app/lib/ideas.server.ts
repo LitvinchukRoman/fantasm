@@ -5,7 +5,10 @@
 import { NAUKMA, type Idea, type IdeaAuthor, type IdeaCard, type IdeaCategory, type IdeaTag, type IdeaView } from "./ideas";
 import { renderMarkdown } from "./markdown.server";
 
-const AUTHOR: IdeaAuthor = { handle: "naukma-ideas", name: "NaUKMA Ideas", verified: true };
+const AUTHOR_ADMIN: IdeaAuthor = { handle: "naukma-ideas", name: "NaUKMA Ideas", verified: true };
+const AUTHOR_STUDENT: IdeaAuthor = { handle: "student123", name: "Звичайний Студент", verified: false };
+const AUTHOR_HACKER: IdeaAuthor = { handle: "hacker_bob", name: "Кібер Боб", verified: false };
+const AUTHOR_DESIGN: IdeaAuthor = { handle: "design_guru", name: "Марія Дизайн", verified: true };
 
 const IDEAS: Idea[] = [
   {
@@ -23,13 +26,14 @@ const IDEAS: Idea[] = [
       { slug: "naukma", label: "НаУКМА" },
       { slug: "overflow", label: "ЩеОдинДовгийТегЩобКікерПішовВКрапки" },
     ],
-    author: AUTHOR,
+    author: AUTHOR_ADMIN,
     votes: 999999,
     comments: 888888,
     participants: 777777,
     createdAt: "2026-09-27T12:00:00.000Z",
     eventAt: "2026-12-31T23:59:00.000Z",
     eventLocation: "МісцеЯкеТежНеМаєВміщатисяБоВоноНавмисноДужеДовге 1234567890",
+    visibility: "PUBLIC",
     fixture: true,
   },
   {
@@ -41,11 +45,12 @@ const IDEAS: Idea[] = [
     category: "COMMUNITY",
     campus: NAUKMA,
     tags: [{ slug: "naukma", label: "НаУКМА" }],
-    author: AUTHOR,
+    author: AUTHOR_STUDENT,
     votes: 0,
     comments: 0,
     participants: 0,
     createdAt: "2026-09-09T12:00:00.000Z",
+    visibility: "PUBLIC",
   },
   {
     slug: "mafia-piatnytsi",
@@ -59,13 +64,14 @@ const IDEAS: Idea[] = [
       { slug: "mafia", label: "Мафія" },
       { slug: "naukma", label: "НаУКМА" },
     ],
-    author: AUTHOR,
+    author: AUTHOR_DESIGN,
     votes: 0,
     comments: 0,
     participants: 0,
     createdAt: "2026-09-25T12:00:00.000Z",
     eventAt: "2026-10-02T16:00:00.000Z",
     eventLocation: "НаУКМА, КМЦ (4-й корпус)",
+    visibility: "UKMA_ONLY",
   },
   {
     slug: "lecturenotes-ai",
@@ -78,12 +84,13 @@ const IDEAS: Idea[] = [
       { slug: "startup", label: "Стартап" },
       { slug: "hakaton", label: "Хакатон" },
     ],
-    author: AUTHOR,
+    author: AUTHOR_HACKER,
     votes: 0,
     comments: 0,
     participants: 0,
     createdAt: "2026-09-20T12:00:00.000Z",
     needsRoles: "ML, Backend, Design",
+    visibility: "PUBLIC",
   },
   {
     slug: "volonterska-initsiatyva",
@@ -93,11 +100,12 @@ const IDEAS: Idea[] = [
     category: "COMMUNITY",
     campus: null,
     tags: [{ slug: "volonterstvo", label: "Волонтерство" }],
-    author: AUTHOR,
+    author: AUTHOR_STUDENT,
     votes: 0,
     comments: 0,
     participants: 0,
     createdAt: "2026-09-22T12:00:00.000Z",
+    visibility: "PUBLIC",
   },
 ];
 
@@ -171,6 +179,7 @@ function extraIdeas(): Idea[] {
     { slug: "hakaton", label: "Хакатон" },
     { slug: "volonterstvo", label: "Волонтерство" },
   ];
+  const authorsPool = [AUTHOR_ADMIN, AUTHOR_STUDENT, AUTHOR_HACKER, AUTHOR_DESIGN];
   const ideas: Idea[] = [];
   for (let i = 0; i < EXTRA_TITLES.length; i++) {
     const category = categories[i % categories.length];
@@ -185,13 +194,14 @@ function extraIdeas(): Idea[] {
       category,
       campus,
       tags: [tagPool[i % tagPool.length]],
-      author: AUTHOR,
+      author: authorsPool[i % authorsPool.length],
       votes: i % 7,
       comments: i % 4,
       participants: i % 5,
       createdAt: created.toISOString(),
       eventAt,
       eventLocation: eventAt ? "НаУКМА" : undefined,
+      visibility: i % 5 === 0 ? "UKMA_ONLY" : "PUBLIC",
       fixture: true,
     });
   }

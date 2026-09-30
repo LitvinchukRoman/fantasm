@@ -43,6 +43,7 @@ export type Idea = {
   eventAt?: string;
   eventLocation?: string;
   needsRoles?: string;
+  visibility: "PUBLIC" | "UKMA_ONLY";
   /** Тестові картки для верстки: у прод-білд не потрапляють (див. IDEAS_SEED). */
   fixture?: boolean;
 };

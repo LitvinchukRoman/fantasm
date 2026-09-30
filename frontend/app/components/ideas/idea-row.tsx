@@ -70,6 +70,11 @@ export function IdeaRow({ idea, number, decorative = false }: { idea: IdeaCardDa
         <div className="idea-meta">
           <h2 className="idea-title">{idea.title}</h2>
           <ul className="idea-tags">
+            {idea.visibility === "UKMA_ONLY" && (
+              <li className="idea-tag !border-white/30 !text-white font-mono uppercase" title="Тільки для спільноти НаУКМА">
+                UKMA_ONLY
+              </li>
+            )}
             <li className="idea-tag">{CATEGORY_LABELS[idea.category]}</li>
             {idea.campus && <li className="idea-tag">{idea.campus.label}</li>}
             {isEvent && <li className="idea-tag">{eventWhen(idea.eventAt!)}</li>}

@@ -60,7 +60,12 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
             <RelativeTime className="ray-date" iso={idea.createdAt} />
             <VoteControl score={idea.votes} className="ray-vote" />
             <div className="min-w-0 flex-1 pr-24">
+              {/* TODO: Переписати UI блоку автора! Зробити його набагато помітнішим. 
+                  Тут (або в сайдбарі) має бути великий аватар, справжнє ім'я автора, 
+                  @handle та "Печатка Могилянця" (Verified Badge), щоб підвищити рівень довіри. */}
               <p className="ray-kicker">
+                <Link to={`/u/${idea.author.handle}`} className="hover:text-[var(--color-text)] transition-colors">@{idea.author.handle}</Link>
+                {` · `}
                 {CATEGORY_LABELS[idea.category]}
                 {idea.campus ? ` · ${idea.campus.label}` : ""}
                 {isEvent ? (

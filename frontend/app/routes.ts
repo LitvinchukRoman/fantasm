@@ -13,6 +13,7 @@ export default [
   ]),
   route("sitemap.xml", "routes/sitemap.ts"),
   route("robots.txt", "routes/robots.ts"),
+  route("u/:handle", "routes/profile.tsx"),
   route(":hub", "routes/hub.tsx"),
   route(":hub/:slug", "routes/article.tsx"),
 ] satisfies RouteConfig;
