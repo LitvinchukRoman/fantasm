@@ -28,6 +28,7 @@ type Repository interface {
 	CreateSession(context.Context, domain.Session) error
 	UserBySession(context.Context, string, time.Time) (domain.User, error)
 	DeleteSession(context.Context, string) error
+	IdentitiesByUser(context.Context, string) ([]domain.Identity, error)
 }
 
 type Transactor interface {
@@ -39,22 +40,33 @@ type Provider interface {
 	Authenticate(ctx context.Context, code, nonce, verifier string) (domain.Identity, error)
 }
 
-type Service struct {
-	repository   Repository
-	transactions Transactor
-	providers    map[domain.Provider]Provider
-	ukmaTenantID string
-	now          func() time.Time
+type MembershipPolicy interface {
+	Evaluate([]domain.Identity) []domain.Membership
 }
 
-func NewService(repository Repository, transactions Transactor, providers map[domain.Provider]Provider, ukmaTenantID string) *Service {
-	return &Service{
+type Service struct {
+	membershipPolicy MembershipPolicy
+	repository       Repository
+	transactions     Transactor
+	providers        map[domain.Provider]Provider
+	now              func() time.Time
+}
+
+func NewService(repository Repository, transactions Transactor, providers map[domain.Provider]Provider, options ...func(*Service)) *Service {
+	service := &Service{
 		repository:   repository,
 		transactions: transactions,
 		providers:    maps.Clone(providers),
-		ukmaTenantID: strings.ToLower(ukmaTenantID),
 		now:          time.Now,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+
+func WithMembershipPolicy(policy MembershipPolicy) func(*Service) {
+	return func(s *Service) { s.membershipPolicy = policy }
 }
 
 type Login struct {
@@ -113,7 +125,7 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 	candidate := domain.User{
 		ID: id, Handle: "u_" + strings.ReplaceAll(id, "-", ""),
 		Name: external.Name, Email: external.Email, AvatarURL: external.AvatarURL,
-		Affiliation: external.Affiliation(s.ukmaTenantID), Role: domain.UserRole,
+		Role:      domain.UserRole,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if candidate.Name == "" {
@@ -125,6 +137,9 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 		auth.User, err = s.repository.UpsertUser(ctx, external, candidate)
 		if err != nil {
 			return fmt.Errorf("save user: %w", err)
+		}
+		if err := s.resolveMemberships(ctx, &auth.User); err != nil {
+			return err
 		}
 		if validToken(previousToken) {
 			if err := s.repository.DeleteSession(ctx, hashToken(previousToken)); err != nil {
@@ -153,7 +168,23 @@ func (s *Service) CurrentUser(ctx context.Context, token string) (domain.User, e
 	if err != nil {
 		return domain.User{}, fmt.Errorf("find session user: %w", err)
 	}
+	if err := s.resolveMemberships(ctx, &user); err != nil {
+		return domain.User{}, err
+	}
 	return user, nil
+}
+
+func (s *Service) resolveMemberships(ctx context.Context, user *domain.User) error {
+	user.Memberships = []domain.Membership{}
+	if s.membershipPolicy == nil {
+		return nil
+	}
+	identities, err := s.repository.IdentitiesByUser(ctx, user.ID)
+	if err != nil {
+		return fmt.Errorf("load membership evidence: %w", err)
+	}
+	user.Memberships = s.membershipPolicy.Evaluate(identities)
+	return nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -191,4 +222,22 @@ func randomID() string {
 	value[6] = value[6]&0x0f | 0x40
 	value[8] = value[8]&0x3f | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", value[:4], value[4:6], value[6:8], value[8:10], value[10:])
+}
+
+func (s *Service) AvailableProviders() []domain.Provider {
+	providers := []domain.Provider{}
+	for _, name := range []domain.Provider{domain.Google, domain.Entra} {
+		if _, ok := s.providers[name]; ok {
+			providers = append(providers, name)
+		}
+	}
+	return providers
+}
+
+func (s *Service) Providers() []domain.Provider {
+	list := make([]domain.Provider, 0, len(s.providers))
+	for p := range s.providers {
+		list = append(list, p)
+	}
+	return list
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
 )
 
 func TestPublicURLValidation(t *testing.T) {
@@ -24,7 +25,7 @@ func TestPublicURLValidation(t *testing.T) {
 }
 
 func TestUnauthenticatedRequestsAndLogoutOrigin(t *testing.T) {
-	service := identity.NewService(nil, nil, nil, "")
+	service := identity.NewService(nil, nil, nil)
 	h, err := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)), "https://fantasm.example")
 	if err != nil {
 		t.Fatal(err)
@@ -64,5 +65,52 @@ func TestUnauthenticatedRequestsAndLogoutOrigin(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAvailableProvidersAndBrowserLoginErrors(t *testing.T) {
+	service := identity.NewService(nil, nil, nil)
+	h, err := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://localhost:5173")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/providers", nil))
+	if w.Code != http.StatusOK || w.Body.String() != "{\"providers\":[]}\n" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("providers: %d %s", w.Code, w.Body.String())
+	}
+	for _, path := range []string{"/api/auth/google/login", "/api/auth/google/callback?error=access_denied&error_description=secret"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Accept", "text/html,application/xhtml+xml")
+		w = httptest.NewRecorder()
+		mux.ServeHTTP(w, request)
+		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "http://localhost:5173/login?error=provider_unavailable" {
+			t.Fatalf("browser error: %d %s", w.Code, w.Header().Get("Location"))
+		}
+	}
+}
+
+func TestBrowserCallbackErrorKeepsJSONContract(t *testing.T) {
+	service := identity.NewService(nil, nil, map[domain.Provider]identity.Provider{domain.Google: nil})
+	h, err := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://localhost:5173")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	for _, accept := range []string{"application/json", "text/html"} {
+		request := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?error=access_denied&error_description=private", nil)
+		request.Header.Set("Accept", accept)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, request)
+		if accept == "text/html" {
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "http://localhost:5173/login?error=authentication_failed" {
+				t.Fatalf("browser error: %d %s", w.Code, w.Header().Get("Location"))
+			}
+		} else if w.Code != http.StatusUnauthorized {
+			t.Fatalf("JSON error: %d", w.Code)
+		}
 	}
 }

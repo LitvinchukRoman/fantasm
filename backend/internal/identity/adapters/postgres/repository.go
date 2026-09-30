@@ -49,25 +49,25 @@ func (r *Repository) UpsertUser(ctx context.Context, external domain.Identity, c
 		case errors.Is(err, pgx.ErrNoRows):
 			userID = candidate.ID
 			_, err = q.Exec(ctx, `
-				INSERT INTO users (id, handle, name, email, avatar_url, affiliation, role, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, candidate.ID, candidate.Handle, candidate.Name, candidate.Email, candidate.AvatarURL, candidate.Affiliation, candidate.Role, candidate.CreatedAt, candidate.UpdatedAt)
+				INSERT INTO users (id, handle, name, email, avatar_url, role, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, candidate.ID, candidate.Handle, candidate.Name, candidate.Email, candidate.AvatarURL, candidate.Role, candidate.CreatedAt, candidate.UpdatedAt)
 			if err != nil {
 				return err
 			}
 			_, err = q.Exec(ctx, `
-				INSERT INTO external_identities (provider, issuer, subject, user_id, tenant_id, email_verified)
-				VALUES ($1, $2, $3, $4, $5, $6)`, external.Provider, external.Issuer, external.Subject, userID, external.TenantID, external.EmailVerified)
+				INSERT INTO external_identities (provider, issuer, subject, user_id, tenant_id, email_verified, email)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`, external.Provider, external.Issuer, external.Subject, userID, external.TenantID, external.EmailVerified, external.Email)
 			if err != nil {
 				return err
 			}
 		case err != nil:
 			return err
 		default:
-			_, err = q.Exec(ctx, `UPDATE users SET email = $2, affiliation = $3, updated_at = $4 WHERE id = $1`, userID, candidate.Email, candidate.Affiliation, candidate.UpdatedAt)
+			_, err = q.Exec(ctx, `UPDATE users SET email = $2, updated_at = $3 WHERE id = $1`, userID, candidate.Email, candidate.UpdatedAt)
 			if err != nil {
 				return err
 			}
-			_, err = q.Exec(ctx, `UPDATE external_identities SET tenant_id = $3, email_verified = $4 WHERE issuer = $1 AND subject = $2`, external.Issuer, external.Subject, external.TenantID, external.EmailVerified)
+			_, err = q.Exec(ctx, `UPDATE external_identities SET tenant_id = $3, email_verified = $4, email = $5 WHERE issuer = $1 AND subject = $2`, external.Issuer, external.Subject, external.TenantID, external.EmailVerified, external.Email)
 			if err != nil {
 				return err
 			}
@@ -93,11 +93,11 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash string) error 
 	return err
 }
 
-const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.faculty, u.affiliation, u.role, u.created_at, u.updated_at`
+const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.faculty, u.role, u.created_at, u.updated_at`
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.Faculty, &user.Affiliation, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.Faculty, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	return user, notFound(err)
 }
 
@@ -106,4 +106,21 @@ func notFound(err error) error {
 		return domain.ErrNotFound
 	}
 	return err
+}
+
+func (r *Repository) IdentitiesByUser(ctx context.Context, userID string) ([]domain.Identity, error) {
+	rows, err := r.db.Querier(ctx).Query(ctx, `SELECT provider, issuer, subject, tenant_id, email, email_verified FROM external_identities WHERE user_id = $1 ORDER BY issuer, subject`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	identities := []domain.Identity{}
+	for rows.Next() {
+		var identity domain.Identity
+		if err := rows.Scan(&identity.Provider, &identity.Issuer, &identity.Subject, &identity.TenantID, &identity.Email, &identity.EmailVerified); err != nil {
+			return nil, err
+		}
+		identities = append(identities, identity)
+	}
+	return identities, rows.Err()
 }

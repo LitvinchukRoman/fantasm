@@ -3,8 +3,10 @@ package identity
 import (
 	"context"
 	"errors"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/organizations"
 	"maps"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 )
 
 type memoryRepository struct {
+	identities  map[string]domain.Identity
 	logins      map[string]domain.LoginAttempt
 	users       map[string]domain.User
 	sessions    map[string]domain.Session
@@ -20,7 +23,7 @@ type memoryRepository struct {
 }
 
 func newMemoryRepository() *memoryRepository {
-	return &memoryRepository{logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session)}
+	return &memoryRepository{identities: make(map[string]domain.Identity), logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session)}
 }
 
 func (r *memoryRepository) CreateLogin(_ context.Context, attempt domain.LoginAttempt) error {
@@ -39,9 +42,9 @@ func (r *memoryRepository) ConsumeLogin(_ context.Context, state, browser string
 
 func (r *memoryRepository) UpsertUser(_ context.Context, external domain.Identity, candidate domain.User) (domain.User, error) {
 	key := external.Issuer + "|" + external.Subject
+	r.identities[key] = external
 	if existing, ok := r.users[key]; ok {
 		existing.Email = candidate.Email
-		existing.Affiliation = candidate.Affiliation
 		r.users[key] = existing
 		return existing, nil
 	}
@@ -75,9 +78,9 @@ func (r *memoryRepository) DeleteSession(_ context.Context, hash string) error {
 }
 
 func (r *memoryRepository) WithinTx(ctx context.Context, fn func(context.Context) error) error {
-	users, sessions := maps.Clone(r.users), maps.Clone(r.sessions)
+	users, sessions, identities := maps.Clone(r.users), maps.Clone(r.sessions), maps.Clone(r.identities)
 	if err := fn(ctx); err != nil {
-		r.users, r.sessions = users, sessions
+		r.users, r.sessions, r.identities = users, sessions, identities
 		return err
 	}
 	return nil
@@ -103,8 +106,8 @@ func (p *fakeProvider) Authenticate(_ context.Context, code, nonce, verifier str
 
 func testService() (*Service, *memoryRepository, *fakeProvider) {
 	r := newMemoryRepository()
-	p := &fakeProvider{profile: domain.Identity{Provider: domain.Google, Issuer: "https://accounts.google.com", Subject: "subject", Email: "student@ukma.edu.ua", EmailVerified: true, Name: "Student"}}
-	s := NewService(r, r, map[domain.Provider]Provider{domain.Google: p}, "tenant")
+	p := &fakeProvider{profile: domain.Identity{Provider: domain.Google, Issuer: "https://accounts.google.com", Subject: "subject", Email: "person@example.com", EmailVerified: true, Name: "Student"}}
+	s := NewService(r, r, map[domain.Provider]Provider{domain.Google: p})
 	s.now = func() time.Time { return time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC) }
 	return s, r, p
 }
@@ -135,7 +138,7 @@ func signIn(t *testing.T, s *Service, previous string) Authentication {
 func TestSessionLifecycle(t *testing.T) {
 	s, r, _ := testService()
 	auth := signIn(t, s, "")
-	if auth.User.Affiliation != domain.External || auth.User.Role != domain.UserRole {
+	if auth.User.Role != domain.UserRole {
 		t.Fatalf("unexpected privileges: %+v", auth.User)
 	}
 	if _, exists := r.sessions[auth.Token]; exists {
@@ -233,5 +236,64 @@ func TestProviderFailureCreatesNoSession(t *testing.T) {
 	}
 	if len(r.users) != 0 || len(r.sessions) != 0 || len(r.logins) != 0 {
 		t.Fatal("failed authentication persisted credentials or reusable state")
+	}
+}
+
+func (r *memoryRepository) IdentitiesByUser(_ context.Context, id string) ([]domain.Identity, error) {
+	identities := []domain.Identity{}
+	for key, user := range r.users {
+		if user.ID == id {
+			identities = append(identities, r.identities[key])
+		}
+	}
+	return identities, nil
+}
+
+func TestMembershipRefreshAndPolicyRevocation(t *testing.T) {
+	s, repository, provider := testService()
+	policy, err := organizations.Parse(strings.NewReader(`{"version":1,"organizations":[{"id":"campus","name":"Campus","match":{"verifiedEmailDomain":"example.com"},"capabilities":["ideas.read_internal"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.membershipPolicy = policy
+	auth := signIn(t, s, "")
+	if !auth.User.Can("campus", "ideas.read_internal") || auth.User.Role != domain.UserRole {
+		t.Fatalf("membership at login: %+v", auth.User)
+	}
+	user, err := s.CurrentUser(t.Context(), auth.Token)
+	if err != nil || !user.Can("campus", "ideas.read_internal") {
+		t.Fatalf("membership in session: %+v, %v", user, err)
+	}
+	empty, err := organizations.Parse(strings.NewReader(`{"version":1,"organizations":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted := NewService(repository, repository, nil, WithMembershipPolicy(empty))
+	restarted.now = s.now
+	user, err = restarted.CurrentUser(t.Context(), auth.Token)
+	if err != nil || len(user.Memberships) != 0 {
+		t.Fatalf("stale membership after rules changed: %+v, %v", user, err)
+	}
+	provider.profile.EmailVerified = false
+	refreshed := signIn(t, s, "")
+	if len(refreshed.User.Memberships) != 0 {
+		t.Fatal("unverified evidence retained membership")
+	}
+	user, err = s.CurrentUser(t.Context(), auth.Token)
+	if err != nil || len(user.Memberships) != 0 {
+		t.Fatalf("old session retained revoked membership: %+v, %v", user, err)
+	}
+}
+
+func TestAvailableProviders(t *testing.T) {
+	s, _, _ := testService()
+	providers := s.AvailableProviders()
+	if len(providers) != 1 || providers[0] != domain.Google {
+		t.Fatalf("providers: %v", providers)
+	}
+	s.providers[domain.Entra] = &fakeProvider{}
+	providers = s.AvailableProviders()
+	if len(providers) != 2 || providers[0] != domain.Google || providers[1] != domain.Entra {
+		t.Fatalf("providers: %v", providers)
 	}
 }

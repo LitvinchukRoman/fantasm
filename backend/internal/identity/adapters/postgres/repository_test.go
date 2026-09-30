@@ -2,8 +2,10 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/organizations"
 	"io"
 	"log/slog"
 	"net/http"
@@ -26,6 +28,11 @@ import (
 )
 
 func database(t *testing.T) *postgres.DB {
+	t.Helper()
+	return databaseWithSetup(t, nil)
+}
+
+func databaseWithSetup(t *testing.T, before func(*postgres.DB, string)) *postgres.DB {
 	t.Helper()
 	dsn := os.Getenv("IDENTITY_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -65,6 +72,9 @@ func database(t *testing.T) *postgres.DB {
 		t.Fatalf("find migrations: %v", err)
 	}
 	for _, path := range paths {
+		if before != nil {
+			before(db, filepath.Base(path))
+		}
 		migration, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -81,7 +91,7 @@ func profile(subject string) domain.Identity {
 }
 
 func candidate(n int) domain.User {
-	return domain.User{ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", n), Handle: fmt.Sprintf("user_%d", n), Name: "Student", Email: "same@example.com", Affiliation: domain.External, Role: domain.UserRole, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	return domain.User{ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", n), Handle: fmt.Sprintf("user_%d", n), Name: "Student", Email: "same@example.com", Role: domain.UserRole, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 }
 
 func TestConcurrentIdentityCreation(t *testing.T) {
@@ -176,7 +186,11 @@ func (provider) Authenticate(_ context.Context, code, nonce, verifier string) (d
 func TestHTTPLoginSessionAndLogout(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
-	s := identity.NewService(r, db, map[domain.Provider]identity.Provider{domain.Google: provider{}}, "")
+	policy, err := organizations.Parse(strings.NewReader(`{"version":1,"organizations":[{"id":"campus","name":"Campus","match":{"verifiedEmailDomain":"example.com"},"capabilities":["ideas.read_internal"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := identity.NewService(r, db, map[domain.Provider]identity.Provider{domain.Google: provider{}}, identity.WithMembershipPolicy(policy))
 	h, err := identityhttp.NewHandler(s, slog.New(slog.NewTextHandler(io.Discard, nil)), "https://fantasm.example")
 	if err != nil {
 		t.Fatal(err)
@@ -219,8 +233,30 @@ func TestHTTPLoginSessionAndLogout(t *testing.T) {
 	me.AddCookie(session)
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, me)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"affiliation":"EXTERNAL"`) || strings.Contains(w.Body.String(), session.Value) {
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), session.Value) {
 		t.Fatalf("current user: %d %s", w.Code, w.Body.String())
+	}
+	var current struct {
+		Memberships []domain.Membership `json:"memberships"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &current); err != nil || len(current.Memberships) != 1 || current.Memberships[0].OrganizationID != "campus" {
+		t.Fatalf("HTTP memberships: %s, %v", w.Body.String(), err)
+	}
+	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE users SET email = 'edited@other.example'`); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, me)
+	if err := json.Unmarshal(w.Body.Bytes(), &current); err != nil || len(current.Memberships) != 1 {
+		t.Fatal("editable user email changed membership")
+	}
+	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE external_identities SET email_verified = false`); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, me)
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &current) != nil || len(current.Memberships) != 0 {
+		t.Fatalf("stale HTTP membership: %s", w.Body.String())
 	}
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, request)
@@ -245,7 +281,7 @@ func TestHTTPLoginSessionAndLogout(t *testing.T) {
 func TestFailedSessionRollsBackNewUser(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
-	s := identity.NewService(r, db, map[domain.Provider]identity.Provider{domain.Google: provider{}}, "")
+	s := identity.NewService(r, db, map[domain.Provider]identity.Provider{domain.Google: provider{}})
 	if _, err := db.Querier(t.Context()).Exec(t.Context(), "ALTER TABLE sessions ADD CONSTRAINT reject_test_sessions CHECK (false) NOT VALID"); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +304,7 @@ func TestFailedSessionRollsBackNewUser(t *testing.T) {
 	}
 }
 
-func TestSessionUsesCurrentAffiliationAndExpiry(t *testing.T) {
+func TestSessionUsesCurrentRoleAndExpiry(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
 	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1))
@@ -279,14 +315,62 @@ func TestSessionUsesCurrentAffiliationAndExpiry(t *testing.T) {
 	if err := r.CreateSession(t.Context(), session); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE users SET affiliation = 'UKMA_VERIFIED', role = 'MODERATOR' WHERE id = $1`, u.ID); err != nil {
+	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE users SET role = 'MODERATOR' WHERE id = $1`, u.ID); err != nil {
 		t.Fatal(err)
 	}
 	u, err = r.UserBySession(t.Context(), session.TokenHash, time.Now())
-	if err != nil || u.Affiliation != domain.UKMAVerified || u.Role != domain.ModeratorRole {
+	if err != nil || u.Role != domain.ModeratorRole {
 		t.Fatalf("stale session privileges: %+v %v", u, err)
 	}
 	if _, err := r.UserBySession(t.Context(), session.TokenHash, session.ExpiresAt); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expired session accepted: %v", err)
+	}
+}
+
+func TestIdentityEvidenceRefresh(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	external := profile("subject")
+	user, err := r.UpsertUser(t.Context(), external, candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := r.IdentitiesByUser(t.Context(), user.ID)
+	if err != nil || len(evidence) != 1 || evidence[0].Email != external.Email || !evidence[0].EmailVerified {
+		t.Fatalf("evidence: %+v, %v", evidence, err)
+	}
+	external.Email = "new@other.example"
+	external.EmailVerified = false
+	if _, err := r.UpsertUser(t.Context(), external, candidate(2)); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err = r.IdentitiesByUser(t.Context(), user.ID)
+	if err != nil || len(evidence) != 1 || evidence[0].Email != external.Email || evidence[0].EmailVerified {
+		t.Fatalf("stale evidence: %+v, %v", evidence, err)
+	}
+}
+
+func TestLegacyRestrictedIdeasKeepOrganizationScope(t *testing.T) {
+	db := databaseWithSetup(t, func(db *postgres.DB, migration string) {
+		if migration != "000008_university_agnostic.up.sql" {
+			return
+		}
+		_, err := db.Querier(t.Context()).Exec(t.Context(), `
+   INSERT INTO users (id, handle, name, email) VALUES ('00000000-0000-4000-8000-000000000001', 'legacy', 'Legacy', 'legacy@example.com');
+   INSERT INTO ideas (id, author_id, slug, title, category, visibility) VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', 'legacy', 'Legacy', 'PROJECT', 'UKMA_ONLY');
+  `)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	var visibility, organization string
+	if err := db.Querier(t.Context()).QueryRow(t.Context(), `SELECT visibility, organization_id FROM ideas WHERE slug = 'legacy'`).Scan(&visibility, &organization); err != nil || visibility != "ORGANIZATION_ONLY" || organization != "naukma" {
+		t.Fatalf("legacy scope = %s/%s, %v", visibility, organization, err)
+	}
+	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE ideas SET organization_id = NULL WHERE slug = 'legacy'`); err == nil {
+		t.Fatal("restricted idea accepted without organization")
+	}
+	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE ideas SET visibility = 'PUBLIC' WHERE slug = 'legacy'`); err == nil {
+		t.Fatal("public idea retained organization restriction")
 	}
 }

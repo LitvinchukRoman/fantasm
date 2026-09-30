@@ -3,6 +3,8 @@ package oidc
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,13 +22,11 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
-	TenantID     string
 }
 
 type Provider struct {
 	name     domain.Provider
 	issuer   string
-	tenantID string
 	oauth    oauth2.Config
 	verifier *coreoidc.IDTokenVerifier
 	client   *http.Client
@@ -36,32 +36,30 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 	if cfg.ClientID == "" || cfg.ClientSecret == "" || cfg.RedirectURL == "" {
 		return nil, fmt.Errorf("incomplete %s OIDC configuration", cfg.Provider)
 	}
-	issuer := "https://accounts.google.com"
+	client := &http.Client{Timeout: 10 * time.Second}
+	p := &Provider{name: cfg.Provider, client: client, oauth: oauth2.Config{
+		ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, RedirectURL: cfg.RedirectURL,
+		Scopes: []string{coreoidc.ScopeOpenID, "profile", "email"},
+	}}
 	switch cfg.Provider {
 	case domain.Google:
-	case domain.Entra:
-		if !validTenantID(cfg.TenantID) {
-			return nil, fmt.Errorf("Entra requires a tenant UUID")
+		p.issuer = "https://accounts.google.com"
+		discovered, err := coreoidc.NewProvider(coreoidc.ClientContext(ctx, client), p.issuer)
+		if err != nil {
+			return nil, fmt.Errorf("discover google: %w", err)
 		}
-		cfg.TenantID = strings.ToLower(cfg.TenantID)
-		issuer = "https://login.microsoftonline.com/" + cfg.TenantID + "/v2.0"
+		p.oauth.Endpoint = discovered.Endpoint()
+		p.verifier = discovered.VerifierContext(coreoidc.ClientContext(context.Background(), client), &coreoidc.Config{ClientID: cfg.ClientID, SupportedSigningAlgs: []string{"RS256"}})
+	case domain.Entra:
+		p.oauth.Endpoint = oauth2.Endpoint{
+			AuthURL:   "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			TokenURL:  "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			AuthStyle: oauth2.AuthStyleInParams,
+		}
 	default:
 		return nil, fmt.Errorf("unsupported OIDC provider %q", cfg.Provider)
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	ctx = coreoidc.ClientContext(ctx, client)
-	discovered, err := coreoidc.NewProvider(ctx, issuer)
-	if err != nil {
-		return nil, fmt.Errorf("discover %s: %w", cfg.Provider, err)
-	}
-	return &Provider{
-		name: cfg.Provider, issuer: issuer, tenantID: cfg.TenantID, client: client,
-		oauth: oauth2.Config{
-			ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, RedirectURL: cfg.RedirectURL,
-			Endpoint: discovered.Endpoint(), Scopes: []string{coreoidc.ScopeOpenID, "profile", "email"},
-		},
-		verifier: discovered.VerifierContext(coreoidc.ClientContext(context.Background(), client), &coreoidc.Config{ClientID: cfg.ClientID, SupportedSigningAlgs: []string{"RS256"}}),
-	}, nil
+	return p, nil
 }
 
 func (p *Provider) AuthorizationURL(state, nonce, verifier string) string {
@@ -82,7 +80,14 @@ func (p *Provider) Authenticate(ctx context.Context, code, nonce, verifier strin
 	if !ok {
 		return domain.Identity{}, apperr.Unauthorized("provider did not return an ID token")
 	}
-	verified, err := p.verifier.Verify(ctx, raw)
+	verifierForToken := p.verifier
+	if p.name == domain.Entra {
+		verifierForToken, err = p.entraVerifier(ctx, raw)
+		if err != nil {
+			return domain.Identity{}, err
+		}
+	}
+	verified, err := verifierForToken.Verify(ctx, raw)
 	if err != nil {
 		return domain.Identity{}, apperr.Unauthorized("invalid provider ID token")
 	}
@@ -101,7 +106,7 @@ func (p *Provider) Authenticate(ctx context.Context, code, nonce, verifier strin
 	if claims.AuthorizedParty != "" && claims.AuthorizedParty != p.oauth.ClientID || len(verified.Audience) > 1 && claims.AuthorizedParty != p.oauth.ClientID {
 		return domain.Identity{}, apperr.Unauthorized("invalid authorized party")
 	}
-	return p.identity(verified.Subject, claims)
+	return p.identity(verified.Issuer, verified.Subject, claims)
 }
 
 type tokenClaims struct {
@@ -114,17 +119,17 @@ type tokenClaims struct {
 	AuthorizedParty      string `json:"azp"`
 }
 
-func (p *Provider) identity(subject string, claims tokenClaims) (domain.Identity, error) {
+func (p *Provider) identity(issuer, subject string, claims tokenClaims) (domain.Identity, error) {
 	result := domain.Identity{
-		Provider: p.name, Issuer: p.issuer, Subject: subject,
+		Provider: p.name, Issuer: issuer, Subject: subject,
 		Email: strings.TrimSpace(claims.Email), EmailVerified: claims.EmailVerified,
 		Name: strings.TrimSpace(claims.Name), AvatarURL: claims.Picture,
 	}
 	if p.name == domain.Entra {
-		if !strings.EqualFold(claims.TenantID, p.tenantID) {
+		if !validTenantID(claims.TenantID) || issuer != entraIssuer(claims.TenantID) {
 			return domain.Identity{}, apperr.Unauthorized("invalid provider tenant")
 		}
-		result.TenantID = p.tenantID
+		result.TenantID = strings.ToLower(claims.TenantID)
 		result.EmailVerified = false
 		if email := strings.TrimSpace(claims.VerifiedPrimaryEmail); email != "" {
 			result.Email = email
@@ -153,4 +158,25 @@ func validTenantID(value string) bool {
 		}
 	}
 	return true
+}
+
+func entraIssuer(tenant string) string {
+	return "https://login.microsoftonline.com/" + strings.ToLower(tenant) + "/v2.0"
+}
+
+func (p *Provider) entraVerifier(ctx context.Context, raw string) (*coreoidc.IDTokenVerifier, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 || len(raw) > 65536 {
+		return nil, apperr.Unauthorized("invalid provider ID token")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	var hint tokenClaims
+	if err != nil || json.Unmarshal(payload, &hint) != nil || !validTenantID(hint.TenantID) {
+		return nil, apperr.Unauthorized("invalid provider tenant")
+	}
+	discovered, err := coreoidc.NewProvider(ctx, entraIssuer(hint.TenantID))
+	if err != nil {
+		return nil, fmt.Errorf("discover Microsoft tenant: %w", err)
+	}
+	return discovered.VerifierContext(ctx, &coreoidc.Config{ClientID: p.oauth.ClientID, SupportedSigningAlgs: []string{"RS256"}}), nil
 }

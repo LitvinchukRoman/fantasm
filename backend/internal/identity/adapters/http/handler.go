@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity"
@@ -40,6 +41,7 @@ func NewHandler(service *identity.Service, logger *slog.Logger, publicURL string
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/auth/providers", h.providers)
 	mux.HandleFunc("GET /api/auth/{provider}/login", h.beginLogin)
 	mux.HandleFunc("GET /api/auth/{provider}/callback", h.completeLogin)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
@@ -55,7 +57,7 @@ func (h *Handler) beginLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	login, err := h.service.BeginLogin(r.Context(), domain.Provider(r.PathValue("provider")))
 	if err != nil {
-		h.writeError(w, r, err)
+		h.loginError(w, r, err)
 		return
 	}
 	h.setCookie(w, h.loginCookie, login.BrowserToken, login.ExpiresAt, int(identity.LoginTTL.Seconds()))
@@ -73,7 +75,7 @@ func (h *Handler) completeLogin(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	auth, err := h.service.CompleteLogin(r.Context(), domain.Provider(r.PathValue("provider")), query.Get("state"), cookieValue(r, h.loginCookie), query.Get("code"), cookieValue(r, h.sessionCookie))
 	if err != nil {
-		h.writeError(w, r, err)
+		h.loginError(w, r, err)
 		return
 	}
 	h.setCookie(w, h.sessionCookie, auth.Token, auth.ExpiresAt, int(identity.SessionTTL.Seconds()))
@@ -90,7 +92,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userResponse{
 		ID: user.ID, Handle: user.Handle, Name: user.Name, Email: user.Email,
 		AvatarURL: user.AvatarURL, Bio: user.Bio, Faculty: user.Faculty,
-		Affiliation: user.Affiliation, Role: user.Role, CreatedAt: user.CreatedAt,
+		Role: user.Role, CreatedAt: user.CreatedAt, Memberships: user.Memberships,
 	})
 }
 
@@ -110,16 +112,16 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 type userResponse struct {
-	ID          string             `json:"id"`
-	Handle      string             `json:"handle"`
-	Name        string             `json:"name"`
-	Email       string             `json:"email"`
-	AvatarURL   string             `json:"avatarUrl"`
-	Bio         string             `json:"bio"`
-	Faculty     string             `json:"faculty"`
-	Affiliation domain.Affiliation `json:"affiliation"`
-	Role        domain.Role        `json:"role"`
-	CreatedAt   time.Time          `json:"createdAt"`
+	Memberships []domain.Membership `json:"memberships"`
+	ID          string              `json:"id"`
+	Handle      string              `json:"handle"`
+	Name        string              `json:"name"`
+	Email       string              `json:"email"`
+	AvatarURL   string              `json:"avatarUrl"`
+	Bio         string              `json:"bio"`
+	Faculty     string              `json:"faculty"`
+	Role        domain.Role         `json:"role"`
+	CreatedAt   time.Time           `json:"createdAt"`
 }
 
 func (h *Handler) private(w http.ResponseWriter) {
@@ -174,4 +176,31 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	list := h.service.Providers()
+	if list == nil {
+		list = []domain.Provider{}
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Providers []domain.Provider `json:"providers"`
+	}{Providers: list})
+}
+
+func (h *Handler) loginError(w http.ResponseWriter, r *http.Request, err error) {
+	w.Header().Add("Vary", "Accept")
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		h.writeError(w, r, err)
+		return
+	}
+	code := "authentication_failed"
+	if apperr.KindOf(err) == apperr.KindNotFound {
+		code = "provider_unavailable"
+	}
+	if apperr.KindOf(err) == apperr.KindInternal {
+		h.logger.ErrorContext(r.Context(), "identity login failed", "error", err)
+	}
+	http.Redirect(w, r, h.origin+"/login?error="+code, http.StatusSeeOther)
 }

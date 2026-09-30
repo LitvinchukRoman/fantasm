@@ -1,6 +1,7 @@
 package main
 
-import (
+import
+(
 	"context"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	identityoidc "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/oidc"
 	identitypostgres "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/postgres"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/organizations"
 
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/config"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/migrate"
@@ -30,6 +32,10 @@ func main() {
 
 func run(logger *slog.Logger) error {
 	cfg := config.Load()
+	policy, err := organizations.Load(cfg.OrganizationRulesFile)
+	if err != nil {
+		return err
+	}
 
 	if cfg.MigrateOnStart {
 		if err := migrate.Up(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
@@ -47,7 +53,7 @@ func run(logger *slog.Logger) error {
 	providers := make(map[domain.Provider]identity.Provider)
 	for _, providerConfig := range []identityoidc.Config{
 		{Provider: domain.Google, ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret},
-		{Provider: domain.Entra, ClientID: cfg.EntraClientID, ClientSecret: cfg.EntraClientSecret, TenantID: cfg.UKMATenantID},
+		{Provider: domain.Entra, ClientID: cfg.EntraClientID, ClientSecret: cfg.EntraClientSecret},
 	} {
 		if providerConfig.ClientID == "" && providerConfig.ClientSecret == "" {
 			continue
@@ -60,7 +66,7 @@ func run(logger *slog.Logger) error {
 		providers[providerConfig.Provider] = provider
 	}
 	repository := identitypostgres.NewRepository(db)
-	service := identity.NewService(repository, db, providers, cfg.UKMATenantID)
+	service := identity.NewService(repository, db, providers, identity.WithMembershipPolicy(policy))
 	handler, err := identityhttp.NewHandler(service, logger, cfg.PublicURL)
 	if err != nil {
 		return err
