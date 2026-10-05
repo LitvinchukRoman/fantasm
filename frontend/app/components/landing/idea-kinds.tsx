@@ -32,7 +32,7 @@ export function IdeaKinds() {
         return (
           <li
             key={kind.label}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-2.5 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-strong)] hover:scale-105"
+            className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-2.5 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-strong)]"
           >
             <Icon className="size-4 text-[var(--color-text-muted)]" />
             {kind.label}
@@ -54,7 +54,7 @@ export function IdeaKinds() {
         </p>
       </div>
 
-      <div className="relative mt-12 flex w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+      <div className="relative mt-12 flex w-full overflow-hidden py-1 [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
         <div className="animate-marquee flex w-max items-center">
           {content}
           {content}

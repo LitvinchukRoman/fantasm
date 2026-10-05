@@ -1,5 +1,5 @@
+import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { ChecklistX } from "./checklist-x";
-import { IconSealCheck } from "./icons";
 
 const WITHOUT_SEAL = [
   {
@@ -30,10 +30,7 @@ export function MohylianPerks() {
     <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-24">
       <div className="grid gap-10 lg:grid-cols-[1fr_1fr] lg:items-start">
         <div>
-          <span className="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-accent)]">
-            <IconSealCheck className="size-5" />
-            Печатка могилянця
-          </span>
+          <VerifiedSeal label="Печатка могилянця" />
           <h2 className="mt-3 max-w-md text-2xl font-semibold text-[var(--color-text)] sm:text-3xl">
             Верифікація відкриває більше можливостей
           </h2>

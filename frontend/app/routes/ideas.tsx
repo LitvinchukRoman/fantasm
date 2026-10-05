@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { CurvedRows } from "~/components/ideas/curved-rows";
+import { FilterMenu, FilterOption, FilterPanelHeader, FilterReset, FilterToggle } from "~/components/ideas/filter-bar";
 import { IdeaRow } from "~/components/ideas/idea-row";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Nav } from "~/components/landing/nav";
+import { ActionDock } from "~/components/ui/action-dock";
+import { Button } from "~/components/ui/button";
+import { HudLabel } from "~/components/ui/hud-label";
+import { SiteFooter } from "~/components/ui/site-footer";
 import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
 import { getIdeas, toCard } from "~/lib/ideas.server";
 import { seo } from "~/lib/seo";
 import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
+import { useCurvedMode } from "~/lib/use-curved-mode";
 import { useHydrated } from "~/lib/use-hydrated";
 import type { Route } from "./+types/ideas";
 
@@ -27,97 +33,6 @@ type SortKey = "new" | "old" | "votes";
 type MenuId = "type" | "date" | "campus" | "tags" | "sort";
 
 const DAY = 86_400_000;
-
-function FilterOption({
-  title,
-  hint,
-  selected,
-  onClick,
-}: {
-  title: string;
-  hint: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={
-        "block w-full min-w-0 rounded-xl px-3 py-2.5 text-left " +
-        (selected ? "bg-[var(--color-surface-strong)]" : "hover:bg-[var(--color-surface-strong)]")
-      }
-    >
-      <span className={"block text-sm font-medium wrap-anywhere " + (selected ? "text-[var(--color-accent)]" : "text-[var(--color-text)]")}>
-        {title}
-      </span>
-      <span className="mt-0.5 block text-xs leading-snug text-[var(--color-text-muted)]">{hint}</span>
-    </button>
-  );
-}
-
-function FilterMenu({
-  label,
-  value,
-  open,
-  onToggle,
-  up = false,
-  children,
-}: {
-  label: string;
-  value?: string;
-  open: boolean;
-  onToggle: () => void;
-  /** Випадає вгору й вирівнюється по правому краю: для панелі в нижньому правому куті. */
-  up?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="relative max-sm:static">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={onToggle}
-        className={
-          "rounded-full px-3 py-1.5 text-sm " +
-          (open || value
-            ? "bg-[var(--color-surface-strong)] text-[var(--color-text)]"
-            : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]")
-        }
-      >
-        {label}
-        {value ? <span className="text-[var(--color-accent)]"> · {value}</span> : null}
-      </button>
-      {open && (
-        <div data-curve-ignore className={(up ? "absolute bottom-full right-0 z-30 mb-3" : "absolute top-full z-30 mt-2 sm:left-0") + " rounded-[20px] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-[0_24px_48px_rgb(0_0_0/0.45)] max-sm:inset-x-0 max-sm:w-auto sm:w-[min(20rem,calc(100vw-2.5rem))]"}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Вигнута нескінченна стрічка потрібна лише там, де є колесо й наведення, і тільки без reduced motion.
- * Пререндер і мобільні отримують звичайний список тих самих рядків.
- */
-function useCurvedMode(): boolean {
-  const [enabled, setEnabled] = useState(false);
-  useEffect(() => {
-    const wide = window.matchMedia("(min-width: 1024px) and (hover: hover) and (pointer: fine)");
-    const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setEnabled(wide.matches && !calm.matches);
-    update();
-    wide.addEventListener("change", update);
-    calm.addEventListener("change", update);
-    return () => {
-      wide.removeEventListener("change", update);
-      calm.removeEventListener("change", update);
-    };
-  }, []);
-  return enabled;
-}
 
 const TITLE = "Ідеї, Fantasm";
 const DESCRIPTION = "Стрічка ідей спільноти: стартапи, події, клуби й волонтерство.";
@@ -194,19 +109,36 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const filters = hydrated ? readFilters(searchParams) : EMPTY_FILTERS;
   const { category, dateWindow, campus, sort, tags } = filters;
 
+  // Остання відома комбінація фільтрів. URL оновлюється асинхронно, тож два швидкі кліки поспіль
+  // не повинні читати застарілий стан і губити перший вибір: від порядку натискань результат не залежить.
+  const latest = useRef(filters);
+  useEffect(() => {
+    latest.current = filters;
+  });
   function update(patch: Partial<Filters>) {
-    setSearchParams(writeFilters({ ...filters, ...patch }), { replace: true, preventScrollReset: true });
+    const next = { ...latest.current, ...patch };
+    latest.current = next;
+    setSearchParams(writeFilters(next), { replace: true, preventScrollReset: true });
+  }
+  function reset() {
+    latest.current = EMPTY_FILTERS;
+    setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
+    setMenu(null);
   }
   const setCategory = (value: IdeaCategory | null) => update({ category: value });
   const setDateWindow = (value: DateWindow) => update({ dateWindow: value });
   const setCampus = (value: CampusFilter) => update({ campus: value });
   const setSort = (value: SortKey) => update({ sort: value });
-  const setTags = (next: string[] | ((current: string[]) => string[])) =>
-    update({ tags: typeof next === "function" ? next(tags) : next });
+  const setTags = (next: string[]) => update({ tags: next });
+  const toggleTag = (slug: string) =>
+    update({ tags: latest.current.tags.includes(slug) ? latest.current.tags.filter((item) => item !== slug) : [...latest.current.tags, slug] });
 
   const tagOptions: IdeaTag[] = [
     ...new Map(loaderData.ideas.flatMap((idea) => idea.tags).map((tag) => [tag.slug, tag])).values(),
   ];
+
+  const tagCounts = new Map<string, number>();
+  for (const idea of loaderData.ideas) for (const tag of idea.tags) tagCounts.set(tag.slug, (tagCounts.get(tag.slug) ?? 0) + 1);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -253,7 +185,9 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
 
   const dirty = category !== null || dateWindow !== "all" || campus !== "all" || sort !== "new" || tags.length > 0;
 
-  const curved = useCurvedMode() && ideas.length >= 2;
+  // Режим (вигнута стрічка з панеллю фільтрів знизу чи плоский список) залежить лише від пристрою, а не від кількості
+  // результатів: інакше фільтр, що лишає 0–1 ідею, перекидав би панель нагору просто під пальцем.
+  const curved = useCurvedMode();
 
   useEffect(() => {
     if (!curved) return;
@@ -262,7 +196,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   }, [curved]);
 
   const filterBar = (
-    <div ref={barRef} className="relative flex flex-wrap items-center gap-1">
+    <div ref={barRef} className="relative flex flex-wrap items-center gap-1.5">
       <FilterMenu
         up={curved}
         label="Тип"
@@ -310,23 +244,26 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         open={menu === "tags"}
         onToggle={() => toggleMenu("tags")}
       >
-        <FilterOption title="Усі" hint="Без обмеження за тегами" selected={tags.length === 0} onClick={() => setTags([])} />
-        <div className="grid grid-cols-2 gap-1">
-          {tagOptions.map((tag) => {
-            const on = tags.includes(tag.slug);
-            const count = loaderData.ideas.filter((idea) => idea.tags.some((item) => item.slug === tag.slug)).length;
-            return (
-              <FilterOption
-                key={tag.slug}
-                title={`#${tag.label}`}
-                hint={`${count} у стрічці`}
-                selected={on}
-                onClick={() =>
-                  setTags((current) => (on ? current.filter((slug) => slug !== tag.slug) : [...current, tag.slug]))
-                }
-              />
-            );
-          })}
+        <FilterPanelHeader
+          title="Будь-який із вибраних"
+          action={
+            tags.length > 0 ? (
+              <button type="button" onClick={() => setTags([])} className="text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text)]">
+                Очистити
+              </button>
+            ) : undefined
+          }
+        />
+        <div className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2">
+          {tagOptions.map((tag) => (
+            <FilterToggle
+              key={tag.slug}
+              label={tag.label}
+              count={tagCounts.get(tag.slug) ?? 0}
+              on={tags.includes(tag.slug)}
+              onClick={() => toggleTag(tag.slug)}
+            />
+          ))}
         </div>
       </FilterMenu>
       <FilterMenu
@@ -340,25 +277,32 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         <FilterOption title="Старіші" hint="Спочатку давніші" selected={sort === "old"} onClick={() => choose("sort", setSort)("old")} />
         <FilterOption title="Голоси" hint="Спочатку з більшою підтримкою" selected={sort === "votes"} onClick={() => choose("sort", setSort)("votes")} />
       </FilterMenu>
-      {dirty && (
-        <button
-          type="button"
-          onClick={() => {
-            setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
-            setMenu(null);
-          }}
-          className="px-3 py-1.5 text-sm text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
-        >
-          Скинути
-        </button>
-      )}
+      {dirty && <FilterReset onClick={reset} />}
+    </div>
+  );
+  const emptyState = (
+    <div className="border-y border-dashed border-[var(--color-border-strong)] px-6 py-14 text-center">
+      <p className="text-[var(--color-text)]">{dirty ? "Нічого не знайшлось за цими фільтрами" : "Тут з'явиться перша ідея"}</p>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm text-[var(--color-text-muted)]">
+        {dirty ? "Спробуй послабити умови або скинь фільтри." : "Станьте першим, хто поділиться ідеєю зі спільнотою."}
+      </p>
+      <div className="mt-6 flex justify-center gap-3">
+        {dirty && (
+          <Button variant="secondary" onClick={reset}>
+            Скинути фільтри
+          </Button>
+        )}
+        <Button to="/ideas/new" arrow>
+          Запропонувати ідею
+        </Button>
+      </div>
     </div>
   );
   const numberOf = (index: number) => String(index + 1).padStart(2, "0");
 
   return (
     <div className="min-h-dvh">
-      <IdeasBackground />
+      <IdeasBackground interactive={false} />
       <Nav key={curved ? "overlay" : "solid"} forceSolid={!curved} />
       {curved ? (
         <>
@@ -366,34 +310,67 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
           <div className="ideas-overlay-bottom" aria-hidden="true" />
           <div className="pointer-events-none fixed inset-x-0 top-16 z-20">
             <div className="idea-rail">
-              <h1 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Ідеї · {ideas.length}</h1>
+              <HudLabel as="h1" className="!text-[var(--color-text-muted)]">
+                Ідеї · {ideas.length}
+              </HudLabel>
             </div>
           </div>
           <div className="fixed right-6 bottom-6 z-30 max-w-[calc(100vw-3rem)] rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg)]/80 px-2 py-1.5 backdrop-blur-md">
             {filterBar}
           </div>
-          <CurvedRows
-            items={ideas}
-            keyOf={(idea) => idea.slug}
-            renderRow={(idea, index, decorative) => <IdeaRow idea={idea} number={numberOf(index)} decorative={decorative} />}
-          />
+          {ideas.length >= 2 ? (
+            <CurvedRows
+              items={ideas}
+              keyOf={(idea) => idea.slug}
+              renderRow={(idea, index, decorative) => <IdeaRow idea={idea} number={numberOf(index)} decorative={decorative} />}
+            />
+          ) : (
+            // 0–1 результат: зациклювати нічого, показуємо його на місці, а панель фільтрів лишається там само.
+            <div className="fixed inset-0 z-[1] flex items-center">
+              <div className="idea-rail">
+                {ideas.length === 0 ? (
+                  emptyState
+                ) : (
+                  <ul className="idea-rows idea-rows--flow">
+                    {ideas.map((idea, index) => (
+                      <li key={idea.slug}>
+                        <IdeaRow idea={idea} number={numberOf(index)} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
         </>
       ) : (
-        <main className="relative z-10 mx-auto max-w-3xl px-5 pt-24 pb-20 sm:px-8">
-          <h1 className="text-3xl font-semibold text-[var(--color-text)]">Ідеї</h1>
-          <div className="mt-5">{filterBar}</div>
-          {ideas.length === 0 ? (
-            <p className="mt-8 text-sm text-[var(--color-text-muted)]">Нічого не знайшлось за цими фільтрами.</p>
-          ) : (
-            <ul className="idea-rows idea-rows--flow mt-8">
-              {ideas.map((idea, index) => (
-                <li key={idea.slug}>
-                  <IdeaRow idea={idea} number={numberOf(index)} />
-                </li>
-              ))}
-            </ul>
+        <>
+          <main className="relative z-10 mx-auto min-h-[70dvh] max-w-3xl px-5 pt-24 pb-28 sm:px-8">
+            <HudLabel as="h1" className="!text-[var(--color-text-muted)]">
+              Ідеї · {ideas.length}
+            </HudLabel>
+            <div className="mt-5">{filterBar}</div>
+            {ideas.length === 0 ? (
+              <div className="mt-8">{emptyState}</div>
+            ) : (
+              <ul className="idea-rows idea-rows--flow mt-8">
+                {ideas.map((idea, index) => (
+                  <li key={idea.slug}>
+                    <IdeaRow idea={idea} number={numberOf(index)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </main>
+          <SiteFooter />
+          {ideas.length > 0 && (
+            <ActionDock label="Нова ідея">
+              <Button to="/ideas/new" size="sm" arrow>
+                Запропонувати ідею
+              </Button>
+            </ActionDock>
           )}
-        </main>
+        </>
       )}
     </div>
   );

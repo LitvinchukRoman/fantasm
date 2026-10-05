@@ -31,7 +31,7 @@ export default function AuthLayout() {
             </Link>
           </div>
           <div
-            className="relative z-10 overflow-hidden rounded-[var(--radius-card)] bg-[#0d0e11] shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_25px_50px_-12px_rgb(0_0_0/0.45)]"
+            className="relative z-10 overflow-hidden rounded-[var(--radius-card)] bg-[var(--color-bg-soft)] shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_25px_50px_-12px_rgb(0_0_0/0.45)]"
             style={{
               height: height === null ? "auto" : height,
               transition: height === null ? "none" : "height 0.65s cubic-bezier(0.16, 1, 0.3, 1)",

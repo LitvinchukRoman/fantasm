@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { formatDate } from "~/components/articles/shared";
@@ -38,7 +39,7 @@ export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[]
   return (
     <article>
       <header className="max-w-3xl">
-        <nav aria-label="Хлібні крихти" className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-[var(--color-text-faint)]">
+        <nav aria-label="Хлібні крихти" className="hud-label flex flex-wrap gap-x-2 gap-y-1">
           {crumbs.map((crumb, index) => (
             <span key={crumb.path} className="inline-flex items-center gap-2">
               {index > 0 && <span aria-hidden="true">/</span>}
@@ -58,7 +59,7 @@ export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[]
           {fm.title}
         </h1>
         <p className="mt-3 text-lg text-[var(--color-text-muted)]">{fm.description}</p>
-        <p className="mt-3 text-sm text-[var(--color-text-faint)]">
+        <p className="hud-label mt-4">
           {doc.readingMinutes} хв читання
           {fm.updatedAt ? (
             <>
@@ -74,13 +75,11 @@ export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[]
           <GuideMarkdown html={doc.html} />
           <FaqList items={fm.faq ?? []} />
           {fm.cta && (
-            <Link
-              to={fm.cta.href}
-              prefetch="intent"
-              className="inline-flex rounded-[var(--radius-control)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-bg)] hover:bg-[var(--color-accent-strong)]"
-            >
-              {fm.cta.label}
-            </Link>
+            <div>
+              <Button to={fm.cta.href} arrow>
+                {fm.cta.label}
+              </Button>
+            </div>
           )}
           {related.length > 0 && (
             <section>

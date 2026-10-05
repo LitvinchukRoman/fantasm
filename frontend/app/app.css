@@ -37,8 +37,20 @@
   --color-negative: #ef4444;
   /* семантичний червоний — з паттерну clerk.com (заблоковано/недоступно), не декоративний акцент */
 
+  --color-sheet: #121316;
+  /* вигнута шторка лендінгу і футер: один токен замість двох захардкоджених #121316 */
+
   --radius-card: 20px;
   --radius-control: 999px;
+  --radius-chip: 6px;
+
+  /* Рух: один вихідний ease для всього, що зʼявляється. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-reveal: 600ms;
+  --duration-ui: 200ms;
+
+  /* Одне моно-сімейство для всіх HUD-підписів. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Override — Inter прийнятний, коли бриф явно просить linear/raycast-стиль
      (frontend-design skill, розділ 4.1, override path). Системний стек без
@@ -60,18 +72,37 @@ html {
 }
 
 /*
- * Заголовки на всьому сайті в стилі назв ідей: Onest 500, ВЕЛИКІ літери, невеликий позитивний
- * трекінг. Не в шарі, щоб перебити утиліти на кшталт font-semibold і tracking-tight.
- * Винятки: .hero-display (власний брендовий напис) і .idea-title (вже такий).
+ * Заголовки: база в шарі base, тож утиліти Tailwind (tracking-tight, font-semibold,
+ * uppercase) знову працюють. Звичайний регістр, бо це мова «Історії» (лендінг, гайди,
+ * події, вхід). Великі літери лише для назв сутностей: .display-entity і .idea-title.
  */
-h1,
-h2,
-h3 {
-  font-family: var(--font-sans);
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+}
+
+/* Назва сутності (ідея, людина) у регістрі «Сигнал». */
+.display-entity {
   font-weight: 500;
-  letter-spacing: 0.02em;
   text-transform: uppercase;
-  line-height: 1.15;
+  letter-spacing: 0.02em;
+  line-height: 0.96;
+  overflow-wrap: anywhere;
+}
+
+/* Моно-підпис: крихти, лічильники, ключі метаданих, індекс розділів. */
+.hud-label {
+  font: 400 0.6875rem/1.4 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
 }
 
 /*
@@ -125,7 +156,7 @@ h3 {
   right: 0;
   left: 0;
   width: 100%;
-  height: calc(100% + 96px);
+  height: calc(100% + 192px);
   pointer-events: none;
   overflow: visible;
 }
@@ -146,7 +177,7 @@ h3 {
 .prose-guide h3 {
   color: var(--color-text);
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
   scroll-margin-top: 6rem;
 }
 
@@ -226,113 +257,8 @@ h3 {
   border-bottom: 0;
 }
 
-/*
- * Картка ідеї: суцільна заливка #111217 і тонка світла кромка.
- * Прозоре скло прибрано, бо крізь нього не читався текст.
- * Усередині картки лише два кольори тексту.
- */
-.ray-window {
-  position: relative;
-  z-index: 0;
-  border-radius: 26px;
-  background: #111217;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
-  transform: scale(1);
-  transform-origin: center center;
-  transition: transform 4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.ray-window.is-open {
-  z-index: 3;
-  transform: scale(1.06);
-}
-
-.ray-window.is-scrolling {
-  transition: none;
-}
-
-.ray-date {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  color: rgb(255 255 255 / 55%);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.ray-vote {
-  display: inline-flex;
-  height: fit-content;
-  flex: none;
-  flex-direction: column;
-  align-items: center;
-  color: rgb(255 255 255 / 55%);
-  font-size: 13px;
-  line-height: 16px;
-}
-
-.ray-vote:hover {
-  color: #fff;
-}
-
-.ray-kicker,
-.ray-window p,
-.ray-window footer {
-  color: rgb(255 255 255 / 55%);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.ray-kicker {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.ray-title,
-.ray-summary,
-.idea-head,
 .prose-guide {
   overflow-wrap: anywhere;
-}
-
-.idea-head {
-  overflow: hidden;
-}
-
-.ray-title {
-  display: block;
-  margin-top: 6px;
-  overflow: hidden;
-  min-height: calc(1.35em * 2);
-  max-height: calc(1.35em * 2);
-  color: #fff;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.35;
-  transition: color 0.45s ease;
-}
-
-.ray-window.is-hot .ray-title {
-  color: var(--color-accent);
-}
-
-.ray-summary {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  min-height: calc(1.4em * 2);
-  max-height: calc(1.4em * 2);
-}
-
-.ray-hit {
-  margin: -6px -18px;
-  padding: 6px 18px;
-}
-
-.ray-window footer {
-  margin-top: 14px;
-  font-size: 12px;
 }
 
 * {
@@ -375,7 +301,14 @@ h3 {
 }
 
 .animate-fade-up {
-  animation: fade-up 0.6s cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: fade-up var(--duration-reveal) var(--ease-out-expo) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none;
+  }
 }
 
 ::selection {
@@ -401,9 +334,9 @@ h3 {
   background: var(--color-border-strong);
 }
 
-/* 
- * Verified Badge Animation 
- * "лінія заливається крізь крапки, без хрестиків" 
+/*
+ * Печатка могилянця. Кромка суцільна 1px (без пунктиру з крапок: на малих радіусах він
+ * давав зернисті краї). Заливка заїжджає один раз і зупиняється.
  */
 .verified-badge {
   position: relative;
@@ -411,39 +344,33 @@ h3 {
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
-  border-radius: var(--radius-control);
-  background: var(--color-surface-strong);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   color: var(--color-accent);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   overflow: hidden;
-}
-
-.verified-badge::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: radial-gradient(circle at center, var(--color-accent) 1px, transparent 1px) 0 0 / 4px 4px;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
+  isolation: isolate;
+  -webkit-font-smoothing: antialiased;
 }
 
 .verified-badge-fill {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  background: var(--color-accent);
-  opacity: 0.15;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent);
   transform: translateX(-100%);
-  animation: badge-fill-in 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: badge-fill-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verified-badge-fill {
+    animation: none;
+    transform: none;
+  }
 }
 
 @keyframes badge-fill-in {
@@ -607,7 +534,7 @@ h3 {
 }
 
 .input-focus-pulse:focus {
-  animation: input-focus-glow 2s ease-in-out infinite;
+  animation: input-focus-glow 1.2s var(--ease-out-expo) 1 both;
   border-color: var(--color-accent) !important;
   outline: none;
 }
@@ -643,7 +570,7 @@ h3 {
 
 .btn-shimmer:hover::after {
   opacity: 1;
-  animation: btn-shimmer 1.2s ease-in-out infinite;
+  animation: btn-shimmer 1.2s ease-in-out 1;
 }
 
 /* ===== Статті: секція Bento (components/articles/bento.tsx) ===== */
@@ -1095,8 +1022,7 @@ h3 {
     display: block;
   }
 
-  .idea-row:hover .idea-pill,
-  .btn-tactical:hover .idea-pill {
+  .idea-row:hover .idea-pill {
     opacity: 1;
     scale: 1;
   }
@@ -1146,65 +1072,6 @@ html.ideas-curved body {
 }
 
 /* 
- * Brutalist Button (Mimics Idea Row Hover) 
- */
-.btn-tactical {
-  position: relative;
-  display: block;
-  width: 100%;
-  background: transparent;
-  padding: 0.75rem 1rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--color-text-muted);
-  border-top: 1px solid var(--color-border-strong);
-  border-bottom: 1px solid var(--color-border-strong);
-  border-left: none;
-  border-right: none;
-  transition: color 0.3s ease;
-  text-align: center;
-  cursor: pointer;
-}
-
-.btn-tactical::before,
-.btn-tactical::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  left: 0;
-  z-index: 2;
-  width: 0;
-  transform-origin: left;
-  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-tactical::before {
-  top: -1px;
-  height: 1.5px;
-  background: #fff;
-}
-
-.btn-tactical::after {
-  bottom: -1px;
-  height: 1px;
-  background: rgb(255 255 255 / 30%);
-}
-
-.btn-tactical:hover::before,
-.btn-tactical:hover::after,
-.btn-tactical:focus-visible::before,
-.btn-tactical:focus-visible::after {
-  width: 100%;
-}
-
-.btn-tactical:hover {
-  color: #fff;
-}
-
-/* 
  * Overrides for CurvedRows inside the profile page grid 
  */
 .profile-curved-container .ideas-stage {
@@ -1214,4 +1081,44 @@ html.ideas-curved body {
 .profile-curved-container .idea-rail {
   margin-left: 0;
   width: 100%;
+}
+/* Панель фільтра ідей: коротке «випливання» з боку кнопки. */
+@keyframes filter-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.filter-panel {
+  transform-origin: top left;
+  animation: filter-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.filter-panel--up {
+  transform-origin: bottom right;
+  animation-name: filter-pop-up;
+}
+
+@keyframes filter-pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel {
+    animation: none;
+  }
 }

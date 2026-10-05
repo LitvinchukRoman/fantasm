@@ -58,8 +58,8 @@ export function IconUsers({ className }: IconProps) {
 export function IconSealCheck({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">
-      <path d="M10 2.5 12.6 4l3-.2.6 3 2.1 2.2-1.4 2.7 1.4 2.7-2.1 2.2-.6 3-3-.2L10 21l-2.6-1.8-3 .2-.6-3-2.1-2.2 1.4-2.7-1.4-2.7 2.1-2.2.6-3 3 .2Z" />
-      <path d="M7 10.2 9.2 12.4 13.4 7.8" />
+      <path d="M10.00 1.60 L12.68 3.53 L15.94 4.06 L16.47 7.32 L18.40 10.00 L16.47 12.68 L15.94 15.94 L12.68 16.47 L10.00 18.40 L7.32 16.47 L4.06 15.94 L3.53 12.68 L1.60 10.00 L3.53 7.32 L4.06 4.06 L7.32 3.53Z" strokeLinejoin="round" />
+      <path d="M6.9 10.2 9.1 12.4 13.2 7.9" />
     </svg>
   );
 }
@@ -121,7 +121,8 @@ export function IconEyeOff({ className }: IconProps) {
 export function IconFlame({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">
-      <path d="M10 2.5c.6 2.4-1 3.6-2 5-1.2 1.7-1.8 3-1.8 4.5a3.8 3.8 0 0 0 7.6 0c0-1.1-.3-1.9-.9-2.8.1 1.1-.3 2-1 2.4.3-2.3-.6-3.4-1.4-4.6-.5-.8-.7-1.7-.5-2.5-1 .5-1.6 1.3-1.9 2.4-.2-1.6.3-3 1.9-4.4Z" />
+      <path d="M10.2 2c.3 2.4 1.9 3.7 3.3 5.4 1.2 1.5 2 3.1 2 4.9A5.5 5.5 0 0 1 10 17.8a5.5 5.5 0 0 1-5.5-5.5c0-1.6.6-3 1.6-4.2.3.9.9 1.6 1.7 1.9-.3-2.9.9-5.6 2.4-8Z" />
+      <path d="M10 17.8c-1.5 0-2.6-1.1-2.6-2.5 0-1.4 1-2.4 2.6-3.8 1.6 1.4 2.6 2.4 2.6 3.8 0 1.4-1.1 2.5-2.6 2.5Z" />
     </svg>
   );
 }
@@ -131,6 +132,30 @@ export function IconPenLine({ className }: IconProps) {
     <svg {...base} className={className} aria-hidden="true">
       <path d="M3 17h4l9-9-4-4-9 9v4Z" />
       <path d="M11 5l4 4" />
+    </svg>
+  );
+}
+
+export function IconChevronDown({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="m5 8 5 5 5-5" />
+    </svg>
+  );
+}
+
+export function IconCheck({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="m4.5 10.5 3.5 3.5 7.5-8" />
+    </svg>
+  );
+}
+
+export function IconClose({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="m5 5 10 10M15 5 5 15" />
     </svg>
   );
 }

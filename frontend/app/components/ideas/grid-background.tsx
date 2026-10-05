@@ -5,7 +5,7 @@ import type { GridSceneHandle } from "./webgl/create-grid-scene";
  * Живий фон-сітка. WebGL підключається на клієнті після гідрації. Без WebGL або при
  * `prefers-reduced-motion` лишається статична CSS-сітка з тими ж лініями, без руху.
  */
-export function GridBackground() {
+export function GridBackground({ interactive = true }: { interactive?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fallback, setFallback] = useState(false);
 
@@ -27,7 +27,7 @@ export function GridBackground() {
       .then(({ createGridScene }) => {
         if (cancelled) return;
         const compact = window.innerWidth < 1024;
-        scene = createGridScene(canvas, { segments: compact ? 140 : 200 });
+        scene = createGridScene(canvas, { segments: compact ? 140 : 200, interactive });
         const rect = host.getBoundingClientRect();
         scene.resize(rect.width, rect.height);
       })
@@ -46,7 +46,7 @@ export function GridBackground() {
       observer.disconnect();
       scene?.dispose();
     };
-  }, []);
+  }, [interactive]);
 
   if (fallback) return <div className="ideas-grid-static" />;
   return <canvas ref={canvasRef} className="ideas-grid-canvas" />;

@@ -1,14 +1,18 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 const HEADROOM = 96;
+const FOOTROOM = 96;
 const MAX_SAG = 72;
 
 /**
- * Межа сірої шторки — квадратична крива. Лівий і правий краї стоять
- * на шві сторінки і не відхиляються. Рухається тільки центр:
- * скрол угору прогинає його вниз і відкриває сферу, скрол униз — угору.
+ * Межі сірої шторки — дві квадратичні криві, верхня і нижня. Лівий і правий краї
+ * стоять на швах сторінки і не відхиляються. Рухаються тільки центри:
+ * середина кожної межі йде за напрямком руху змісту. Скрол угору прогинає її вниз,
+ * скрол униз піднімає. Верх відкриває сферу, низ відкриває фон під закликом.
  * Текст у .page-sheet-content цим зсувом не чіпається.
- * У спокої крива повертається до прямої. Крок згладжений, без ривка в нуль.
+ * Елементи з `data-sheet-hole` вирізаються зі шторки (evenodd), тож крізь них видно фонову сцену.
+ * Радіус отвору береться з `border-radius` елемента.
+ * У спокої криві повертаються до прямих. Крок згладжений, без ривка в нуль.
  */
 export function CurvedSheet({ children }: { children: ReactNode }) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -24,20 +28,45 @@ export function CurvedSheet({ children }: { children: ReactNode }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     let lastY = window.scrollY;
     let velocity = 0;
-    let sag = 0;
+    let topSag = 0;
+    let bottomSag = 0;
     let raf = 0;
     let running = false;
+    let holes = "";
 
-    const paint = (next: number) => {
+    /** Отвори в координатах SVG: відлік від верху шторки плюс HEADROOM. */
+    const measureHoles = () => {
+      const base = sheet.getBoundingClientRect();
+      const parts: string[] = [];
+      sheet.querySelectorAll<HTMLElement>("[data-sheet-hole]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        const x = r.left - base.left;
+        const y = r.top - base.top + HEADROOM;
+        const radius = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, r.width / 2, r.height / 2);
+        const x1 = x + r.width;
+        const y1 = y + r.height;
+        parts.push(
+          `M${x + radius} ${y}H${x1 - radius}A${radius} ${radius} 0 0 1 ${x1} ${y + radius}V${y1 - radius}A${radius} ${radius} 0 0 1 ${x1 - radius} ${y1}H${x + radius}A${radius} ${radius} 0 0 1 ${x} ${y1 - radius}V${y + radius}A${radius} ${radius} 0 0 1 ${x + radius} ${y}Z`,
+        );
+      });
+      holes = parts.join("");
+    };
+
+    const paint = (top: number, bottom: number) => {
       const w = Math.max(1, sheet.clientWidth);
-      const h = sheet.clientHeight + HEADROOM;
+      const sheetH = sheet.clientHeight;
+      const h = sheetH + HEADROOM + FOOTROOM;
       const y0 = HEADROOM;
+      const y1 = HEADROOM + sheetH;
       svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
       path.setAttribute(
         "d",
-        `M0 ${y0} Q${w / 2} ${y0 + next} ${w} ${y0} L${w} ${h} L0 ${h} Z`,
+        `M0 ${y0} Q${w / 2} ${y0 + top} ${w} ${y0} L${w} ${y1} Q${w / 2} ${y1 + bottom} 0 ${y1} Z${holes}`,
       );
     };
+
+    const clamp = (value: number) => Math.max(-MAX_SAG, Math.min(MAX_SAG, value));
 
     const tick = () => {
       const y = window.scrollY;
@@ -45,27 +74,32 @@ export function CurvedSheet({ children }: { children: ReactNode }) {
       lastY = y;
 
       if (reduced.matches) {
-        sag = 0;
+        topSag = 0;
+        bottomSag = 0;
         velocity = 0;
-        paint(0);
+        paint(0, 0);
         running = false;
         return;
       }
 
       velocity = velocity * 0.82 + dy * 0.18;
-      const top = sheet.getBoundingClientRect().top;
+      const rect = sheet.getBoundingClientRect();
       const vh = window.innerHeight;
-      const seamNear = top < vh * 1.2 && top > -vh;
-      const target = seamNear ? Math.max(-MAX_SAG, Math.min(MAX_SAG, -velocity * 6)) : 0;
-      sag += (target - sag) * 0.14;
-      paint(sag);
+      const topNear = rect.top < vh * 1.2 && rect.top > -vh;
+      const bottomNear = rect.bottom < vh * 1.2 && rect.bottom > -vh;
+      const target = clamp(-velocity * 6);
+      topSag += ((topNear ? target : 0) - topSag) * 0.14;
+      bottomSag += ((bottomNear ? target : 0) - bottomSag) * 0.14;
+      paint(topSag, bottomSag);
 
-      if (Math.abs(sag) > 0.4 || Math.abs(velocity) > 0.15 || Math.abs(dy) > 0.5) {
+      const moving = Math.abs(topSag) > 0.4 || Math.abs(bottomSag) > 0.4;
+      if (moving || Math.abs(velocity) > 0.15 || Math.abs(dy) > 0.5) {
         raf = requestAnimationFrame(tick);
       } else {
-        sag = 0;
+        topSag = 0;
+        bottomSag = 0;
         velocity = 0;
-        paint(0);
+        paint(0, 0);
         running = false;
       }
     };
@@ -76,9 +110,17 @@ export function CurvedSheet({ children }: { children: ReactNode }) {
       raf = requestAnimationFrame(tick);
     };
 
-    paint(0);
-    const resize = new ResizeObserver(() => paint(sag));
+    const relayout = () => {
+      measureHoles();
+      paint(topSag, bottomSag);
+    };
+    measureHoles();
+    paint(0, 0);
+    const resize = new ResizeObserver(relayout);
     resize.observe(sheet);
+    sheet.querySelectorAll("[data-sheet-hole]").forEach((el) => resize.observe(el));
+    window.addEventListener("resize", relayout);
+    void document.fonts?.ready.then(relayout);
     window.addEventListener("scroll", kick, { passive: true });
     reduced.addEventListener("change", kick);
 
@@ -86,6 +128,7 @@ export function CurvedSheet({ children }: { children: ReactNode }) {
       cancelAnimationFrame(raf);
       resize.disconnect();
       window.removeEventListener("scroll", kick);
+      window.removeEventListener("resize", relayout);
       reduced.removeEventListener("change", kick);
     };
   }, []);
@@ -93,7 +136,7 @@ export function CurvedSheet({ children }: { children: ReactNode }) {
   return (
     <div ref={sheetRef} className="page-sheet">
       <svg ref={svgRef} className="page-curtain" aria-hidden="true">
-        <path ref={pathRef} fill="#121316" />
+        <path ref={pathRef} fill="var(--color-sheet)" fillRule="evenodd" />
       </svg>
       <div className="page-sheet-content">{children}</div>
     </div>

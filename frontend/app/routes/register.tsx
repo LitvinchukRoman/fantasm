@@ -119,7 +119,7 @@ export default function RegisterRoute() {
                 placeholder="Іван Франко"
                 className={`mt-1.5 block w-full rounded-[var(--radius-control)] border ${
                   isShaking && !name ? "border-red-500" : "border-[var(--color-border)]"
-                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
               />
             </motion.div>
 
@@ -134,7 +134,7 @@ export default function RegisterRoute() {
                 placeholder="email@ukma.edu.ua"
                 className={`mt-1.5 block w-full rounded-[var(--radius-control)] border ${
                   isShaking && !email ? "border-red-500" : "border-[var(--color-border)]"
-                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
               />
             </motion.div>
 
@@ -150,7 +150,7 @@ export default function RegisterRoute() {
                   onChange={(e) => setPassword(e.target.value)}
                   className={`block w-full rounded-[var(--radius-control)] border ${
                     isShaking && (!password || password !== confirmPassword) ? "border-red-500" : "border-[var(--color-border)]"
-                  } bg-[var(--color-bg)] pl-3 pr-10 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                  } bg-[var(--color-bg)] pl-3 pr-10 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
                 />
                 <button
                   type="button"
@@ -178,16 +178,6 @@ export default function RegisterRoute() {
                       transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
                       className="absolute inset-y-0 left-0 overflow-hidden rounded-full"
                     >
-                      <motion.div
-                        animate={{ x: ["-100%", "200%"] }}
-                        transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                        className="absolute inset-0 w-full bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12"
-                      />
-                      <motion.div
-                        animate={{ x: ["0%", "-100%"] }}
-                        transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
-                        className="absolute inset-0 w-[200%] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSI2Ij48Y2lyY2xlIGN4PSI1IiBjeT0iMyIgcj0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuNSIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iNCIgcj0iMC41IiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC4zIi8+PC9zdmc+')] opacity-60 mix-blend-overlay"
-                      />
                     </motion.div>
                   </div>
                   
@@ -225,7 +215,7 @@ export default function RegisterRoute() {
                     isShaking && (!confirmPassword || password !== confirmPassword) 
                       ? "border-red-500" 
                       : (confirmPassword && password === confirmPassword ? "border-green-500/50" : "border-[var(--color-border)]")
-                  } bg-[var(--color-bg)] pl-3 pr-[60px] py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                  } bg-[var(--color-bg)] pl-3 pr-[60px] py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2.5">
                   {confirmPassword && (
@@ -255,7 +245,7 @@ export default function RegisterRoute() {
 
             <motion.div variants={itemVariants} className="pt-2">
               <label className="flex cursor-pointer items-start gap-3">
-                <div className={`relative mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border ${isShaking && !agreed ? "border-red-500" : "border-[var(--color-border-strong)]"} bg-transparent transition-all duration-300 hover:scale-110 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)]`}>
+                <div className={`relative mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border ${isShaking && !agreed ? "border-red-500" : "border-[var(--color-border-strong)]"} bg-transparent transition-all duration-300 hover:scale-110 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)]`}>
                   <motion.div
                     initial={false}
                     animate={{

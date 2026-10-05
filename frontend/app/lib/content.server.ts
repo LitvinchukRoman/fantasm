@@ -30,7 +30,7 @@ function docPath(hub: HubSlug, slug: string) {
 /** Службові заголовки-заклики в кінці статті: у тексті лишаються, у змісті лише дрібнять навігацію. */
 const TOC_SKIP = new Set(["наступний крок"]);
 
-function buildToc(body: string): TocItem[] {
+export function buildToc(body: string): TocItem[] {
   const slugger = new GithubSlugger();
   const out: TocItem[] = [];
   let inFence = false;
