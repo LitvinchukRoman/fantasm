@@ -44,7 +44,6 @@ export function createSpherePointCloud() {
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let n = 0; n < SHELL_COUNT; n++) {
     const y = 1 - (n / (SHELL_COUNT - 1)) * 2;
-    const ring = Math.sqrt(Math.max(0, 1 - y * y));
     const theta = golden * n;
     const jitter = 0.94 + rand() * 0.08;
     const r = SPHERE_RADIUS * jitter;

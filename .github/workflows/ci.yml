@@ -20,7 +20,7 @@ env:
 jobs:
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -37,7 +37,7 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -54,7 +54,7 @@ jobs:
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -79,7 +79,7 @@ jobs:
 
   actionlint:
     name: actionlint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,7 +89,7 @@ jobs:
   # so the name is enforced here. Job name is the ruleset check context.
   branch-name:
     name: branch-name
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: Check branch name
@@ -114,7 +114,7 @@ jobs:
     name: deploy
     needs: [lint, typecheck, build, actionlint, branch-name]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: prod
     permissions:

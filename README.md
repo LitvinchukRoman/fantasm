@@ -9,8 +9,13 @@
 | `frontend/` | новий клієнт, React + TypeScript |
 | `backend/` | новий сервер, Go |
 | `legacy/` | заморожений фронтенд MVP (Next.js). Не розвивати |
+| `infra/` | статика фронтенду: S3 + CloudFront. Бекенд на EC2 ще попереду |
 
-Інфраструктуру (CloudFront + EC2) у цьому репозиторії ще немає.
+## Гілки
+
+Ім'я гілки: `тип/короткий-опис`. Тип один із `feat`, `fix`, `chore`, `infra`, `docs`. Далі лише малі латинські літери, цифри і дефіси. Приклади: `feat/forum-thread`, `fix/ci-annotations`, `infra/frontend-static`.
+
+`main` і гілки Dependabot (`dependabot/...`) цим правилом не обмежені. Перевіряє джоб `branch-name` у `.github/workflows/ci.yml`; без нього pull request у `main` не мерджиться. Окремий ruleset GitHub на ім'я гілки на персональному акаунті недоступний.
 
 ## Локально
 

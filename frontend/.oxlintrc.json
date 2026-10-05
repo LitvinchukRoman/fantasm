@@ -4,7 +4,8 @@
   "ignorePatterns": [
     "pages/**",
     "build/**",
-    ".react-router/**"
+    ".react-router/**",
+    ".agents/**"
   ],
   "rules": {
     "react/rules-of-hooks": "error",
