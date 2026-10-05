@@ -17,11 +17,18 @@ data "aws_iam_policy_document" "github_assume" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # Push and workflow_dispatch on main only. Pull requests cannot publish.
+    # A job with `environment:` puts the environment in `sub` and omits the ref
+    # from it (GitHub OIDC docs, "Filtering for a specific environment").
+    # `ref` stays a separate claim, so deploy is still limited to main.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_deploy_branch}"]
+      values   = ["repo:${var.github_repository}:environment:prod"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/${var.github_deploy_branch}"]
     }
   }
 }
