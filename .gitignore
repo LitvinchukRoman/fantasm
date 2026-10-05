@@ -15,6 +15,16 @@ backend/bin/
 # Node
 node_modules/
 frontend/dist/
+frontend/build/
+frontend/.react-router/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/tfplan
+infra/terraform/*.tfplan
+infra/terraform/crash.log
 legacy/node_modules/
 legacy/.next/
 legacy/out/
