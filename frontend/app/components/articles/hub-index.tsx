@@ -76,7 +76,7 @@ export function HubIndex({ hubs }: { hubs: HubIndexEntry[] }) {
                     >
                       Весь розділ
                       <span
-                        className={`grid size-7 place-items-center rounded-full bg-white/[0.08] transition-[background-color,color] duration-500 ${EASE_CLASS} group-hover:bg-[var(--color-accent)] group-hover:text-[#0a0a0a]`}
+                        className={`grid size-7 place-items-center rounded-full bg-white/[0.08] transition-[background-color,color] duration-500 ${EASE_CLASS} group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-bg)]`}
                       >
                         <IconArrowUpRight
                           className={`size-3.5 transition-transform duration-500 ${EASE_CLASS} group-hover:translate-x-0.5 group-hover:-translate-y-0.5`}
@@ -105,7 +105,7 @@ export function HubIndex({ hubs }: { hubs: HubIndexEntry[] }) {
                         </span>
                         <span
                           aria-hidden="true"
-                          className={`grid size-7 shrink-0 place-items-center rounded-full text-[var(--color-text-faint)] transition-[background-color,color] duration-500 ${EASE_CLASS} group-hover:bg-[var(--color-accent)] group-hover:text-[#0a0a0a]`}
+                          className={`grid size-7 shrink-0 place-items-center rounded-full text-[var(--color-text-faint)] transition-[background-color,color] duration-500 ${EASE_CLASS} group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-bg)]`}
                         >
                           <IconArrowUpRight className="size-3.5" />
                         </span>

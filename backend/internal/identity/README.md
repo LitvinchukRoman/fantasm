@@ -99,6 +99,6 @@ unset SESSION
 
 Expect 200, 204, then 401. Treat the session cookie as a credential. Curl can check redirects and authenticated API calls, but does not replace interactive Google/Microsoft login. Do not start in curl and continue in a browser without transferring the login-binding cookie.
 
-For the frontend development proxy, set `PUBLIC_URL` to its actual origin (typically `http://localhost:5173`), register callback URLs using that origin, and run `npm run dev` in `frontend`. Initiate login through the frontend origin's `/api/auth/{provider}/login`. The frontend login/register pages load enabled providers and navigate to these login routes. Navigation shows the current user and logout; the account view displays memberships. Password-based login is not implemented.
+For the frontend development proxy, set `PUBLIC_URL` to its actual origin (typically `http://localhost:5173`), register callback URLs using that origin, and run `npm run dev` in `frontend`. Initiate login through the frontend origin's `/api/auth/{provider}/login`. The frontend login/register pages are not yet wired to these routes: start login by opening the URL directly. Password-based login is not implemented.
 
 Google and Microsoft identities remain separate even when their email addresses match. Account linking is deferred.

@@ -3,6 +3,7 @@ import { Link, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-
 import { EventsCalendar, formatDay, nextRange, type DayRange } from "~/components/events/calendar";
 import { GuideFrame } from "~/components/guides/frame";
 import { EmptyState } from "~/components/landing/empty-state";
+import { Chip } from "~/components/ui/chip";
 import { IconArrowRight, IconCalendar, IconUsers } from "~/components/landing/icons";
 import { NAUKMA, eventTime, kyivDayKey, type IdeaCard } from "~/lib/ideas";
 import { getIdeas, toCard } from "~/lib/ideas.server";
@@ -93,16 +94,10 @@ function EventItem({ event, past }: { event: IdeaCard; past: boolean }) {
         (past ? "opacity-60" : "")
       }
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full bg-[var(--color-accent-soft)] px-2.5 py-0.5 font-medium tabular-nums text-[var(--color-accent)]">
-          {eventTime(event.eventAt!)}
-        </span>
-        {event.campus?.id === NAUKMA.id && (
-          <span className="rounded-full border border-[var(--color-border-strong)] px-2.5 py-0.5 text-[var(--color-text-muted)]">
-            {NAUKMA.label}
-          </span>
-        )}
-        {past && <span className="text-[var(--color-text-faint)]">Минула</span>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip tone="accent">{eventTime(event.eventAt!)}</Chip>
+        {event.campus?.id === NAUKMA.id && <Chip>{NAUKMA.label}</Chip>}
+        {past && <Chip>Минула</Chip>}
       </div>
       <h3 className="mt-2 font-semibold leading-snug text-[var(--color-text)] wrap-anywhere group-hover:text-[var(--color-accent)]">
         {event.title}
@@ -169,7 +164,7 @@ export default function EventsPage({ loaderData }: Route.ComponentProps) {
     <GuideFrame>
       <div className="mx-auto max-w-5xl">
         <header>
-          <h1 className="text-3xl font-semibold text-[var(--color-text)]">Найближчі події</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-text)] sm:text-4xl">Найближчі події</h1>
           <p className="mt-2 text-[var(--color-text-muted)]">Приєднуйтесь офлайн і онлайн: від ігор до лекцій.</p>
         </header>
 

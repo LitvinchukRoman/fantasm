@@ -1,6 +1,7 @@
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { ArticlesBento } from "~/components/articles/bento";
 import { HubIndex } from "~/components/articles/hub-index";
+import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Nav } from "~/components/landing/nav";
 import { getArticleItems } from "~/lib/articles.server";
 import { HUB_SLUGS, HUBS, getArticles, getHub } from "~/lib/content.server";
@@ -51,9 +52,10 @@ export function meta({ data }: Route.MetaArgs) {
 export default function GuidesIndex({ loaderData }: Route.ComponentProps) {
   const reduce = useReducedMotion() ?? false;
   return (
-    <div className="min-h-dvh bg-[var(--color-bg)]">
+    <div className="min-h-dvh">
+      <IdeasBackground interactive={false} />
       <Nav forceSolid />
-      <main className="pt-16">
+      <main className="relative z-10 pt-16">
         {/* Спільна група: коли сітка Bento міняє висоту, перелік нижче їде плавно, а не стрибає. */}
         <LayoutGroup id="guides-page">
           <ArticlesBento articles={loaderData.articles} headingAs="h1" showAllLink={false} />

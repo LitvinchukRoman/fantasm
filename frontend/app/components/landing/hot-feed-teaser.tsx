@@ -1,15 +1,15 @@
 import { Link } from "react-router";
+import { IdeaRow } from "~/components/ideas/idea-row";
+import type { IdeaCard } from "~/lib/ideas";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight, IconFlame, IconPenLine } from "./icons";
 
 /**
- * "Гарячі зараз" — секція зі стрічки була в лендингу legacy
- * (legacy/app/page.tsx) і випала при першому проході редизайну. Заголовок
- * і посилання "Усі ідеї" — звідти ж; текст порожнього стану — з
- * EmptyState, який legacy рендерить, коли getFeed повертає 0 елементів
- * (саме так, без даних), а не вигадана заглушка.
+ * «Гарячі зараз»: ті самі рядки, що в стрічці `/ideas`, а не окремі картки. Це міст між регістрами:
+ * лендінг («Історія») показує живий вигляд стрічки («Сигнал»), тож перехід далі не стрибок.
+ * Поки ідей немає, лишається чесний порожній стан (текст як у legacy/app/page.tsx).
  */
-export function HotFeedTeaser() {
+export function HotFeedTeaser({ ideas }: { ideas: IdeaCard[] }) {
   return (
     <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-24">
       <div className="flex items-end justify-between gap-4">
@@ -20,7 +20,7 @@ export function HotFeedTeaser() {
         <Link
           to="/ideas"
           prefetch="intent"
-          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] hover:underline transition-transform hover:scale-105"
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-accent)] transition-transform hover:scale-105 hover:underline"
         >
           Усі ідеї
           <IconArrowRight className="size-4" />
@@ -28,13 +28,23 @@ export function HotFeedTeaser() {
       </div>
 
       <div className="mt-8">
-        <EmptyState
-          icon={IconPenLine}
-          title="Тут з'явиться перша ідея"
-          body="Станьте першим, хто поділиться ідеєю зі спільнотою."
-          actionHref="/ideas/new"
-          actionLabel="Запропонувати ідею"
-        />
+        {ideas.length > 0 ? (
+          <ul className="idea-rows idea-rows--flow">
+            {ideas.map((idea, index) => (
+              <li key={idea.slug}>
+                <IdeaRow idea={idea} number={String(index + 1).padStart(2, "0")} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={IconPenLine}
+            title="Тут з'явиться перша ідея"
+            body="Станьте першим, хто поділиться ідеєю зі спільнотою."
+            actionHref="/ideas/new"
+            actionLabel="Запропонувати ідею"
+          />
+        )}
       </div>
     </section>
   );

@@ -76,7 +76,7 @@ export default function LoginRoute() {
                 placeholder="email@ukma.edu.ua"
                 className={`mt-1.5 block w-full rounded-[var(--radius-control)] border ${
                   isShaking && !email ? "border-red-500" : "border-[var(--color-border)]"
-                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
               />
             </motion.div>
 
@@ -100,7 +100,7 @@ export default function LoginRoute() {
                   placeholder="••••••••"
                   className={`block w-full rounded-[var(--radius-control)] border ${
                     isShaking && !password ? "border-red-500" : "border-[var(--color-border)]"
-                  } bg-[var(--color-bg)] pl-3 pr-10 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgba(255,0,0,0.3)] input-focus-pulse`}
+                  } bg-[var(--color-bg)] pl-3 pr-10 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
                 />
                 <button
                   type="button"

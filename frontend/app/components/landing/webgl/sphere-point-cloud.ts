@@ -20,6 +20,8 @@ function mulberry32(seed: number) {
 }
 
 const SPHERE_RADIUS = 2.45;
+/** Видимий розмір сфери відносно ауры: пил трохи менший за радіус, від якого рахується аура. */
+const SPHERE_SHRINK = 0.88;
 const SHELL_COUNT = 52000;
 const VOLUME_COUNT = 16000;
 const CAP_COUNT = 3500;
@@ -76,6 +78,20 @@ export function createSpherePointCloud() {
     push(dir.x, dir.y, dir.z, 1);
   }
 
+  // Перемішуємо точки, щоб `setDrawRange(0, n)` давав рівномірно рідшу сферу, а не відрізав
+  // «шапку» чи об'єм. Так якість можна знижувати на льоту (мобільні, слабка відеокарта).
+  for (let n = count - 1; n > 0; n--) {
+    const m = Math.floor(rand() * (n + 1));
+    for (let k = 0; k < 3; k++) {
+      const t = positions[n * 3 + k];
+      positions[n * 3 + k] = positions[m * 3 + k];
+      positions[m * 3 + k] = t;
+    }
+    const ts = shell[n];
+    shell[n] = shell[m];
+    shell[m] = ts;
+  }
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("aShell", new THREE.BufferAttribute(shell, 1));
@@ -83,15 +99,17 @@ export function createSpherePointCloud() {
   const uniforms = {
     uTime: { value: 0 },
     uPointSize: { value: 1.45 },
+    /** Масштаб сфери: на вузьких екранах менший, щоб сфера вміщалась у кадр. */
+    uScale: { value: 1 },
     uPixelRatio: { value: 1 },
-    uMouse: { value: new THREE.Vector2(0, 0) },
     uViewHalf: { value: new THREE.Vector2(3.2, 2) },
     uCenter: { value: new THREE.Vector2(1.15, 0.05) },
-    uMouseInfluenceRadius: { value: 1.15 },
-    uMouseStrength: { value: 0.85 },
-    uColorLow: { value: new THREE.Color("#c5c8d0") },
-    uColorMid: { value: new THREE.Color("#d8d8d8") },
-    uColorHigh: { value: new THREE.Color("#ffffff") },
+    /** Зсув від курсора (fluid.ts, RG у висотах екрана) і діра під ним (R). */
+    uFluid: { value: null as THREE.Texture | null },
+    uHole: { value: null as THREE.Texture | null },
+    uColorLow: { value: new THREE.Color("#d9b4b2") },
+    uColorMid: { value: new THREE.Color("#ecd0cc") },
+    uColorHigh: { value: new THREE.Color("#fff3f0") },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -104,12 +122,12 @@ export function createSpherePointCloud() {
       attribute float aShell;
       uniform float uTime;
       uniform float uPointSize;
+      uniform float uScale;
       uniform float uPixelRatio;
-      uniform vec2 uMouse;
       uniform vec2 uViewHalf;
       uniform vec2 uCenter;
-      uniform float uMouseInfluenceRadius;
-      uniform float uMouseStrength;
+      uniform sampler2D uFluid;
+      uniform sampler2D uHole;
       varying float vLight;
       varying float vAlpha;
 
@@ -123,24 +141,30 @@ export function createSpherePointCloud() {
 
       void main() {
         float spin = uTime * 0.11;
-        vec3 p = rotateY(position, spin);
+        vec3 p = rotateY(position * uScale * ${SPHERE_SHRINK.toFixed(3)}, spin);
         float wobble = snoise(p * 1.35 + vec3(0.0, uTime * 0.17, 0.2));
         p += normalize(p + vec3(0.0001)) * wobble * 0.04;
 
         vec3 world = p + vec3(uCenter, 0.0);
-        vec2 mouseWorld = uMouse * uViewHalf;
-        float mouseDist = distance(world.xy, mouseWorld);
-        float mouseBump = smoothstep(uMouseInfluenceRadius, 0.0, mouseDist) * uMouseStrength;
 
         vec3 nrm = normalize(p);
-        world += nrm * mouseBump * 0.42;
 
         float ndl = pow(max(dot(nrm, normalize(vec3(0.28, 0.18, 0.94))), 0.0), 1.55);
-        vLight = clamp(ndl + mouseBump * 0.65, 0.0, 1.0);
-        vAlpha = aShell * (0.62 + 0.38 * vLight);
+        vLight = clamp(ndl, 0.0, 1.0);
+        // Край сфери м'якший: силует розчиняється в ауре, а не обрізається різкою межею.
+        float facing = abs(nrm.z);
+        vAlpha = aShell * (0.62 + 0.38 * vLight) * (0.5 + 0.5 * smoothstep(0.0, 0.55, facing));
 
         vec4 mvPosition = modelViewMatrix * vec4(world, 1.0);
         gl_Position = projectionMatrix * mvPosition;
+
+        // Пил рухається разом із масою: зсув у висотах екрана -> NDC, з інерцією поля.
+        vec2 suv = gl_Position.xy / gl_Position.w * 0.5 + 0.5;
+        vec2 push = texture2D(uFluid, suv).xy;
+        float aspect = uViewHalf.x / uViewHalf.y;
+        gl_Position.xy += vec2(push.x * 2.0 / aspect, push.y * 2.0) * 1.3 * gl_Position.w;
+        float holeDim = 1.0 - 0.12 * texture2D(uHole, suv).x;
+        vAlpha *= holeDim;
         gl_PointSize = uPointSize * uPixelRatio * (0.65 + 1.35 * vLight);
       }
     `,
@@ -169,5 +193,5 @@ export function createSpherePointCloud() {
   points.frustumCulled = false;
   points.position.set(0, 0, 0);
 
-  return { points, material, uniforms, radius: SPHERE_RADIUS };
+  return { points, material, uniforms, radius: SPHERE_RADIUS, count };
 }

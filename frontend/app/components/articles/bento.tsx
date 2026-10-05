@@ -170,7 +170,7 @@ function CardContent({ article, featured }: { article: ArticleItem; featured: bo
           <time dateTime={article.date} className="text-[13px] tabular-nums text-[var(--color-text-faint)]">
             {formatDate(article.date)}
           </time>
-          <span className="grid size-9 place-items-center rounded-full bg-white/[0.06] text-[var(--color-text)] transition-[background-color,color] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:bg-[var(--color-accent)] group-hover:text-[#0a0a0a]">
+          <span className="grid size-9 place-items-center rounded-full bg-white/[0.06] text-[var(--color-text)] transition-[background-color,color] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-bg)]">
             <IconArrowUpRight className="size-4" />
           </span>
         </div>
@@ -296,7 +296,7 @@ export function ArticlesBento({
                   className={
                     "relative rounded-full px-4 py-2 text-sm font-medium transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] " +
                     (active
-                      ? "text-[#0a0a0a]"
+                      ? "text-[var(--color-bg)]"
                       : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]")
                   }
                 >
@@ -394,7 +394,7 @@ export function ArticlesBento({
           <Link
             to="/guides"
             prefetch="intent"
-            className="group inline-flex items-center gap-3 rounded-full bg-[var(--color-text)] py-2 pr-2 pl-6 text-sm font-medium text-[#0a0a0a] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+            className="group inline-flex items-center gap-3 rounded-full bg-[var(--color-text)] py-2 pr-2 pl-6 text-sm font-medium text-[var(--color-bg)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
           >
             Усі гайди
             <span className="grid size-8 place-items-center rounded-full bg-black/10 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px group-hover:scale-105">

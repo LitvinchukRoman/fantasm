@@ -110,9 +110,12 @@ void main() {
 export type GridSceneOptions = {
   /** Густота площини за кількістю сегментів, менше на слабких екранах. */
   segments: number;
+  /** false: фон пасивний, без реакції на курсор (ні відтискання, ні сліду). */
+  interactive?: boolean;
 };
 
 export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOptions): GridSceneHandle {
+  const interactive = options.interactive ?? true;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance" });
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -122,13 +125,12 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   camera.position.set(0, 0, CAMERA_Z);
 
   // Палітра: нейтральні темно-сірі тони без кольорового відтінку, підсвітка слідом лише біла.
-  const palette = [
-    new THREE.Color("#1a1a1a"),
-    new THREE.Color("#0d0d0d"),
-    new THREE.Color("#242424"),
-    new THREE.Color("#0d0d0d"),
-    new THREE.Color("#141414"),
-  ];
+  // Пасивний фон без сліду курсора світліший: лінії самі мають бути видні, без підсвітки від руху.
+  // Колір задано в лінійному просторі, де темні сірі майже нуль, тому множник такий великий.
+  const lift = interactive ? 1 : 9;
+  const palette = ["#1a1a1a", "#0d0d0d", "#242424", "#0d0d0d", "#141414"].map((hex) =>
+    new THREE.Color(hex).multiplyScalar(lift),
+  );
   const trailPositions = Array.from({ length: TRAIL_MAX }, () => new THREE.Vector2());
   const trailAlphas = new Float32Array(TRAIL_MAX);
 
@@ -141,14 +143,14 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     uColorSpeed: { value: 0.35 },
     uMouse: { value: new THREE.Vector2(0.5, 0.5) },
     uPushRadius: { value: 0.25 },
-    uPushStrength: { value: 0.15 },
+    uPushStrength: { value: interactive ? 0.15 : 0 },
     uTrailCount: { value: 0 },
     uTrailPos: { value: trailPositions },
     uTrailAlpha: { value: trailAlphas },
     uTrailColor: { value: new THREE.Color("#ffffff").multiplyScalar(0.28) },
     uTrailRadius: { value: 0.06 },
     uBendColor: { value: new THREE.Color("#ffffff").multiplyScalar(0.3) },
-    uBendGlow: { value: 0.32 },
+    uBendGlow: { value: interactive ? 0.32 : 0.5 },
     uCells: { value: 220 },
   };
 
@@ -210,7 +212,7 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
       if (trail.length > TRAIL_CAP) trail.splice(0, trail.length - TRAIL_CAP);
     });
   };
-  window.addEventListener("mousemove", onMove);
+  if (interactive) window.addEventListener("mousemove", onMove);
 
   const clock = new THREE.Clock();
   let frame = 0;

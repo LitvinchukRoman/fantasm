@@ -68,9 +68,7 @@ export function Toc({ items }: { items: TocItem[] }) {
 
   return (
     <nav aria-label="Зміст" className="text-sm">
-      <div className="mb-3 text-xs font-medium tracking-wide text-[var(--color-text-faint)] uppercase">
-        Зміст
-      </div>
+      <p className="hud-label mb-3">[ Зміст ]</p>
       <ul ref={listRef} className="relative border-l border-[var(--color-border)]">
         <span
           aria-hidden="true"

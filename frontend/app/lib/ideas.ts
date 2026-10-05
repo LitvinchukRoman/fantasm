@@ -3,6 +3,7 @@
  * у ideas.server.ts, щоб не потрапляти в бандл і не серіалізуватися зайвий раз.
  * Кампус — рядок `{ id, label }`, не окремий тип «могилянець».
  */
+import type { TocItem } from "./content-meta";
 
 export type Campus = { id: string; label: string };
 
@@ -42,7 +43,8 @@ export type Idea = {
   updatedAt?: string;
   eventAt?: string;
   eventLocation?: string;
-  needsRoles?: string;
+  /** Кого шукають: ролі окремими рядками, у UI це чипи. */
+  needsRoles?: string[];
   visibility: "PUBLIC" | "UKMA_ONLY";
   /** Тестові картки для верстки: у прод-білд не потрапляють (див. IDEAS_SEED). */
   fixture?: boolean;
@@ -51,8 +53,11 @@ export type Idea = {
 /** Картка стрічки: замість markdown-тіла — готовий текст для друку при наведенні. */
 export type IdeaCard = Omit<Idea, "body"> & { story: string };
 
-/** Сторінка ідеї: тіло вже відрендерене в HTML. */
-export type IdeaView = Omit<Idea, "body"> & { html: string };
+/** Сторінка ідеї: тіло вже відрендерене в HTML, зміст зібраний із заголовків тіла. */
+export type IdeaView = Omit<Idea, "body"> & { html: string; toc: TocItem[]; readingMinutes: number };
+
+/** Наступна ідея внизу сторінки: лише те, що потрібно для блоку, без тіла. */
+export type IdeaNext = Pick<Idea, "slug" | "title" | "summary" | "category">;
 
 /**
  * Дати форматуються в часовому поясі кампусу: білд-сервер і браузер

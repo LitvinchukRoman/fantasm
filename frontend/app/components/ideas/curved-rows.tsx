@@ -38,6 +38,8 @@ export function CurvedRows<T>({
   const [repeat, setRepeat] = useState(1);
 
   const count = items.length;
+  // Склад і порядок рядків: при зміні фільтрів/сортування розкладку треба перебудувати, а не лише при зміні кількості.
+  const signature = items.map(keyOf).join("|");
   const rows = Array.from({ length: count * repeat }, (_, index) => ({
     item: items[index % count],
     index,
@@ -52,8 +54,10 @@ export function CurvedRows<T>({
     let rowHeight = rowEls[0].offsetHeight - 1;
     if (rowHeight <= 0) return;
 
-    const needed = Math.ceil((window.innerHeight * 1.6) / (count * rowHeight));
-    if (needed > repeat) {
+    const needed = Math.max(1, Math.ceil((window.innerHeight * 1.6) / (count * rowHeight)));
+    // Кількість копій виводиться з поточного списку (і зростає, і спадає), тож той самий набір фільтрів
+    // завжди дає ту саму стрічку незалежно від того, якою дорогою до нього прийшли.
+    if (needed !== repeat) {
       setRepeat(needed);
       return;
     }
@@ -205,7 +209,7 @@ export function CurvedRows<T>({
       document.removeEventListener("visibilitychange", onVisibility);
       root.classList.remove("is-scrolling");
     };
-  }, [count, repeat]);
+  }, [count, repeat, signature]);
 
   return (
     <>

@@ -2,7 +2,9 @@
  * Зразки ідей з редакційного сіда MVP, щоб картку й сторінку можна було
  * перенести до появи стрічки з Go. Лоадер і є місце підміни на API.
  */
-import { NAUKMA, type Idea, type IdeaAuthor, type IdeaCard, type IdeaCategory, type IdeaTag, type IdeaView } from "./ideas";
+import { buildToc } from "./content.server";
+import { forumCount } from "./forum.server";
+import { NAUKMA, type Idea, type IdeaAuthor, type IdeaCard, type IdeaCategory, type IdeaNext, type IdeaTag, type IdeaView } from "./ideas";
 import { renderMarkdown } from "./markdown.server";
 
 const AUTHOR_ADMIN: IdeaAuthor = { handle: "naukma-ideas", name: "NaUKMA Ideas", verified: true };
@@ -89,7 +91,7 @@ const IDEAS: Idea[] = [
     comments: 0,
     participants: 0,
     createdAt: "2026-09-20T12:00:00.000Z",
-    needsRoles: "ML, Backend, Design",
+    needsRoles: ["ML", "Backend", "Design"],
     visibility: "PUBLIC",
   },
   {
@@ -252,8 +254,10 @@ function ideaStory(idea: Idea): string {
 }
 
 export function getIdeas(): Idea[] {
-  const all = ideasSeedEnabled() ? [...IDEAS, ...extraIdeas()] : IDEAS.filter((idea) => !idea.fixture);
-  return all.map(limitIdea);
+  const seed = ideasSeedEnabled();
+  const all = seed ? [...IDEAS, ...extraIdeas()] : IDEAS.filter((idea) => !idea.fixture);
+  // Лічильник коментарів береться з гілки форуму, щоб стрічка й сторінка не розходилися.
+  return all.map((idea) => limitIdea({ ...idea, comments: forumCount(idea.slug, seed) ?? idea.comments }));
 }
 
 export function getIdea(slug: string): Idea | null {
@@ -267,5 +271,25 @@ export function toCard(idea: Idea): IdeaCard {
 
 export function toView(idea: Idea): IdeaView {
   const { body, ...rest } = idea;
-  return { ...rest, html: renderMarkdown(body) };
+  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  return {
+    ...rest,
+    html: renderMarkdown(body),
+    toc: buildToc(body),
+    readingMinutes: Math.max(1, Math.round(words / 180)),
+  };
+}
+
+/**
+ * Наступна ідея за стрічкою (найновіші першими). Ідеї «лише НаУКМА» не пропонуємо:
+ * блок видно всім, а вони для сторонніх не існують.
+ */
+export function getNextIdea(slug: string): IdeaNext | null {
+  const feed = getIdeas()
+    .filter((idea) => idea.visibility === "PUBLIC" || idea.slug === slug)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const index = feed.findIndex((idea) => idea.slug === slug);
+  if (index === -1 || feed.length < 2) return null;
+  const next = feed[(index + 1) % feed.length];
+  return { slug: next.slug, title: next.title, summary: next.summary, category: next.category };
 }

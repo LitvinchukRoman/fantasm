@@ -1,6 +1,7 @@
 import type { DocView, Faq } from "./content-meta";
 import { HUBS } from "./content-meta";
-import { NAUKMA, type IdeaView } from "./ideas";
+import type { ForumPost, ForumThread } from "./forum";
+import { NAUKMA, type IdeaAuthor, type IdeaView } from "./ideas";
 import { DEFAULT_OG_BASE, OG_SIZES, SITE_LANGUAGE, SITE_LOGO, SITE_LOGO_SIZE, SITE_NAME, SITE_URL, absoluteUrl, ogBase, type JsonLd, type OgRatio } from "./site";
 
 /**
@@ -271,6 +272,60 @@ export function event(idea: IdeaView): JsonLd | null {
       address: NAUKMA_ADDRESS,
     },
     organizer: { "@type": "Organization", name: idea.author.name, url: `${SITE_URL}/` },
+  };
+}
+
+function person(author: IdeaAuthor): JsonLd {
+  return { "@type": "Person", name: author.name, url: absoluteUrl(`/u/${author.handle}`) };
+}
+
+function comment(ideaUrl: string, post: ForumPost): JsonLd[] {
+  if (post.deleted) return [];
+  return [
+    {
+      "@type": "Comment",
+      "@id": `${ideaUrl}#post-${post.id}`,
+      url: `${ideaUrl}#post-${post.id}`,
+      text: post.text,
+      datePublished: post.createdAt,
+      author: person(post.author),
+      ...(post.replies.length ? { comment: post.replies.flatMap((reply) => comment(ideaUrl, reply)) } : {}),
+    },
+  ];
+}
+
+/**
+ * Ідея з обговоренням під нею. Google показує форумні сторінки окремим блоком, але лише якщо
+ * розмітка збігається з видимим: без жодного допису (порожня гілка) вузол не віддаємо зовсім.
+ */
+export function discussionForumPosting(idea: IdeaView, thread: ForumThread): JsonLd | null {
+  if (thread.count === 0) return null;
+  const url = absoluteUrl(`/ideas/${idea.slug}`);
+  return {
+    "@context": CONTEXT,
+    "@type": "DiscussionForumPosting",
+    "@id": `${url}#discussion`,
+    mainEntityOfPage: { "@id": url },
+    url,
+    headline: idea.title.slice(0, 110),
+    text: idea.summary,
+    inLanguage: SITE_LANGUAGE,
+    datePublished: idea.createdAt,
+    ...(idea.updatedAt ? { dateModified: idea.updatedAt } : {}),
+    author: person(idea.author),
+    interactionStatistic: [
+      {
+        "@type": "InteractionCounter",
+        interactionType: "https://schema.org/CommentAction",
+        userInteractionCount: thread.count,
+      },
+      {
+        "@type": "InteractionCounter",
+        interactionType: "https://schema.org/LikeAction",
+        userInteractionCount: idea.votes,
+      },
+    ],
+    comment: thread.posts.flatMap((post) => comment(url, post)),
   };
 }
 
