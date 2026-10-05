@@ -14,7 +14,7 @@
 - Функція `functions/pretty-urls.js` повторює `frontend/server.js`: `/ideas/` → 301 `/ideas`, `/ideas` читає `ideas/index.html`. Файли з крапкою (`/assets/*`, `*.data`, `sitemap.xml`) не чіпає.
 - Кеш береться з `Cache-Control` обʼєкта. CI ставить рік і `immutable` на `/assets`, `max-age=0` на HTML і `*.data`, годину на решту. Після публікації інвалідується `/*`.
 - Відсутній ключ (S3 віддає 403 через OAC) CloudFront показує як 404 зі сторінкою `frontend/public/404.html`.
-- Деплой — OIDC-роль `fantasm-frontend-deploy`. Довіряє лише `repo:LitvinchukRoman/fantasm:ref:refs/heads/main`. Ключів доступу немає.
+- Деплой — OIDC-роль `fantasm-frontend-deploy`. Джоб має `environment: prod`, тож `sub` токена — `repo:LitvinchukRoman/fantasm:environment:prod`, а окремий claim `ref` мусить бути `refs/heads/main`. Ключів доступу немає.
 
 ## Застосувати
 
