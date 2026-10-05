@@ -4,7 +4,6 @@ import { IdeaRow } from "~/components/ideas/idea-row";
 import { CurvedRows } from "~/components/ideas/curved-rows";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Nav } from "~/components/landing/nav";
-import { formatShortDate } from "~/lib/ideas";
 import { getIdeas, toCard } from "~/lib/ideas.server";
 import { getUserProfile } from "~/lib/users.server";
 import { seo } from "~/lib/seo";
