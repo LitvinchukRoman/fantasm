@@ -646,6 +646,11 @@ html {
 .ideas-bg {
   position: fixed;
   inset: 0;
+  /* Висота найбільшого в'юпорта: адресний рядок на мобільних при гортанні не змінює розмір фону,
+     тож WebGL-канвас не перебудовується й не блимає. */
+  bottom: auto;
+  height: 100vh;
+  height: 100lvh;
   z-index: 0;
   overflow: hidden;
   background: var(--color-bg);
