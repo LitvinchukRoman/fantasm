@@ -234,7 +234,8 @@ export function createHeroScene(canvas: HTMLCanvasElement): HeroSceneHandle {
       const wide = width >= 800;
       const scale = wide ? 1 : Math.min(1, (halfW * 1.1) / radius);
       uniforms.uScale.value = scale;
-      uniforms.uLightAmount.value = wide ? 1 : 0.5;
+      uniforms.uLightAmount.value = wide ? 1 : 0;
+      uniforms.uCapAmount.value = wide ? 1 : 0;
       bloomPass.strength = wide ? 0.95 : 0.62;
       density = wide ? 1 : Math.min(1, Math.max(0.15, scale * scale * 1.8));
       applyQuality();

@@ -31,15 +31,18 @@ export function createSpherePointCloud() {
   const count = SHELL_COUNT + VOLUME_COUNT + CAP_COUNT;
   const positions = new Float32Array(count * 3);
   const shell = new Float32Array(count);
+  /** 1 для точок «шапки»: на вузькому екрані їх ховаємо, щоб куля була однорідна. */
+  const cap = new Float32Array(count);
 
   const light = new THREE.Vector3(0.22, 0.48, 0.85).normalize();
   let i = 0;
 
-  const push = (x: number, y: number, z: number, shellFactor: number) => {
+  const push = (x: number, y: number, z: number, shellFactor: number, capFactor = 0) => {
     positions[i * 3] = x;
     positions[i * 3 + 1] = y;
     positions[i * 3 + 2] = z;
     shell[i] = shellFactor;
+    cap[i] = capFactor;
     i++;
   };
 
@@ -75,7 +78,7 @@ export function createSpherePointCloud() {
       .normalize();
     const radial = SPHERE_RADIUS * (0.9 + rand() * 0.1);
     dir.multiplyScalar(radial);
-    push(dir.x, dir.y, dir.z, 1);
+    push(dir.x, dir.y, dir.z, 1, 1);
   }
 
   // Перемішуємо точки, щоб `setDrawRange(0, n)` давав рівномірно рідшу сферу, а не відрізав
@@ -90,11 +93,15 @@ export function createSpherePointCloud() {
     const ts = shell[n];
     shell[n] = shell[m];
     shell[m] = ts;
+    const tc = cap[n];
+    cap[n] = cap[m];
+    cap[m] = tc;
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("aShell", new THREE.BufferAttribute(shell, 1));
+  geometry.setAttribute("aCap", new THREE.BufferAttribute(cap, 1));
 
   const uniforms = {
     uTime: { value: 0 },
@@ -102,8 +109,10 @@ export function createSpherePointCloud() {
     /** Масштаб сфери: на вузьких екранах менший, щоб сфера вміщалась у кадр. */
     uScale: { value: 1 },
     uPixelRatio: { value: 1 },
-    /** 1 на широкому екрані. На вузькому менше: освітлена шапка не перетворюється на білу пляму, яскравість рівніша. */
+    /** 1 на широкому екрані. На вузькому 0: світла немає взагалі, вся куля однієї яскравості без плями. */
     uLightAmount: { value: 1 },
+    /** 1 на широкому екрані. 0 на вузькому: точки «шапки» не малюються, густина по кулі рівна. */
+    uCapAmount: { value: 1 },
     uViewHalf: { value: new THREE.Vector2(3.2, 2) },
     uCenter: { value: new THREE.Vector2(1.15, 0.05) },
     /** Зсув від курсора (fluid.ts, RG у висотах екрана) і діра під ним (R). */
@@ -122,11 +131,13 @@ export function createSpherePointCloud() {
     blending: THREE.AdditiveBlending,
     vertexShader: `
       attribute float aShell;
+      attribute float aCap;
       uniform float uTime;
       uniform float uPointSize;
       uniform float uScale;
       uniform float uPixelRatio;
       uniform float uLightAmount;
+      uniform float uCapAmount;
       uniform vec2 uViewHalf;
       uniform vec2 uCenter;
       uniform sampler2D uFluid;
@@ -158,6 +169,7 @@ export function createSpherePointCloud() {
         // Край сфери м'якший: силует розчиняється в ауре, а не обрізається різкою межею.
         float facing = abs(nrm.z);
         vAlpha = aShell * (0.62 + 0.38 * vLight) * (0.5 + 0.5 * smoothstep(0.0, 0.55, facing));
+        vAlpha *= mix(1.0, uCapAmount, aCap);
 
         vec4 mvPosition = modelViewMatrix * vec4(world, 1.0);
         gl_Position = projectionMatrix * mvPosition;
