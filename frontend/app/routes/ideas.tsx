@@ -4,6 +4,7 @@ import { CurvedRows } from "~/components/ideas/curved-rows";
 import { FilterMenu, FilterOption, FilterPanelHeader, FilterReset, FilterToggle } from "~/components/ideas/filter-bar";
 import { IdeaRow } from "~/components/ideas/idea-row";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
+import { IconChevronDown } from "~/components/landing/icons";
 import { Nav } from "~/components/landing/nav";
 import { ActionDock } from "~/components/ui/action-dock";
 import { Button } from "~/components/ui/button";
@@ -13,7 +14,8 @@ import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/
 import { getIdeas, toCard } from "~/lib/ideas.server";
 import { seo } from "~/lib/seo";
 import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
-import { useCurvedMode } from "~/lib/use-curved-mode";
+import { readFeedPosition, saveFeedPosition } from "~/lib/feed-position";
+import { canCurve, useCurvedMode } from "~/lib/use-curved-mode";
 import { useHydrated } from "~/lib/use-hydrated";
 import type { Route } from "./+types/ideas";
 
@@ -100,6 +102,8 @@ const EMPTY_FILTERS = readFilters(new URLSearchParams());
 export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuId | null>(null);
+  // Телефон: фільтри сховані за однією кнопкою, щоб не нагромаджувати екран; вигнута стрічка (десктоп) цього не потребує.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // Точка відліку для «за 7/30 днів»; фільтр дати діє лише після гідрації.
   const [now] = useState(() => Date.now());
   const [searchParams, setSearchParams] = useSearchParams();
@@ -195,8 +199,49 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
     return () => document.documentElement.classList.remove("ideas-curved");
   }, [curved]);
 
+  // Плоский список (мобайл): повертаємо scrollY, коли вертаємось у стрічку не кнопкою «назад» (її обробляє ScrollRestoration).
+  const feedSignature = ideas.map((idea) => idea.slug).join("|");
+  useEffect(() => {
+    if (!hydrated || canCurve()) return;
+    const saved = readFeedPosition("flat", feedSignature);
+    const frame = saved !== null ? requestAnimationFrame(() => window.scrollTo(0, saved)) : 0;
+    const remember = () => saveFeedPosition("flat", feedSignature, window.scrollY);
+    window.addEventListener("pagehide", remember);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      remember();
+      window.removeEventListener("pagehide", remember);
+    };
+  }, [hydrated, feedSignature]);
+
+  const activeCount = (category ? 1 : 0) + (dateWindow !== "all" ? 1 : 0) + (campus !== "all" ? 1 : 0) + (sort !== "new" ? 1 : 0) + tags.length;
+
   const filterBar = (
-    <div ref={barRef} className="relative flex flex-wrap items-center gap-1.5">
+    <div className="relative">
+    <div className="flex items-center gap-1.5 sm:hidden">
+      <button
+        type="button"
+        aria-expanded={filtersOpen}
+        onClick={() => {
+          setFiltersOpen((open) => !open);
+          setMenu(null);
+        }}
+        className={`inline-flex h-8 items-center gap-2 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors duration-150 ${
+          activeCount > 0 ? "border-[var(--color-accent)] text-[var(--color-text)]" : "border-[var(--color-border-strong)] text-[var(--color-text-muted)]"
+        }`}
+      >
+        Фільтри
+        {activeCount > 0 && <span className="tabular-nums text-[var(--color-accent)]">{activeCount}</span>}
+        <IconChevronDown className={`size-4 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+      </button>
+      {dirty && <FilterReset onClick={reset} />}
+    </div>
+    <div className={filtersOpen ? "max-sm:mt-2" : "max-sm:hidden"}>
+    <div
+      ref={barRef}
+      // Телефон: фільтри в один горизонтальний ряд на всю ширину екрана (з затуханням праворуч), без «осиротілої» пігулки на новому рядку.
+      className="relative flex items-center gap-1.5 max-sm:-mx-5 max-sm:overflow-x-auto max-sm:px-5 max-sm:pb-1 max-sm:[scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden"
+    >
       <FilterMenu
         up={curved}
         label="Тип"
@@ -277,7 +322,14 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         <FilterOption title="Старіші" hint="Спочатку давніші" selected={sort === "old"} onClick={() => choose("sort", setSort)("old")} />
         <FilterOption title="Голоси" hint="Спочатку з більшою підтримкою" selected={sort === "votes"} onClick={() => choose("sort", setSort)("votes")} />
       </FilterMenu>
-      {dirty && <FilterReset onClick={reset} />}
+      {dirty && <FilterReset onClick={reset} className="max-sm:hidden" />}
+    </div>
+    {/* Затухання правого краю підказує, що ряд гортається; окремий шар, бо маска на самому ряду сховала б і шторку. */}
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 -right-5 w-8 bg-gradient-to-l from-[var(--color-bg)] to-transparent sm:hidden"
+    />
+    </div>
     </div>
   );
   const emptyState = (
@@ -301,7 +353,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const numberOf = (index: number) => String(index + 1).padStart(2, "0");
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <IdeasBackground interactive={false} />
       <Nav key={curved ? "overlay" : "solid"} forceSolid={!curved} />
       {curved ? (
@@ -345,7 +397,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         </>
       ) : (
         <>
-          <main className="relative z-10 mx-auto min-h-[70dvh] max-w-3xl px-5 pt-24 pb-28 sm:px-8">
+          <main className="relative z-10 mx-auto w-full flex-1 max-w-3xl px-5 pt-24 pb-28 sm:px-8">
             <HudLabel as="h1" className="!text-[var(--color-text-muted)]">
               Ідеї · {ideas.length}
             </HudLabel>
@@ -364,7 +416,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
           </main>
           <SiteFooter />
           {ideas.length > 0 && (
-            <ActionDock label="Нова ідея">
+            <ActionDock label="Нова ідея" visible={menu === null}>
               <Button to="/ideas/new" size="sm" arrow>
                 Запропонувати ідею
               </Button>

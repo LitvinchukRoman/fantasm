@@ -29,14 +29,26 @@ export function HeroBackground() {
       if (cancelled) return;
       scene = createHeroScene(canvas);
       const rect = container.getBoundingClientRect();
-      scene.resize(rect.width, rect.height);
+      applySize(rect.width, rect.height);
       syncActivity(true);
     });
+
+    // Висоту контейнера тримає h-lvh (див. routes/_index.tsx), тож згортання адресного рядка
+    // на мобільних її не змінює. Розмір застосовуємо лише коли він справді інший.
+    let appliedWidth = 0;
+    let appliedHeight = 0;
+    const applySize = (width: number, height: number) => {
+      if (!scene) return;
+      if (Math.abs(width - appliedWidth) < 1 && Math.abs(height - appliedHeight) < 1) return;
+      appliedWidth = width;
+      appliedHeight = height;
+      scene.resize(width, height);
+    };
 
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      scene?.resize(entry.contentRect.width, entry.contentRect.height);
+      applySize(entry.contentRect.width, entry.contentRect.height);
     });
     resizeObserver.observe(container);
 

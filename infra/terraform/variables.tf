@@ -34,6 +34,18 @@ variable "github_repository" {
   default     = "LitvinchukRoman/fantasm"
 }
 
+variable "github_owner_id" {
+  description = "Numeric GitHub user id. Repos created after 2026-07-15 put it in the OIDC sub claim."
+  type        = string
+  default     = "198748414"
+}
+
+variable "github_repository_id" {
+  description = "Numeric GitHub repository id, included in the immutable OIDC sub claim."
+  type        = string
+  default     = "1382305948"
+}
+
 variable "github_deploy_branch" {
   description = "Only this branch's GitHub Actions token may publish the frontend."
   type        = string

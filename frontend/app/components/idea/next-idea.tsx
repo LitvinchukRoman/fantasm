@@ -16,7 +16,7 @@ export function NextIdea({ idea }: { idea: IdeaNext }) {
         <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[var(--color-text-muted)]">
           <span className="hud-label">{CATEGORY_LABELS[idea.category]}</span>
           <span className="max-w-xl">{idea.summary}</span>
-          <span className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--color-border-strong)] text-[var(--color-text)] transition-[background-color,color,transform] duration-300 group-hover:translate-x-1 group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-bg)]">
+          <span className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--color-border-strong)] text-[var(--color-text)] transition-[background-color,color] duration-300 group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-bg)]">
             <IconArrowRight className="size-4" />
           </span>
         </p>

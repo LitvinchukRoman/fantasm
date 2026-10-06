@@ -136,6 +136,26 @@ export function IconPenLine({ className }: IconProps) {
   );
 }
 
+/** Колба: дослідження, експерименти. */
+export function IconFlask({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M8 2.5h4M8.5 2.5v5L4 15.2a1.5 1.5 0 0 0 1.3 2.3h9.4a1.5 1.5 0 0 0 1.3-2.3L11.5 7.5v-5" />
+      <path d="M6.2 12.5h7.6" />
+    </svg>
+  );
+}
+
+/** Газета: медіа, журналістика. */
+export function IconNewspaper({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M13.5 16.5h-9a1.5 1.5 0 0 1-1.5-1.5V4.5A1 1 0 0 1 4 3.5h9.5a1 1 0 0 1 1 1v12Zm0 0h1.75a1.75 1.75 0 0 0 1.75-1.75V8.5h-2.5" />
+      <path d="M6 6.5h6M6 9.5h6M6 12.5h3.5" />
+    </svg>
+  );
+}
+
 export function IconChevronDown({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">

@@ -132,8 +132,7 @@ const STEPS: { title: string; body: string; mock: ReactNode }[] = [
 
 /**
  * Три кроки. Верх кожної колонки — «вікно»: його вирізано зі шторки (`data-sheet-hole`, див. CurvedSheet),
- * тож усередині видно фонову сцену, а поверх неї умовний інтерфейс кроку. Номери `01 02 03` ті самі,
- * що в рядках стрічки. Текст статичний: постійний рух того, що читають, лише заважає.
+ * тож усередині видно фонову сцену, а поверх неї умовний інтерфейс кроку. Номери `01 02 03` того ж розміру й гарнітури, що й заголовок кроку. Текст статичний: постійний рух того, що читають, лише заважає.
  */
 export function HowItWorks() {
   return (
@@ -153,10 +152,10 @@ export function HowItWorks() {
               {step.mock}
             </div>
             <div className="mt-5 flex items-baseline gap-3">
-              <span className="hud-label tabular-nums" aria-hidden="true">
+              <span className="text-base font-medium tabular-nums text-[var(--color-accent)]" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <h3 className="text-base font-semibold text-[var(--color-text)]">{step.title}</h3>
+              <h3 className="text-lg font-semibold text-[var(--color-text)]">{step.title}</h3>
             </div>
             <p className="mt-1.5 text-sm text-[var(--color-text-muted)]">{step.body}</p>
           </li>

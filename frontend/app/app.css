@@ -245,6 +245,56 @@ html {
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--color-border);
+  /* Слова в клітинках не рвемо посередині: .prose-guide має overflow-wrap:anywhere, у таблиці він давав «Прогр/ама». */
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+
+/*
+ * Телефон: таблицю не стискаємо, вона має природну ширину колонок і гортається вбік.
+ * Перша колонка (назва рядка) прилипає ліворуч, щоб при прокрутці було видно, до чого значення.
+ * Затухання справа (`data-more`, ставить GuideMarkdown) підказує, що є ще колонки; зникає в кінці.
+ */
+@media (max-width: 767px) {
+  .guide-table {
+    margin-inline: -0.25rem;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .guide-table table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .guide-table th,
+  .guide-table td {
+    width: 11rem;
+    min-width: 9rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .guide-table th:first-child,
+  .guide-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: 8.5rem;
+    min-width: 8.5rem;
+    background: var(--color-surface);
+    box-shadow: 1px 0 0 var(--color-border-strong);
+  }
+
+  .guide-table th:first-child {
+    background: var(--color-surface-strong);
+  }
+
+  .guide-table[data-more] {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+  }
 }
 
 .guide-table th {
@@ -508,7 +558,7 @@ html {
 }
 
 .animate-marquee {
-  animation: marquee 30s linear infinite;
+  animation: marquee var(--marquee-duration, 30s) linear infinite;
 }
 
 .animate-marquee:hover {
@@ -575,23 +625,7 @@ html {
 
 /* ===== Статті: секція Bento (components/articles/bento.tsx) ===== */
 
-/* 1. Bento: прожектор за курсором і повільний оберт кілець */
-.bento-core::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%),
-      rgb(255 99 99 / 13%),
-      transparent 70%);
-}
-
-.bento-shell:hover .bento-core::before {
-  opacity: 1;
-}
-
+/* 1. Bento: повільний оберт кілець */
 .bento-rings {
   transition: transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -616,6 +650,11 @@ html {
   overflow: hidden;
   background: var(--color-bg);
   pointer-events: none;
+}
+
+/* Сторінки читання: тихіша статична сітка (рух і форма в шейдері теж тихіші). */
+.ideas-bg--calm .ideas-grid-static {
+  opacity: 0.5;
 }
 
 .ideas-grid-canvas {
@@ -717,11 +756,17 @@ html {
   gap: 1.25rem;
   margin-top: -1px;
   border-block: 1px solid var(--color-border-strong);
-  padding-block: 1.75rem;
+  padding-block: 1.25rem;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
   transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (min-width: 640px) {
+  .idea-row {
+    padding-block: 1.75rem;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -809,9 +854,9 @@ html {
   overflow: hidden;
   overflow-wrap: anywhere;
   font-family: "Onest", system-ui, sans-serif;
-  font-size: clamp(1.5rem, 2.3vw, 2.6rem);
+  font-size: clamp(1.25rem, 2.3vw, 2.6rem);
   font-weight: 500;
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-text);
@@ -830,6 +875,39 @@ html {
   margin-top: 0.75rem;
   padding: 0;
   list-style: none;
+}
+
+/* Телефон: не рядок рамок-«фільтрів», а один тихий рядок тексту через крапку. Другорядне (кампус, #теги) ховаємо: воно є на сторінці ідеї. */
+@media (max-width: 639px) {
+  .idea-tags {
+    flex-wrap: nowrap;
+    gap: 0;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent);
+  }
+
+  .idea-tags .idea-tag {
+    flex: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    font-size: 0.625rem;
+    color: var(--color-text-faint);
+  }
+
+  .idea-tags .idea-tag + .idea-tag::before {
+    content: "·";
+    margin: 0 0.5rem;
+  }
+
+  .idea-tags .idea-tag--minor {
+    display: none;
+  }
+
+  /* З лічильників лишаємо голоси: решта на сторінці ідеї. */
+  .idea-stats span:not(:first-child) {
+    display: none;
+  }
 }
 
 .idea-tag {
@@ -862,8 +940,40 @@ html {
 /* Панель справа: сигнал замість картинки. */
 .idea-media {
   position: relative;
+  display: none;
   flex: none;
   width: 11rem;
+}
+
+@media (min-width: 1024px) {
+  .idea-media {
+    display: block;
+  }
+}
+
+/* Стисла стрічка сигналів для вузьких екранів замість великої панелі з голосами. */
+.idea-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.idea-stats b {
+  font-weight: 500;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 1024px) {
+  .idea-stats {
+    display: none;
+  }
 }
 
 .idea-frame {
@@ -1100,6 +1210,26 @@ html.ideas-curved body {
   animation: filter-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Телефон: панель фільтра — нижня шторка поверх сторінки. */
+@media (max-width: 639px) {
+  .filter-panel {
+    animation-name: filter-sheet;
+    transform-origin: bottom center;
+  }
+}
+
+@keyframes filter-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .filter-panel--up {
   transform-origin: bottom right;
   animation-name: filter-pop-up;
@@ -1119,6 +1249,24 @@ html.ideas-curved body {
 
 @media (prefers-reduced-motion: reduce) {
   .filter-panel {
+    animation: none;
+  }
+}
+
+/* Попап профілю автора: плавна поява без зсуву контенту. */
+@keyframes author-pop-in {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}
+
+.author-pop {
+  animation: author-pop-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .author-pop {
     animation: none;
   }
 }

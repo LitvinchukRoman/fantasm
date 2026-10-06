@@ -7,7 +7,7 @@ import { SIMPLEX_NOISE_3D_GLSL } from "~/components/landing/webgl/simplex-noise.
  *
  * Велика площина з густою сіткою вершин. Вершини піднімає повільний simplex-шум, а курсор
  * відтискає ділянку до камери й залишає слід із десяти згасаючих точок, що підсвічують лінії білим.
- * Лінії (квадрати й діагоналі) малює фрагментний шейдер за fwidth, тож вони завжди 1 px.
+ * Лінії (квадрати й діагоналі) малює фрагментний шейдер за fwidth, тож вони завжди ≈1.5 px і з м'яким краєм.
  */
 
 const TRAIL_MAX = 10;
@@ -16,6 +16,8 @@ const TRAIL_STEP_MS = 30;
 /** Скільки точок слідів тримаємо в пам'яті (за 1.5 с при кроці 30 мс їх до 50). */
 const TRAIL_CAP = 60;
 const CAMERA_Z = 5;
+/** Розмір клітинки сітки у світових одиницях. */
+const CELL_SIZE = 0.085;
 const FOV = 50;
 
 export type GridSceneHandle = {
@@ -42,6 +44,7 @@ uniform vec3 uTrailColor;
 uniform float uTrailRadius;
 uniform vec3 uBendColor;
 uniform float uBendGlow;
+uniform float uSweep;
 
 varying vec3 vColor;
 varying vec2 vUv;
@@ -51,18 +54,28 @@ ${SIMPLEX_NOISE_3D_GLSL}
 void main() {
   vUv = uv;
 
-  // Хвиля: повільний шум, додатна частина дає «пагорби».
+  // Хвиля. Три повільні шари, щоб рух був живим, а не механічним:
+  // 1) пагорби, поле яких «тече» крізь шум, а не просто їде вбік (domain warp);
+  // 2) великий м'який вал в іншому напрямку, що то підіймає, то опускає ділянки;
+  // 3) ледь помітна зяб по діагоналі.
   vec2 field = uv * vec2(3.0, 4.0);
-  float hills = max(0.0, snoise(vec3(field.x + uTime * uSpeed, field.y, uTime * uSpeed)));
+  float t = uTime * uSpeed;
+  vec2 warp = vec2(
+    snoise(vec3(uv * 1.7, t * 0.9)),
+    snoise(vec3(uv * 1.7 + 5.2, t * 0.9))
+  );
+  vec2 flowField = field + warp * 0.55;
+  float hills = max(0.0, snoise(vec3(flowField.x + t, flowField.y - t * 0.6, t * 0.7)));
+  float swell = snoise(vec3(uv * vec2(1.3, 1.7) + vec2(-t * 0.5, t * 0.35), 7.0 + t * 0.4)) * 0.5 + 0.5;
   float incline = uv.x * uIncline;
   float lean = incline * mix(-0.25, 0.25, uv.y);
-  float ripple = sin(uTime + position.x * 2.0) * 0.1;
+  float ripple = sin(uTime * 0.38 + position.x * 1.2 + position.y * 0.8) * 0.14;
 
   // Курсор притискає ділянку до камери.
   vec2 fromMouse = uv - uMouse;
   float push = smoothstep(uPushRadius * uPushRadius, 0.0, dot(fromMouse, fromMouse)) * uPushStrength;
 
-  vec3 displaced = vec3(position.xy, position.z + hills * uElevation + incline + lean + ripple + push);
+  vec3 displaced = vec3(position.xy, position.z + hills * uElevation + swell * swell * uElevation * 0.55 + incline + lean + ripple + push);
   gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(displaced, 1.0);
 
   // Колір: два шари шуму змішують палітру.
@@ -78,6 +91,10 @@ void main() {
   float bend = smoothstep(0.12, 0.85, hills) + push / max(uPushStrength, 0.0001) * 0.6;
   vColor = mix(vColor, uBendColor, clamp(bend, 0.0, 1.0) * uBendGlow);
 
+  // Світлий «промінь» повільно пливе по сітці по діагоналі: показує, що поверхня рухається.
+  float sweepBand = pow(0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.1 - uTime * 0.3), 6.0);
+  vColor = mix(vColor, uBendColor, sweepBand * uSweep);
+
   // Слід курсора підсвічує лінії.
   float glow = 0.0;
   for (int i = 0; i < ${TRAIL_MAX}; i++) {
@@ -91,19 +108,35 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 uniform float uCells;
+uniform float uStrength;
 varying vec3 vColor;
 varying vec2 vUv;
 
+// Лінія з м'яким краєм (≈1.5 px). Жорсткий 1-px край на перспективній, хвилястій сітці дає
+// обриви ліній і мерехтіння, схоже на завади старого телевізора.
+float lineMask(float distPx, float halfWidthPx) {
+  return 1.0 - smoothstep(halfWidthPx - 0.75, halfWidthPx + 0.75, distPx);
+}
+
 void main() {
   vec2 cell = vUv * uCells;
+  vec2 cellPerPx = fwidth(cell);
 
-  vec2 box = abs(fract(cell - 0.5) - 0.5) / fwidth(cell);
+  vec2 box = abs(fract(cell - 0.5) - 0.5) / max(cellPerPx, vec2(1e-5));
   float diagonal = cell.x - cell.y;
-  float diag = abs(fract(diagonal - 0.5) - 0.5) / fwidth(diagonal);
+  float diag = abs(fract(diagonal - 0.5) - 0.5) / max(fwidth(diagonal), 1e-5);
 
-  float alpha = 1.0 - min(min(box.x, box.y), min(diag, 1.0));
+  float squares = max(lineMask(box.x, 0.75), lineMask(box.y, 0.75));
+  // Діагоналі слабші: сітка читається як квадрати, а не як густа решітка.
+  float diagonals = lineMask(diag, 0.7) * 0.45;
+  float alpha = max(squares, diagonals);
+
+  // Там, де клітинка на екрані менша за ~6 px (дальній край хвилі), лінії зливаються й дають муар: гасимо.
+  float cellPx = 1.0 / max(max(cellPerPx.x, cellPerPx.y), 1e-5);
+  alpha *= smoothstep(3.0, 8.0, cellPx);
+
   if (alpha < 0.01) discard;
-  gl_FragColor = vec4(vColor, alpha);
+  gl_FragColor = vec4(vColor, alpha * uStrength);
 }
 `;
 
@@ -112,10 +145,13 @@ export type GridSceneOptions = {
   segments: number;
   /** false: фон пасивний, без реакції на курсор (ні відтискання, ні сліду). */
   interactive?: boolean;
+  /** Сторінки для читання (статті): ті самі форма й рух, але лінії тихіші, щоб текст домінував. */
+  calm?: boolean;
 };
 
 export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOptions): GridSceneHandle {
   const interactive = options.interactive ?? true;
+  const calm = options.calm ?? false;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance" });
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -127,7 +163,7 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   // Палітра: нейтральні темно-сірі тони без кольорового відтінку, підсвітка слідом лише біла.
   // Пасивний фон без сліду курсора світліший: лінії самі мають бути видні, без підсвітки від руху.
   // Колір задано в лінійному просторі, де темні сірі майже нуль, тому множник такий великий.
-  const lift = interactive ? 1 : 9;
+  const lift = interactive ? 1 : 12;
   const palette = ["#1a1a1a", "#0d0d0d", "#242424", "#0d0d0d", "#141414"].map((hex) =>
     new THREE.Color(hex).multiplyScalar(lift),
   );
@@ -137,10 +173,11 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   const uniforms = {
     uTime: { value: 0 },
     uPalette: { value: palette },
-    uElevation: { value: 0.65 },
-    uSpeed: { value: 0.12 },
+    uElevation: { value: interactive ? 0.65 : 1.25 },
+    uSpeed: { value: interactive ? 0.12 : 0.075 },
     uIncline: { value: 0.6 },
-    uColorSpeed: { value: 0.35 },
+    uColorSpeed: { value: interactive ? 0.35 : 0.1 },
+    uSweep: { value: interactive ? 0 : calm ? 0.12 : 0.55 },
     uMouse: { value: new THREE.Vector2(0.5, 0.5) },
     uPushRadius: { value: 0.25 },
     uPushStrength: { value: interactive ? 0.15 : 0 },
@@ -150,8 +187,9 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     uTrailColor: { value: new THREE.Color("#ffffff").multiplyScalar(0.28) },
     uTrailRadius: { value: 0.06 },
     uBendColor: { value: new THREE.Color("#ffffff").multiplyScalar(0.3) },
-    uBendGlow: { value: interactive ? 0.32 : 0.5 },
-    uCells: { value: 220 },
+    uBendGlow: { value: interactive ? 0.32 : calm ? 0.4 : 0.8 },
+    uStrength: { value: calm ? 0.62 : 1 },
+    uCells: { value: 80 },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -184,6 +222,9 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     viewH = 2 * CAMERA_Z * Math.tan((FOV * Math.PI) / 360);
     viewW = viewH * camera.aspect;
     plane = 1.5 * Math.max(viewW, viewH);
+    // Клітинка має фіксований світовий розмір (≈16 px на екрані), а не фіксовану кількість на площину:
+    // інакше на великому екрані вона стає дрібною, а лінії - шумом.
+    uniforms.uCells.value = Math.round(plane / CELL_SIZE);
     build();
   };
 

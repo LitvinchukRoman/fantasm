@@ -5,6 +5,7 @@ import { formatDate } from "~/components/articles/shared";
 import type { DocLink, DocView, Faq, TocItem } from "~/lib/content-meta";
 import { docCrumbs } from "~/lib/structured-data";
 import { GuideMarkdown } from "./markdown";
+import { GuideTimeline } from "./guide-timeline";
 import { Toc } from "./toc";
 
 const FAQ_TOC_ITEM: TocItem = { depth: 2, text: "Часті запитання", id: "chasti-zapytannia" };
@@ -30,7 +31,20 @@ function FaqList({ items }: { items: Faq[] }) {
   );
 }
 
-export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[] }) {
+/**
+ * `roadmap` — єдиний список-роадмеп під статтею. Лежить поза двоколонковою
+ * сіткою (текст + зміст), тож на всю ширину контейнера й не впирається в колонку
+ * змісту. На статті це «Далі по темі», на хабі — усі матеріали розділу.
+ */
+export function ArticleView({
+  doc,
+  roadmap,
+  roadmapTitle = "Далі по темі",
+}: {
+  doc: DocView;
+  roadmap: DocLink[];
+  roadmapTitle?: string;
+}) {
   const fm = doc.frontmatter;
   const crumbs = docCrumbs(doc);
   const hasFaq = (fm.faq?.length ?? 0) > 0;
@@ -81,25 +95,6 @@ export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[]
               </Button>
             </div>
           )}
-          {related.length > 0 && (
-            <section>
-              <h2 className="text-xl font-semibold text-[var(--color-text)]">Далі по темі</h2>
-              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                {related.map((item) => (
-                  <li key={item.path}>
-                    <Link
-                      to={item.path}
-                      prefetch="intent"
-                      className="block rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 hover:border-[var(--color-border-strong)]"
-                    >
-                      <div className="font-medium text-[var(--color-text)]">{item.title}</div>
-                      <p className="mt-1 text-sm text-[var(--color-text-muted)]">{item.description}</p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
         </div>
         <aside className="hidden lg:block">
           <div className="sticky top-24">
@@ -107,6 +102,13 @@ export function ArticleView({ doc, related }: { doc: DocView; related: DocLink[]
           </div>
         </aside>
       </div>
+
+      {roadmap.length > 0 && (
+        <section className="mt-20">
+          <h2 className="text-xl font-semibold text-[var(--color-text)]">{roadmapTitle}</h2>
+          <GuideTimeline items={roadmap} />
+        </section>
+      )}
     </article>
   );
 }

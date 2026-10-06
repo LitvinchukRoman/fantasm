@@ -17,13 +17,14 @@ data "aws_iam_policy_document" "github_assume" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # A job with `environment:` puts the environment in `sub` and omits the ref
-    # from it (GitHub OIDC docs, "Filtering for a specific environment").
-    # `ref` stays a separate claim, so deploy is still limited to main.
+    # Fantasm was created after 2026-07-15, so the subject is immutable:
+    # repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod
+    # (GET /repos/LitvinchukRoman/fantasm/actions/oidc/customization/sub).
+    # A job with `environment:` does not put the branch into `sub`; `ref` is separate.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:prod"]
+      values   = ["repo:${local.github_owner}@${var.github_owner_id}/${local.github_name}@${var.github_repository_id}:environment:prod"]
     }
     condition {
       test     = "StringEquals"
