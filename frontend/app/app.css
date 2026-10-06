@@ -687,6 +687,47 @@ html {
   background-size: 14px 14px;
 }
 
+/* Док дій: пігулка виїжджає знизу, кнопки підхоплюються по черзі (стагер 45 мс), зникає швидше й без черги. */
+.action-dock {
+  transition:
+    transform 340ms var(--ease-out-expo),
+    opacity 220ms ease-out;
+}
+
+.action-dock[data-visible="false"] {
+  opacity: 0;
+  transform: translateY(100%);
+  transition-duration: 200ms, 150ms;
+}
+
+.action-dock__item {
+  transition:
+    transform 360ms var(--ease-out-expo),
+    opacity 240ms ease-out;
+  transition-delay: calc(70ms + var(--i, 0) * 45ms);
+}
+
+.action-dock[data-visible="false"] .action-dock__item {
+  opacity: 0;
+  transform: translateY(0.5rem) scale(0.94);
+  transition-duration: 150ms;
+  transition-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-dock,
+  .action-dock[data-visible="false"] {
+    transform: none;
+    transition: opacity 200ms ease-out;
+  }
+
+  .action-dock__item,
+  .action-dock[data-visible="false"] .action-dock__item {
+    transform: none;
+    transition: none;
+  }
+}
+
 .ideas-overlay-top,
 .ideas-overlay-bottom {
   pointer-events: none;
