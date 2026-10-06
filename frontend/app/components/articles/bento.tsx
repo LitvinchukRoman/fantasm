@@ -11,8 +11,8 @@ import {
 /**
  * Варіант 1 — «Bento».
  * Асиметрична сітка: одна велика стаття + дрібніші. Кожна картка — подвійна
- * рамка (оболонка + серцевина, high-end-visual-design §4A), прожектор, що
- * стежить за курсором, кнопка-острівець зі стрілкою.
+ * рамка (оболонка + серцевина, high-end-visual-design §4A), кнопка-острівець
+ * зі стрілкою.
  *
  * Зміна розділу, без перемонтування восьми слотів:
  * 1) out — текст гасне, картки стають абстрактними формами; зайві картки
@@ -65,12 +65,6 @@ type Phase = "idle" | "out" | "grow" | "settle" | "in";
 
 const SHELL_RING = "0 0 0 1px rgb(255 255 255 / 0.08)";
 const CORE_INSET = "inset 0 1px 0 rgb(255 255 255 / 0.07)";
-
-function spotlight(event: React.MouseEvent<HTMLElement>) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.style.setProperty("--mx", `${event.clientX - rect.left}px`);
-  event.currentTarget.style.setProperty("--my", `${event.clientY - rect.top}px`);
-}
 
 function Rings() {
   return (
@@ -284,7 +278,7 @@ export function ArticlesBento({
         </div>
 
         <LayoutGroup id="bento-filters">
-          <div role="group" aria-label="Розділ" className="flex flex-wrap gap-1 rounded-full bg-white/[0.04] p-1 ring-1 ring-white/[0.08]">
+          <div role="group" aria-label="Розділ" className="flex max-w-full gap-0.5 overflow-x-auto sm:gap-1 rounded-full bg-white/[0.04] p-1 ring-1 ring-white/[0.08] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {[{ slug: "all", label: "Усі" }, ...filters].map((item) => {
               const active = selected === item.slug;
               return (
@@ -294,7 +288,7 @@ export function ArticlesBento({
                   aria-pressed={active}
                   onClick={() => select(item.slug)}
                   className={
-                    "relative rounded-full px-4 py-2 text-sm font-medium transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] " +
+                    "relative shrink-0 rounded-full px-2.5 py-2 text-[13px] font-medium whitespace-nowrap transition-colors sm:px-4 sm:text-sm duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] " +
                     (active
                       ? "text-[var(--color-bg)]"
                       : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]")
@@ -333,7 +327,6 @@ export function ArticlesBento({
               initial={false}
               animate={{ opacity: visible ? 1 : 0 }}
               transition={{ layout: stepTransition, opacity: { duration: 0.2, ease: EASE } }}
-              onMouseMove={spotlight}
               aria-hidden={!active}
               style={
                 {

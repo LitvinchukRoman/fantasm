@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { Button } from "~/components/ui/button";
 import { RelativeTime } from "~/components/ui/relative-time";
+import { AuthorLink } from "~/components/idea/author-popover";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { FORUM_MAX_DEPTH, type ForumPost, type ForumThread } from "~/lib/forum";
 
@@ -31,9 +32,9 @@ function Post({ post, depth, isIdeaAuthor }: { post: ForumPost; depth: number; i
           <>
             <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Avatar name={post.author.name} />
-              <Link to={`/u/${post.author.handle}`} prefetch="intent" className="text-sm font-medium text-[var(--color-text)] hover:underline">
+              <AuthorLink handle={post.author.handle} className="text-sm font-medium text-[var(--color-text)] hover:underline">
                 {post.author.name}
-              </Link>
+              </AuthorLink>
               {post.author.verified && <VerifiedSeal compact />}
               {isIdeaAuthor(post.author.handle) && (
                 <span className="hud-label !text-[var(--color-accent)]">Автор ідеї</span>

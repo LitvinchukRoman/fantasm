@@ -6,8 +6,8 @@ import {
   IconLayers,
   IconSpark,
   IconFlame,
-  IconPenLine,
-  IconSealCheck,
+  IconFlask,
+  IconNewspaper,
   IconUsers,
 } from "./icons";
 
@@ -19,8 +19,8 @@ const KINDS = [
   { icon: IconHeart, label: "Волонтерство" },
   { icon: IconUsers, label: "Студентська організація" },
   { icon: IconFlame, label: "Хакатон" },
-  { icon: IconSealCheck, label: "Дослідження" },
-  { icon: IconPenLine, label: "Медіа/Журналістика" },
+  { icon: IconFlask, label: "Дослідження" },
+  { icon: IconNewspaper, label: "Медіа/Журналістика" },
   { icon: IconDots, label: "Інше" },
 ];
 

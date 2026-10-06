@@ -71,20 +71,32 @@ export function IdeaRow({ idea, number, decorative = false }: { idea: IdeaCardDa
           <h2 className="idea-title">{idea.title}</h2>
           <ul className="idea-tags">
             {idea.visibility === "UKMA_ONLY" && (
-              <li className="idea-tag !border-white/30 !text-white font-mono uppercase" title="Тільки для спільноти НаУКМА">
+              <li className="idea-tag !border-white/30 !text-white font-mono uppercase max-sm:!border-0" title="Тільки для спільноти НаУКМА">
                 UKMA_ONLY
               </li>
             )}
             <li className="idea-tag">{CATEGORY_LABELS[idea.category]}</li>
-            {idea.campus && <li className="idea-tag">{idea.campus.label}</li>}
+            {idea.campus && <li className="idea-tag idea-tag--minor">{idea.campus.label}</li>}
             {isEvent && <li className="idea-tag">{eventWhen(idea.eventAt!)}</li>}
             {idea.tags.slice(0, 2).map((tag) => (
-              <li key={tag.slug} className="idea-tag">
+              <li key={tag.slug} className="idea-tag idea-tag--minor">
                 #{tag.label}
               </li>
             ))}
           </ul>
           <p className="idea-summary">{idea.summary}</p>
+          {/* На телефонах і планшетах велика панель голосів зникає, лишається ця стисла стрічка. */}
+          <p className="idea-stats" aria-hidden="true">
+            <span>
+              <b>{idea.votes}</b> голосів
+            </span>
+            <span>
+              <b>{idea.comments}</b> комент.
+            </span>
+            <span>
+              <b>{idea.participants}</b> учасн.
+            </span>
+          </p>
         </div>
       </div>
 

@@ -234,6 +234,8 @@ export function createHeroScene(canvas: HTMLCanvasElement): HeroSceneHandle {
       const wide = width >= 800;
       const scale = wide ? 1 : Math.min(1, (halfW * 1.1) / radius);
       uniforms.uScale.value = scale;
+      uniforms.uLightAmount.value = wide ? 1 : 0.5;
+      bloomPass.strength = wide ? 0.95 : 0.62;
       density = wide ? 1 : Math.min(1, Math.max(0.15, scale * scale * 1.8));
       applyQuality();
       uniforms.uPointSize.value = 1.45 * (wide ? 1 : 0.7 + 0.3 * scale);
@@ -248,6 +250,10 @@ export function createHeroScene(canvas: HTMLCanvasElement): HeroSceneHandle {
 
       baseDamp = 0.5;
       afterimagePass.uniforms.damp.value = reducedMotion ? 0.45 : baseDamp;
+
+      // setSize очищає канвас, а ResizeObserver спрацьовує вже після rAF поточного кадру:
+      // без негайного рендеру браузер малює один порожній (чорний) кадр. Малюємо одразу.
+      if (!disposed) composer.render();
     },
     dispose() {
       disposed = true;

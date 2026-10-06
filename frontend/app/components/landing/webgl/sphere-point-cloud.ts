@@ -102,6 +102,8 @@ export function createSpherePointCloud() {
     /** Масштаб сфери: на вузьких екранах менший, щоб сфера вміщалась у кадр. */
     uScale: { value: 1 },
     uPixelRatio: { value: 1 },
+    /** 1 на широкому екрані. На вузькому менше: освітлена шапка не перетворюється на білу пляму, яскравість рівніша. */
+    uLightAmount: { value: 1 },
     uViewHalf: { value: new THREE.Vector2(3.2, 2) },
     uCenter: { value: new THREE.Vector2(1.15, 0.05) },
     /** Зсув від курсора (fluid.ts, RG у висотах екрана) і діра під ним (R). */
@@ -124,6 +126,7 @@ export function createSpherePointCloud() {
       uniform float uPointSize;
       uniform float uScale;
       uniform float uPixelRatio;
+      uniform float uLightAmount;
       uniform vec2 uViewHalf;
       uniform vec2 uCenter;
       uniform sampler2D uFluid;
@@ -150,7 +153,8 @@ export function createSpherePointCloud() {
         vec3 nrm = normalize(p);
 
         float ndl = pow(max(dot(nrm, normalize(vec3(0.28, 0.18, 0.94))), 0.0), 1.55);
-        vLight = clamp(ndl, 0.0, 1.0);
+        // Вузький екран: стискаємо діапазон світла до середини, щоб центр шапки не вигорав.
+        vLight = mix(0.5, clamp(ndl, 0.0, 1.0), uLightAmount);
         // Край сфери м'якший: силует розчиняється в ауре, а не обрізається різкою межею.
         float facing = abs(nrm.z);
         vAlpha = aShell * (0.62 + 0.38 * vLight) * (0.5 + 0.5 * smoothstep(0.0, 0.55, facing));

@@ -44,20 +44,27 @@ export function ChecklistX({
   const [fractions, setFractions] = useState<number[]>(() =>
     items.map((_, index) => index / Math.max(1, items.length - 1)),
   );
+  /** Лінія тягнеться від центру першої крапки до центру останньої, а не до низу списку: підпис останнього пункту може бути в кілька рядків. */
+  const [line, setLine] = useState<{ top: number; height: number } | null>(null);
 
   useLayoutEffect(() => {
     const ul = ulRef.current;
     if (!ul) return;
-    const dots = ul.querySelectorAll<HTMLElement>("[data-dot]");
-    const ulTop = ul.getBoundingClientRect().top;
-    const lineTop = 12;
-    const span = Math.max(1, ul.clientHeight - 24);
-    setFractions(
-      [...dots].map((dot) => {
-        const center = dot.getBoundingClientRect().top + dot.offsetHeight / 2 - ulTop;
-        return Math.min(1, Math.max(0, (center - lineTop) / span));
-      }),
-    );
+    const measure = () => {
+      const dots = [...ul.querySelectorAll<HTMLElement>("[data-dot]")];
+      if (dots.length === 0) return;
+      const ulTop = ul.getBoundingClientRect().top;
+      const centers = dots.map((dot) => dot.getBoundingClientRect().top + dot.offsetHeight / 2 - ulTop);
+      const top = centers[0];
+      const height = Math.max(1, centers[centers.length - 1] - top);
+      setLine({ top, height });
+      setFractions(centers.map((center) => Math.min(1, Math.max(0, (center - top) / height))));
+    };
+    measure();
+    // Підписи переносяться інакше при зміні ширини: перемірюємо.
+    const observer = new ResizeObserver(measure);
+    observer.observe(ul);
+    return () => observer.disconnect();
   }, [items]);
 
   return (
@@ -71,7 +78,8 @@ export function ChecklistX({
       <ul ref={ulRef} className="relative space-y-5">
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute top-3 bottom-3 left-[9px] w-0.5"
+          className="pointer-events-none absolute left-[9px] w-0.5"
+          style={line ? { top: line.top, height: line.height } : { top: 12, bottom: 12 }}
         >
           <span className="absolute inset-0 bg-[var(--color-border-strong)]" />
           <span

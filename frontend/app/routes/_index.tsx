@@ -25,7 +25,16 @@ export function loader() {
     )
     .slice(0, 3)
     .map(toCard);
-  return { hot };
+  // Найближчі події для тизера. Тестові (fixture) події є лише в dev: `getIdeas()` додає їх лише при `ideasSeedEnabled()`,
+  // тож на проді без справжніх подій тизер показує порожній стан.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const events = getIdeas()
+    .filter((idea) => idea.category === "EVENT" && idea.eventAt && Date.parse(idea.eventAt) >= startOfToday.getTime())
+    .sort((a, b) => Date.parse(a.eventAt!) - Date.parse(b.eventAt!))
+    .slice(0, 3)
+    .map(toCard);
+  return { hot, events };
 }
 
 export function meta() {
@@ -51,7 +60,8 @@ export default function Index({ loaderData }: Route.ComponentProps) {
   return (
     <PageLoader>
       <div>
-        <div className="pointer-events-none fixed inset-0 z-0">
+        {/* h-lvh: найбільший в'юпорт. Висота не стрибає, коли на мобільному згортається адресний рядок. */}
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-0 h-lvh">
           <HeroBackground />
         </div>
         <Nav />
@@ -65,7 +75,7 @@ export default function Index({ loaderData }: Route.ComponentProps) {
             <HotFeedTeaser ideas={loaderData.hot} />
             <MohylianPerks />
             <IdeaKinds />
-            <EventsTeaser />
+            <EventsTeaser events={loaderData.events} />
           </main>
         </CurvedSheet>
         <CtaFooter />

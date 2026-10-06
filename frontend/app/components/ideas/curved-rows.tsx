@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { readFeedPosition, saveFeedPosition } from "~/lib/feed-position";
 
 /**
  * Нескінченна вертикальна стрічка з вигином (як на saifullah.dev/projects, реалізація своя).
@@ -64,9 +65,11 @@ export function CurvedRows<T>({
 
     let total = rowEls.length * rowHeight;
     let half = window.innerHeight / 2;
-    let target = BASE_OFFSET;
-    let position = 0;
-    let previous = 0;
+    // Повертаємось у те саме місце, де читач вийшов зі стрічки (той самий склад списку): без вступної анімації.
+    const restored = readFeedPosition("curved", signature);
+    let target = restored ?? BASE_OFFSET;
+    let position = restored ?? 0;
+    let previous = position;
     let intensity = 0;
     let gentle = false;
     let scrolling = false;
@@ -92,7 +95,7 @@ export function CurvedRows<T>({
     };
 
     rowEls.forEach((el) => el.classList.add("is-ready"));
-    layout(0, 0, 0);
+    layout(position, 0, 0);
 
     const tick = (now: number) => {
       const dt = Math.min(3, (now - last) / 16.666);
@@ -194,12 +197,18 @@ export function CurvedRows<T>({
       } else if (Math.abs(target - position) > 0.01 || intensity > 0.001) kick();
     };
 
+    // Зсув зациклений: зберігаємо його по модулю одного кола списку, число не росте безмежно.
+    const remember = () => saveFeedPosition("curved", signature, wrap(0, count * rowHeight, target));
+
     window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("pagehide", remember);
     window.addEventListener("keydown", onKey);
     root.addEventListener("focusin", onFocus);
     window.addEventListener("resize", onResize);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      remember();
+      window.removeEventListener("pagehide", remember);
       if (frame) cancelAnimationFrame(frame);
       window.clearTimeout(gentleTimer);
       window.removeEventListener("wheel", onWheel);

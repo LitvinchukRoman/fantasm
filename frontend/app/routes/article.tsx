@@ -36,7 +36,7 @@ export function meta({ data }: Route.MetaArgs) {
 export default function ArticlePage({ loaderData }: Route.ComponentProps) {
   return (
     <GuideFrame>
-      <ArticleView doc={loaderData.doc} related={loaderData.related} />
+      <ArticleView doc={loaderData.doc} roadmap={loaderData.related} />
     </GuideFrame>
   );
 }

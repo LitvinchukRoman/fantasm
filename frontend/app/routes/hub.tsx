@@ -1,7 +1,7 @@
-import { data, Link } from "react-router";
+import { data } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { ArticleView } from "~/components/guides/article";
-import { getArticles, getHub, getRelated, isHubSlug, toLink, toView } from "~/lib/content.server";
+import { getArticles, getHub, isHubSlug, toLink, toView } from "~/lib/content.server";
 import { ogBase, seo } from "~/lib/seo";
 import { compact, docNodes, itemList } from "~/lib/structured-data";
 import { HUBS } from "~/lib/content-meta";
@@ -13,7 +13,6 @@ export function loader({ params }: Route.LoaderArgs) {
   if (!doc) throw data("Not found", { status: 404 });
   return {
     doc: toView(doc),
-    related: getRelated(doc),
     articles: getArticles(params.hub).map(toLink),
   };
 }
@@ -43,26 +42,7 @@ export function meta({ data }: Route.MetaArgs) {
 export default function HubPage({ loaderData }: Route.ComponentProps) {
   return (
     <GuideFrame>
-      <ArticleView doc={loaderData.doc} related={loaderData.related} />
-      {loaderData.articles.length > 0 && (
-        <section className="mt-16">
-          <h2 className="text-xl font-semibold text-[var(--color-text)]">Матеріали розділу</h2>
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-            {loaderData.articles.map((article) => (
-              <li key={article.path}>
-                <Link
-                  to={article.path}
-                  prefetch="intent"
-                  className="block rounded-[var(--radius-card)] border border-[var(--color-border)] p-4 hover:border-[var(--color-border-strong)]"
-                >
-                  <div className="font-medium text-[var(--color-text)]">{article.title}</div>
-                  <p className="mt-1 text-sm text-[var(--color-text-muted)]">{article.description}</p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <ArticleView doc={loaderData.doc} roadmap={loaderData.articles} roadmapTitle="Матеріали розділу" />
     </GuideFrame>
   );
 }

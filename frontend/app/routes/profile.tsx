@@ -62,11 +62,11 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
   }, [curved]);
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <IdeasBackground />
       <Nav forceSolid />
 
-      <main className="relative z-10 mx-auto max-w-7xl px-5 pt-28 pb-20 sm:px-8">
+      <main className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-5 pt-28 pb-20 sm:px-8">
         <div className="grid lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-8">
           {/* Ліва колонка: людина. Печатка, ім'я й дані тією ж мовою, що на сторінці ідеї. */}
           <aside className="z-20 mt-8 space-y-8 lg:sticky lg:top-36 lg:self-start lg:pr-4">
