@@ -260,10 +260,7 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   let active = true;
   let firstFrame = true;
 
-  const render = () => {
-    frame = 0;
-    if (!active || document.hidden) return;
-
+  const draw = () => {
     const now = performance.now();
     while (trail.length > 0 && now - trail[0].born > TRAIL_LIFETIME_MS) trail.shift();
     // Як на референсі: у шейдер потрапляють лише 10 НАЙСТАРІШИХ живих точок. Поки курсор рухається
@@ -289,6 +286,12 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
       firstFrame = false;
       canvas.dataset.ready = "true";
     }
+  };
+
+  const render = () => {
+    frame = 0;
+    if (!active || document.hidden) return;
+    draw();
     frame = requestAnimationFrame(render);
   };
 
@@ -307,6 +310,9 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   return {
     resize: (width, height) => {
       resize(width, height);
+      // setSize очищає канвас, а наступний rAF буде лише за кадр: без негайного малювання на мобільних
+      // (адресний рядок згортається при гортанні) фон на мить зникає.
+      if (!firstFrame) draw();
       start();
     },
     setActive: (next) => {
