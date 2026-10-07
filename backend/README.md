@@ -54,7 +54,7 @@ IDENTITY_TEST_DATABASE_URL='postgres://fantasm:fantasm@localhost:5432/fantasm_te
 
 ## Продакшен
 
-Образ збирається в CI (`.github/workflows/backend.yml`) під `linux/arm64` крос-компіляцією, без QEMU, і йде в ECR з незмінним тегом `sha-<commit>`. На EC2 його запускає `deploy-api` (див. [infra/terraform](../infra/terraform/README.md)); змінні оточення контейнер отримує з SSM Parameter Store (`/fantasm/<env>/...`), а не з файлу в образі.
+Образ збирається в CI (`.github/workflows/deploy-backend-dev.yaml`) під `linux/arm64` крос-компіляцією, без QEMU, і йде в ECR з незмінним тегом `sha-<commit>`. На EC2 його запускає `deploy-api` (див. [infra/terraform](../infra/terraform/README.md)); змінні оточення контейнер отримує з SSM Parameter Store (`/fantasm/<env>/...`), а не з файлу в образі.
 
 Що має бути виставлено в проді (`refresh-env` пише це з SSM):
 

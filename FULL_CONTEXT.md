@@ -221,7 +221,7 @@ fantasm/
 
 ## Інфраструктура
 
-Фронтенд, поки немає бекенду: пререндер `frontend/build/client` у приватному S3 за CloudFront. Terraform — `infra/terraform`, пайплайн — `.github/workflows/ci.yml`. Хост `https://fantasm.naukma.com`. `ideas.naukma.com` лишається на MVP.
+Фронтенд, поки немає бекенду: пререндер `frontend/build/client` у приватному S3 за CloudFront. Terraform — `infra/terraform`, пайплайни — `.github/workflows/` (`deploy-{frontend,backend}-{dev,prod}.yaml`). Хост `https://fantasm.naukma.com`. `ideas.naukma.com` лишається на MVP.
 
 Цільова схема, коли з’явиться бекенд: **CloudFront спереду, EC2 для застосунку**, медіа в S3 за тим самим CloudFront. Локально досі достатньо двох процесів: Go-сервер і Vite. База в накидці не піднята. Коли з’явиться збереження стану, розумна спадкоємність MVP — Postgres; це перевага, не замок.
 

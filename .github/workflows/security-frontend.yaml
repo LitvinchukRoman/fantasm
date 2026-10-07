@@ -1,0 +1,91 @@
+name: Security frontend
+
+# gitleaks over the history of frontend/, npm registry signatures, npm audit
+# (CRITICAL fails), CodeQL for TypeScript. Runs nightly too: new CVEs appear for
+# code that did not change. On a pull request it works only when frontend/ or
+# .github/ changed.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-frontend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  security-frontend:
+    name: Security frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/changed.sh frontend
+      - name: Secrets (gitleaks)
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        run: |
+          docker run --rm -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /repo --log-opts="-- frontend" --redact --no-banner --verbose
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # --ignore-scripts: a compromised dependency cannot run code at install time.
+      - name: Dependencies
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: npm registry signatures
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm audit signatures
+      - name: npm audit (fail on CRITICAL)
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm audit --audit-level=critical
+      # Dependabot cannot bump .node-version, so the nightly run compares it with
+      # the newest release of the same major line (security fixes land in patches).
+      - name: Node is the newest patch of its line
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        run: |
+          set -euo pipefail
+          pinned="$(tr -d '[:space:]' < frontend/.node-version)"
+          major="${pinned%%.*}"
+          latest="$(curl -fsSL https://nodejs.org/dist/index.json \
+            | jq -r --arg m "v${major}." '[.[] | select(.version | startswith($m))][0].version | ltrimstr("v")')"
+          echo "pinned=${pinned} latest-${major}.x=${latest}"
+          if [[ "$pinned" != "$latest" ]]; then
+            echo "::error file=frontend/.node-version::Node ${pinned} is behind ${latest}. Update frontend/.node-version."
+            exit 1
+          fi
+      - name: CodeQL init
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - name: CodeQL analyze
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:javascript-typescript

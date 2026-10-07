@@ -15,23 +15,40 @@
 
 Ім'я гілки: `тип/короткий-опис`. Тип один із `feat`, `fix`, `chore`, `infra`, `docs`. Далі лише малі латинські літери, цифри і дефіси. Приклади: `feat/forum-thread`, `fix/ci-annotations`, `infra/frontend-static`.
 
-`main` і гілки Dependabot (`dependabot/...`) цим правилом не обмежені. Перевіряє джоб `branch-name` у `.github/workflows/ci.yml`; без нього pull request у `main` не мерджиться. Окремий ruleset GitHub на ім'я гілки на персональному акаунті недоступний.
+`main` і гілки Dependabot (`dependabot/...`) цим правилом не обмежені. Перевіряє чек `Branch name` (`.github/workflows/branch-name.yaml`); без нього pull request у `main` не мерджиться. Окремий ruleset GitHub на ім'я гілки на персональному акаунті недоступний.
 
 ## CI/CD і безпека
 
-Усе, що нижче, блокує мердж і деплой. Дії GitHub закріплені за SHA коміту, образи Docker за digest, інструменти за версією.
+Чеки блокують мердж. Дії GitHub закріплені за SHA коміту, образи Docker за digest, інструменти за версією.
 
-| Перевірка | Де | Що ловить |
+Чеки (кожен — окремий workflow і окремий required check у ruleset `main`):
+
+| Workflow | Коли працює | Степи |
 | --- | --- | --- |
-| `backend-checks` | `backend.yml` | gofmt, `go mod tidy`, `go vet`, golangci-lint з gosec, govulncheck (вразливості, до яких код реально доходить, включно зі stdlib), hadolint |
-| `backend-test` | `backend.yml` | `go test -race` на arm64 (прод працює на Graviton) з реальним PostgreSQL |
-| `backend-image` | `backend.yml` | grype по образу: **CRITICAL із доступним фіксом валить збірку**; SBOM у артефактах |
-| `security` | `security.yml` | gitleaks по всій історії, zizmor по workflow, `npm audit` (CRITICAL валить, підписи реєстру, `npm ci --ignore-scripts`) |
-| `codeql` | `codeql.yml` | SAST для Go і TypeScript; блокує правило «Code scanning results», а не окремий чек |
+| `lint-frontend.yaml` | змінились `frontend/` або `.github/` | oxlint, typecheck |
+| `lint-backend.yaml` | змінилось щось поза `frontend/` | gofmt, `go mod tidy`, `go vet`, golangci-lint з gosec, hadolint, actionlint |
+| `security-frontend.yaml` | як `lint-frontend`, плюс щоночі | gitleaks по історії `frontend/`, підписи npm-реєстру, `npm audit` (CRITICAL валить), CodeQL TypeScript |
+| `security-backend.yaml` | як `lint-backend`, плюс щоночі | gitleaks по історії поза `frontend/`, zizmor, govulncheck, CodeQL Go, grype по продакшен-образу (**CRITICAL із доступним фіксом валить**) |
+| `build-frontend.yaml` | як `lint-frontend` | build, SEO-перевірка |
+| `build-backend.yaml` | як `lint-backend` | `go build`, `go test -race` з PostgreSQL на arm64 (прод працює на Graviton) |
+| `branch-name.yaml` | кожен PR | ім'я гілки за правилом вище |
 
-Нічні запуски (`backend.yml`, `security.yml`) ловлять нові CVE в коді, який не змінювався. `deploy-dev` пушить в ECR саме той образ, який просканував `backend-image`, а `promote-prod.yml` перед прод-деплоєм сканує його ще раз (відкат на `release-*` сканування пропускає, щоб сканер не блокував відкат).
+Required check не можна пропустити фільтром шляхів: такий pull request чекав би на нього вічно. Тому кожен чек стартує завжди, а перший степ (`.github/scripts/changed.sh`) вирішує, чи є для нього робота; якщо ні, чек зелений за кілька секунд.
 
-Виняток із політики додається в `backend/.grype.yaml` з причиною і датою перегляду. Версію Node підіймають у `frontend/.node-version`; нічний запуск `security` падає, якщо там не остання патч-версія гілки.
+Деплой:
+
+| Workflow | Коли | Що робить |
+| --- | --- | --- |
+| `deploy-frontend-dev.yaml` | merge у `main` зі змінами в `frontend/`, або вручну | збірка з dev-URL, S3 dev, інвалідація CloudFront |
+| `deploy-frontend-prod.yaml` | лише вручну | збірка з prod-URL, S3 prod, інвалідація CloudFront |
+| `deploy-backend-dev.yaml` | merge у `main` зі змінами в `backend/`, або вручну | збірка arm64-образу, grype, пуш `sha-<commit>` в ECR, деплой через SSM, smoke |
+| `deploy-backend-prod.yaml` | лише вручну, тег образу з dev | повторний grype того самого образу, alias `release-<sha>`, деплой через SSM, smoke |
+
+Залежності оновлює Dependabot (`.github/dependabot.yaml`): actions, npm, Go, Docker, Terraform, з затримкою 7 днів на нові релізи.
+
+Кожен степ виконується, навіть якщо попередній упав, тож один запуск показує всі проблеми. Нічні запуски security-чеків ловлять нові CVE в коді, який не змінювався. Прод деплоїться лише вручну (environment `prod` з рев'юером); відкат: `deploy-backend-prod.yaml` з тегом `release-<sha>`, сканування для відкату пропускається, щоб сканер не блокував відкат.
+
+Виняток із політики додається в `backend/.grype.yaml` з причиною і датою перегляду. Версію Node підіймають у `frontend/.node-version`; нічний `Security frontend` падає, якщо там не остання патч-версія гілки.
 
 Щоб перевірки справді не пускали в `main`, їхні назви мають бути в обов'язкових перевірках ruleset `main`, а правило «Code scanning results» додає блок за новими критичними алертами CodeQL.
 

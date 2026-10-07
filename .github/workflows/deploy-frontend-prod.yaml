@@ -1,0 +1,51 @@
+name: Deploy frontend prod
+
+# By hand only (Run workflow on main); the prod environment requires a reviewer.
+# The site URL is baked into the bundle, so the build uses the prod URL.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-frontend-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy frontend prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run check:seo
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-frontend
+      - name: Publish to S3 and invalidate CloudFront
+        env:
+          AWS_FRONTEND_BUCKET: ${{ vars.AWS_FRONTEND_BUCKET }}
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+          DIST: frontend/build/client
+        run: bash .github/scripts/publish-frontend.sh

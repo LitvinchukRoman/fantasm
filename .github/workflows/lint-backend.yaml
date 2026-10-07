@@ -1,0 +1,77 @@
+name: Lint backend
+
+# gofmt, go mod tidy, go vet, golangci-lint (+gosec), hadolint, actionlint.
+# Does its work when anything outside frontend/ changed; every step runs even
+# if an earlier one failed, so one run lists all problems.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: lint-backend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Build with the toolchain go.mod asks for; never download another one silently.
+  GOTOOLCHAIN: local
+  GOFLAGS: -mod=readonly
+
+jobs:
+  lint-backend:
+    name: Lint backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/changed.sh backend
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: gofmt
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: backend
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "::error::gofmt -w needed on:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go mod tidy
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: backend
+        run: go mod tidy -diff
+      - name: go vet
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: backend
+        run: go vet ./...
+      - name: golangci-lint
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: backend
+      - name: hadolint
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: backend/Dockerfile
+      - name: actionlint
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
