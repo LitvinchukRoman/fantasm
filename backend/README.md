@@ -51,3 +51,22 @@ go vet ./...
 ```bash
 IDENTITY_TEST_DATABASE_URL='postgres://fantasm:fantasm@localhost:5432/fantasm_test?sslmode=disable' go test -race ./internal/identity/...
 ```
+
+## Продакшен
+
+Образ збирається в CI (`.github/workflows/backend.yml`) під `linux/arm64` крос-компіляцією, без QEMU, і йде в ECR з незмінним тегом `sha-<commit>`. На EC2 його запускає `deploy-api` (див. [infra/terraform](../infra/terraform/README.md)); змінні оточення контейнер отримує з SSM Parameter Store (`/fantasm/<env>/...`), а не з файлу в образі.
+
+Що має бути виставлено в проді (`refresh-env` пише це з SSM):
+
+| Змінна | Значення в проді |
+| --- | --- |
+| `DATABASE_URL` | RDS з `sslmode=verify-full&sslrootcert=/etc/ssl/rds-ca.pem`, роль лише своєї бази |
+| `DB_MAX_CONNS` | 8 для prod, 4 для dev (RDS `db.t4g.micro` дає ~85 з'єднань на обидва середовища) |
+| `PUBLIC_URL` | `https://fantasm.naukma.com` або `https://fantasm-dev.naukma.com`: той самий хост, що в браузера, бо cookie `__Host-` і OIDC callback same-origin |
+| `APP_SECRET` | ≥ 32 символи (обовʼязково при HTTPS), окремий для кожного середовища |
+| `TRUSTED_PROXY_CIDRS` | мережа Docker-моста: Caddy перезаписує `X-Forwarded-For` перевіреною адресою клієнта, і API довіряє заголовку лише від цієї мережі |
+| `LOG_LEVEL` | `info` |
+| `RATE_LIMIT_*`, `SESSION_*_TTL`, `DB_STATEMENT_TIMEOUT`, `REQUEST_TIMEOUT`, `SHUTDOWN_TIMEOUT` | значення за замовчуванням підходять; повний перелік із межами — у `.env.example` та `internal/platform/config` |
+| `MIGRATE_ON_START` | `true`: міграції застосовуються при старті; перед деплоєм `deploy-api` чекає `/healthz` і відкочується, якщо старт не вдався |
+
+Після Caddy і CloudFront API бачить правильну адресу клієнта лише через `TRUSTED_PROXY_CIDRS`. Без нього всі запити виглядатимуть як одна адреса проксі, і ліміти по IP спрацьовуватимуть на всіх одразу.
