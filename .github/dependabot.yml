@@ -1,10 +1,45 @@
 version: 2
+
+# Every ecosystem waits 7 days before taking a brand-new release: most hijacked
+# or broken releases are pulled within that window. Security updates ignore it.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # Dockerfile base images are pinned by digest; this bumps tag and digest together.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform/edge
+      - /infra/terraform/backend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

@@ -1,0 +1,138 @@
+name: promote-prod
+
+# Production moves only through this workflow. It deploys an image that already
+# runs on dev (never rebuilds), then optionally publishes the frontend.
+# The prod environment requires a reviewer (GitHub -> Settings -> Environments).
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "API image tag from dev, e.g. sha-0123456789abcdef0123456789abcdef01234567"
+        required: true
+        type: string
+      deploy_api:
+        description: "Deploy the API image"
+        type: boolean
+        default: true
+      deploy_frontend:
+        description: "Build and publish the frontend from this commit"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-prod
+  cancel-in-progress: false
+
+jobs:
+  api:
+    name: api
+    if: inputs.deploy_api
+    # arm64 runner: the image is arm64, so it can be pulled and scanned natively.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate the tag
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_TAG" =~ ^(sha|release)-[0-9a-f]{7,40}$ ]] || { echo "::error::invalid image_tag"; exit 1; }
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-backend-prod
+      # New CVEs appear after an image was built: scan the exact image that is about
+      # to reach prod again, and refuse to promote it when a CRITICAL fix exists.
+      # A release-<sha> tag is an image prod already ran (a rollback): rolling back
+      # must never be blocked by a scanner, so it skips the gate.
+      - name: Pull the image from ECR
+        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
+          docker pull "${ECR_REPOSITORY}:${IMAGE_TAG}"
+      - name: Grype re-scan (fail on CRITICAL)
+        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          grype-version: v0.120.1
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+          config: backend/.grype.yaml
+      - name: Pin the image against ECR expiry
+        run: |
+          set -euo pipefail
+          repo_name="${ECR_REPOSITORY#*/}"
+          manifest=$(aws ecr batch-get-image --repository-name "$repo_name" --image-ids "imageTag=${IMAGE_TAG}" --query 'images[0].imageManifest' --output text)
+          if [[ -z "$manifest" || "$manifest" == "None" ]]; then
+            echo "::error::${IMAGE_TAG} is not in ECR; it must have been built by backend.yml first"
+            exit 1
+          fi
+          # A release-<sha> alias marks the image as promoted (rollback target).
+          release_tag="release-${IMAGE_TAG#*-}"
+          if [[ "$IMAGE_TAG" != release-* ]] && ! aws ecr describe-images --repository-name "$repo_name" --image-ids "imageTag=${release_tag}" >/dev/null 2>&1; then
+            aws ecr put-image --repository-name "$repo_name" --image-tag "$release_tag" --image-manifest "$manifest" >/dev/null
+          fi
+      - name: Deploy to prod through SSM
+        run: bash .github/scripts/deploy-backend.sh "$IMAGE_TAG"
+      - name: Smoke test through CloudFront
+        run: bash .github/scripts/smoke-api.sh "$SITE_URL"
+
+  frontend:
+    name: frontend
+    needs: [api]
+    # Run when the API job succeeded or was skipped, but not when it failed.
+    if: ${{ !cancelled() && !failure() && inputs.deploy_frontend }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run check:seo
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-frontend-prod
+      - name: Publish to S3 and invalidate CloudFront
+        env:
+          AWS_FRONTEND_BUCKET: ${{ vars.AWS_FRONTEND_BUCKET }}
+          AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+          DIST: frontend/build/client
+        run: bash .github/scripts/publish-frontend.sh

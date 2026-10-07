@@ -1,0 +1,51 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # "standard" = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - gosec # security: weak crypto, SQL built by string, file perms, ...
+    - bodyclose # unclosed http response bodies
+    - noctx # http requests without context
+    - sqlclosecheck # unclosed sql.Rows / Stmt
+    - rowserrcheck # unchecked sql.Rows.Err()
+    - errorlint # errors.Is/As instead of == and type switches on errors
+    - copyloopvar
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -QF1001 # De Morgan rewrite: style, not a defect
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+    gosec:
+      excludes:
+        - G104 # duplicates errcheck
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Tests build requests without a context and read their own fixtures.
+      - path: _test\.go
+        linters: [noctx, gosec, errcheck]
+      - path: internal/apptest/
+        linters: [noctx, gosec]
+      - path: internal/platform/testdb/
+        linters: [gosec]
+      # G101 matches the "token"/"auth" words in public OIDC endpoint URLs.
+      - path: internal/identity/adapters/oidc/provider\.go
+        text: G101
+        linters: [gosec]
+      # G304: the path comes from the operator-controlled config, never from a request.
+      - path: internal/organizations/policy\.go
+        text: G304
+        linters: [gosec]

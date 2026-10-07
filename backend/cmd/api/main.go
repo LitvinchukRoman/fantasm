@@ -1,7 +1,6 @@
 package main
 
-import
-(
+import (
 	"context"
 	"log/slog"
 	"net/http"

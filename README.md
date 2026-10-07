@@ -17,9 +17,31 @@
 
 `main` і гілки Dependabot (`dependabot/...`) цим правилом не обмежені. Перевіряє джоб `branch-name` у `.github/workflows/ci.yml`; без нього pull request у `main` не мерджиться. Окремий ruleset GitHub на ім'я гілки на персональному акаунті недоступний.
 
+## CI/CD і безпека
+
+Усе, що нижче, блокує мердж і деплой. Дії GitHub закріплені за SHA коміту, образи Docker за digest, інструменти за версією.
+
+| Перевірка | Де | Що ловить |
+| --- | --- | --- |
+| `backend-lint` | `backend.yml` | gofmt, `go mod tidy`, `go vet`, golangci-lint з gosec |
+| `backend-test` | `backend.yml` | `go test -race` на amd64 і arm64 (прод працює на Graviton) |
+| `backend-govulncheck` | `backend.yml` | вразливості, до яких код реально доходить: власний код, залежності, stdlib |
+| `backend-image` | `backend.yml` | grype по образу: **CRITICAL із доступним фіксом валить збірку**; SBOM у артефактах |
+| `secrets` | `security.yml` | gitleaks по всій історії |
+| `frontend-deps` | `security.yml` | `npm audit`: CRITICAL валить; підписи реєстру; `npm ci --ignore-scripts` |
+| `dependency-review` | `security.yml` | PR, що додає CRITICAL-залежність |
+| `workflow-audit` | `security.yml` | zizmor: ін'єкції, відкріплені дії, зайві права |
+| `codeql` | `codeql.yml` | SAST для Go і TypeScript, результати в Security → Code scanning |
+
+Нічні запуски (`backend.yml`, `security.yml`) ловлять нові CVE в коді, який не змінювався. `deploy-dev` пушить в ECR саме той образ, який просканував `backend-image`, а `promote-prod.yml` перед прод-деплоєм сканує його ще раз (відкат на `release-*` сканування пропускає, щоб сканер не блокував відкат).
+
+Виняток із політики додається в `backend/.grype.yaml` з причиною і датою перегляду. Версію Node підіймають у `frontend/.node-version`; нічний джоб `node-runtime` падає, якщо там не остання патч-версія гілки.
+
+Щоб перевірки справді не пускали в `main`, їхні назви мають бути в обов'язкових перевірках ruleset `main`, а правило «Code scanning results» додає блок за новими критичними алертами CodeQL.
+
 ## Локально
 
-Потрібні Docker (бекенд і PostgreSQL) та Node 22 (фронтенд).
+Потрібні Docker (бекенд і PostgreSQL) та Node 24 LTS (фронтенд; точна версія в `frontend/.node-version`).
 
 ### 1. Бекенд і база
 
