@@ -4,7 +4,7 @@ export default [
   index("routes/_index.tsx"),
   route("guides", "routes/guides.tsx"),
   route("ideas", "routes/ideas.tsx"),
-  route("ideas/new", "routes/placeholder.tsx", { id: "ideas-new" }),
+  route("ideas/new", "routes/ideas.new.tsx"),
   route("ideas/:slug", "routes/idea.tsx"),
   route("events", "routes/events.tsx"),
   layout("routes/auth-layout.tsx", [
