@@ -1,16 +1,45 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: Fantasm Identity API
-  version: 1.0.0
-  description: Authentication and identity management API.
+  title: Fantasm API
+  version: 2.0.0
+  description: |
+    JSON API of the Fantasm backend. Every route lives under `/api`.
+
+    **Authentication.** Sign-in is OIDC only (Google, Microsoft Entra). A successful callback sets an
+    opaque, HttpOnly, SameSite=Lax session cookie (`__Host-fantasm_session` over HTTPS). There are no passwords.
+
+    **CSRF.** Unsafe methods (POST, PUT, PATCH, DELETE) must come from the site's own origin: a request with a
+    foreign `Origin` or `Sec-Fetch-Site: cross-site` is answered with 403.
+
+    **Errors.** Every failure has the same body, see `Error`, including 404 for an unknown path and 405 (with `Allow`) for a wrong method. Hidden, deleted and nonexistent content all
+    answer 404 identically, so existence is never revealed. Unexpected failures are a generic 500 with a `requestId`.
+
+    **Pagination.** Lists are keyset-paginated: pass the previous page's `nextCursor` as `cursor`. Cursors are
+    signed and bound to the listing they came from. `limit` is clamped to the documented maximum.
+
+    **Limits.** Request bodies are capped (1 MiB), unknown JSON fields are rejected (400), and every route is
+    rate limited per user (signed in) or per address (anonymous). Limited answers carry `Retry-After`.
+servers:
+  - url: /
+security: []
+tags:
+  - name: auth
+  - name: me
+  - name: ideas
+  - name: engagement
+  - name: discussion
+  - name: moderation
+  - name: notifications
+  - name: admin
+
 paths:
   /api/auth/providers:
     get:
-      summary: List available OAuth providers
-      description: Returns a list of configured and enabled identity providers.
+      tags: [auth]
+      summary: List enabled sign-in providers
       responses:
         '200':
-          description: List of available providers.
+          description: Providers that are configured on this server.
           content:
             application/json:
               schema:
@@ -18,144 +47,1029 @@ paths:
                 properties:
                   providers:
                     type: array
-                    items:
-                      type: string
-                      example: google
+                    items: { type: string, enum: [google, entra] }
   /api/auth/{provider}/login:
     get:
-      summary: Initiate authorization flow
-      description: Sets the login verification cookie and redirects the client to the identity provider.
+      tags: [auth]
+      summary: Begin the OIDC authorization-code flow (PKCE, state, nonce)
+      description: Stores a short-lived, hashed login attempt and redirects to the provider. Rate limited per address.
       parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [google, entra]
+        - $ref: '#/components/parameters/Provider'
       responses:
-        '302':
-          description: Redirect to the provider's authorization screen.
-        '303':
-          description: Redirect to frontend /login?error=provider_unavailable (for browser HTML navigation).
-        '404':
-          description: Provider not found (JSON requests).
+        '302': { description: "Redirect to the provider's authorization screen." }
+        '303': { description: "Browser navigation only. Redirect to `/login?error=provider_unavailable`." }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /api/auth/{provider}/callback:
     get:
-      summary: Complete authorization callback
-      description: Validates provider response code and state, then creates a session cookie.
+      tags: [auth]
+      summary: Complete sign-in
+      description: |
+        Verifies state, nonce, PKCE and the ID token, then creates a session and sets the cookie.
+        A previous session cookie is revoked (session rotation).
       parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [google, entra]
-        - name: state
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: code
-          in: query
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/Provider'
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, required: true, schema: { type: string } }
       responses:
-        '303':
-          description: Redirects to origin root (/) on success, or to /login?error=... on browser failure.
-        '401':
-          description: Unauthorized / invalid credentials (JSON requests).
+        '303': { description: "Redirect to `/` on success, or to `/login?error=...` on failure." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /api/auth/logout:
     post:
-      summary: Logout
-      description: Revokes current session and clears session cookies. Requires Origin header verification.
+      tags: [auth]
+      summary: Sign out of this device
       responses:
-        '204':
-          description: Successfully logged out.
-        '403':
-          description: Invalid Origin header.
+        '204': { description: "Session revoked and cookie cleared." }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/auth/logout-all:
+    post:
+      tags: [auth]
+      summary: Sign out everywhere
+      security: [{ session: [] }]
+      responses:
+        '204': { description: "All of the user's sessions revoked." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /api/me:
     get:
-      summary: Get current authenticated profile
-      description: Returns profile details and active organization memberships.
+      tags: [me]
+      summary: Current profile
+      description: Anonymous viewers get 401, which the frontend treats as "signed out".
+      security: [{ session: [] }]
       responses:
         '200':
-          description: Current user profile.
+          description: Profile and organization memberships.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [me]
+      summary: Edit own profile
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                handle: { type: string, pattern: '^[a-z0-9_][a-z0-9_-]{2,39}$' }
+                name: { type: string }
+                bio: { type: string }
+                faculty: { type: string }
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/me/sessions:
+    get:
+      tags: [me]
+      summary: Active sessions of the user
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Sessions, the current one marked.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
-        '401':
-          description: Authentication required or session expired.
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/me/sessions/{id}:
+    delete:
+      tags: [me]
+      summary: Revoke one of the user's sessions
+      security: [{ session: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: "Revoked." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/admin/users/{handle}/role:
+    patch:
+      tags: [admin]
+      summary: Change a user's role
+      description: Admins only. The target's sessions are revoked so the new role takes effect at once.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Handle'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+      responses:
+        '200':
+          description: Role changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  handle: { type: string }
+                  role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /api/ideas:
+    get:
+      tags: [ideas]
+      summary: Feed of public ideas
+      parameters:
+        - { name: sort, in: query, schema: { type: string, enum: [hot, new, top], default: hot } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/Status' } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: campus, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: One page of idea cards.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaPage' }
+        '422': { $ref: '#/components/responses/Validation' }
+    post:
+      tags: [ideas]
+      summary: Create an idea
+      description: |
+        Authors with at least three approved ideas, or an organization benefit that skips premoderation, are
+        approved at once; everyone else enters the moderation queue as PENDING. Drafts are not moderated until
+        published. At most five ideas a day for users without that benefit.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdeaCreate' }
+      responses:
+        '201':
+          description: Created.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/ideas/{slug}:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    get:
+      tags: [ideas]
+      summary: One idea
+      description: Authors see their own unpublished or hidden ideas and staff see everything; for everybody else those answer 404.
+      responses:
+        '200':
+          description: The idea, rendered and sanitized.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ideas]
+      summary: Edit an idea (author, or staff)
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdeaPatch' }
+      responses:
+        '200':
+          description: Updated idea.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      tags: [ideas]
+      summary: Delete an idea (soft delete)
+      security: [{ session: [] }]
+      responses:
+        '204': { description: "Deleted." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/status:
+    post:
+      tags: [ideas]
+      summary: Move an idea through its lifecycle
+      description: Publishing a DRAFT sends it to premoderation unless the author is trusted.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/Status' }
+      responses:
+        '200':
+          description: The idea after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/ideas/{slug}/next:
+    get:
+      tags: [ideas]
+      summary: Next idea to read
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      responses:
+        '200':
+          description: A short reference to the next idea in the feed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slug: { type: string }
+                  title: { type: string }
+                  summary: { type: string }
+                  category: { $ref: '#/components/schemas/Category' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/events:
+    get:
+      tags: [ideas]
+      summary: Upcoming events
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Event ideas the viewer may see, soonest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/IdeaCard' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/sitemap/ideas:
+    get:
+      tags: [ideas]
+      summary: Public ideas for the sitemap
+      description: Anonymous-only data, cacheable for five minutes.
+      responses:
+        '200':
+          description: Slugs with last update time.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        slug: { type: string }
+                        updatedAt: { type: string, format: date-time }
+  /api/me/ideas:
+    get:
+      tags: [ideas]
+      summary: Own ideas, including drafts and moderation state
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: One page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/users/{handle}:
+    get:
+      tags: [ideas]
+      summary: Public profile with the author's visible ideas
+      parameters:
+        - $ref: '#/components/parameters/Handle'
+      responses:
+        '200':
+          description: Profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicProfile' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/ideas/{slug}/vote:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    put:
+      tags: [engagement]
+      summary: Vote for an idea
+      description: Idempotent. The weight comes from the voter's organization benefit and is frozen at vote time. You cannot vote for your own idea (422).
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Totals after the vote.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoteState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      tags: [engagement]
+      summary: Withdraw a vote
+      description: Idempotent. Removes exactly the weight and karma the vote added.
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Totals after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoteState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/participation:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    put:
+      tags: [engagement]
+      summary: Join, or change interest in, an idea or event
+      description: Event capacity is enforced under a row lock, so concurrent joins never exceed it (409 when full).
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state]
+              properties:
+                state: { type: string, enum: [INTERESTED, JOINED] }
+                role: { type: string, description: "One of the roles the idea asks for." }
+      responses:
+        '200':
+          description: Own participation and the participant count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Participation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      tags: [engagement]
+      summary: Leave
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: State after leaving.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Participation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/participants:
+    get:
+      tags: [engagement]
+      summary: Participants of an idea
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      responses:
+        '200':
+          description: Participants the viewer may see.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Participant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/participants/{handle}/{decision}:
+    post:
+      tags: [engagement]
+      summary: Accept or decline a participant (idea author)
+      description: A declined participation stays on record, so it cannot be re-requested.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+        - $ref: '#/components/parameters/Handle'
+        - { name: decision, in: path, required: true, schema: { type: string, enum: [accept, decline] } }
+      responses:
+        '200':
+          description: New state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  handle: { type: string }
+                  state: { type: string, enum: [ACCEPTED, DECLINED] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/ideas/{slug}/thread:
+    get:
+      tags: [discussion]
+      summary: Discussion thread of an idea
+      description: A tree of at most 5000 posts, depth capped at 8 (deeper replies attach to the parent's parent). Deleted posts remain as empty tombstones so replies keep their parent.
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      responses:
+        '200':
+          description: The thread.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Thread' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/posts:
+    post:
+      tags: [discussion]
+      summary: Write a post or reply
+      description: Markdown, sanitized on write (no raw HTML, no images, at most 10 links, 5000 characters). Ten per minute per user.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 5000 }
+                parentId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: The new post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/posts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [discussion]
+      summary: Edit own post (within 15 minutes)
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 5000 }
+      responses:
+        '200':
+          description: The edited post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [discussion]
+      summary: Delete a post (author or staff)
+      description: Idempotent soft delete.
+      security: [{ session: [] }]
+      responses:
+        '204': { description: "Deleted." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/ideas/{slug}/report:
+    post:
+      tags: [moderation]
+      summary: Report an idea
+      description: One open report per person and idea (409 if repeated). The fifth open report hides the idea and queues it for a moderator. Ten per minute per user.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '204': { description: "Reported." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/moderation/queue:
+    get:
+      tags: [moderation]
+      summary: Open moderation cases (staff)
+      security: [{ session: [] }]
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [PENDING, HIDDEN], default: PENDING } }
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: Oldest case first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/QueueItem' }
+                  nextCursor: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/moderation/ideas/{id}/decision:
+    post:
+      tags: [moderation]
+      summary: Decide an open case (staff)
+      description: |
+        Closes the case with an audit trail (who, when, note), resolves its reports and tells the author.
+        The first approval of a pending idea raises the author's approved-ideas count. Staff cannot decide their own ideas (403).
+        A note is required unless approving.
+      security: [{ session: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVED, HIDDEN, REJECTED] }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '204': { description: "Decided." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/moderation/reports:
+    get:
+      tags: [moderation]
+      summary: Reports filed against one idea (staff)
+      security: [{ session: [] }]
+      parameters:
+        - { name: ideaId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Newest first, at most 100.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        reporter: { $ref: '#/components/schemas/Person' }
+                        reason: { type: string }
+                        status: { type: string, enum: [OPEN, RESOLVED] }
+                        createdAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /api/me/notifications:
+    get:
+      tags: [notifications]
+      summary: Own notifications, newest first
+      security: [{ session: [] }]
+      parameters:
+        - { name: unread, in: query, schema: { type: boolean, default: false } }
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: One page and the total unread count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+                  nextCursor: { type: string, nullable: true }
+                  unread: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/me/notifications/read:
+    post:
+      tags: [notifications]
+      summary: Mark notifications as read
+      description: Send either `ids` (at most 100 of your own) or `all`. Foreign ids match nothing. Idempotent.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                ids:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, format: uuid }
+                all: { type: boolean }
+      responses:
+        '200':
+          description: How many changed and what is still unread.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+                  unread: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/me/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: Number of unread notifications
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unread: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
 components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-fantasm_session
+      description: Opaque session token set by the OIDC callback. Only its SHA-256 hash is stored.
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string, enum: [google, entra] }
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 90 }
+    Handle:
+      name: handle
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9_][a-z0-9_-]{2,39}$' }
+    Cursor:
+      name: cursor
+      in: query
+      description: The `nextCursor` of the previous page. A forged or foreign cursor is a 422.
+      schema: { type: string, maxLength: 512 }
+  responses:
+    Unauthorized:
+      description: Not signed in, or the session expired.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Signed in but not allowed, or a cross-origin request.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: No such resource, or one the viewer may not know about.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: The request conflicts with the current state.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Validation:
+      description: The input is well-formed but not acceptable; `fields` names what to fix.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds to wait. }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum: [invalid_request, unauthorized, forbidden, not_found, conflict, rate_limited, payload_too_large, validation_failed, unsupported_media_type, method_not_allowed, not_implemented, internal_error]
+        fields: { type: object, additionalProperties: { type: string } }
+        requestId: { type: string }
+    Category: { type: string, enum: [STARTUP, PROJECT, EVENT, COMMUNITY, VOLUNTEERING, OTHER] }
+    Status: { type: string, enum: [DRAFT, OPEN, TEAM_FORMING, IN_PROGRESS, DONE, ARCHIVED] }
+    Visibility: { type: string, enum: [PUBLIC, MEMBERS_ONLY, ORGANIZATION_ONLY] }
+    Campus:
+      type: object
+      nullable: true
+      properties:
+        id: { type: string }
+        label: { type: string }
+    Person:
+      type: object
+      properties:
+        handle: { type: string }
+        name: { type: string }
     Membership:
       type: object
       properties:
-        organizationId:
-          type: string
-          example: naukma
-        name:
-          type: string
-          example: НаУКМА
-        badge:
-          type: string
-          example: Могилянець
-        capabilities:
-          type: array
-          items:
-            type: string
-          example: ["ideas.read_internal", "ideas.create_internal"]
+        organizationId: { type: string, example: naukma }
+        name: { type: string }
+        badge: { type: string }
+        capabilities: { type: array, items: { type: string } }
         benefits:
           type: object
           properties:
-            voteWeight:
-              type: integer
-              example: 2
-            rankingMultiplier:
-              type: number
-              format: float
-              example: 1.5
-            karmaMultiplier:
-              type: number
-              format: float
-              example: 1.5
-            skipPremoderation:
-              type: boolean
-              example: true
-    UserResponse:
+            voteWeight: { type: integer }
+            rankingMultiplier: { type: number }
+            karmaMultiplier: { type: number }
+            skipPremoderation: { type: boolean }
+    User:
+      type: object
+      required: [id, handle, name, email, role, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: string }
+        bio: { type: string }
+        faculty: { type: string }
+        role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+        karma: { type: integer }
+        verified: { type: boolean }
+        memberships: { type: array, items: { $ref: '#/components/schemas/Membership' } }
+        createdAt: { type: string, format: date-time }
+    Session:
       type: object
       properties:
-        id:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        userAgent: { type: string }
+        current: { type: boolean }
+    Tag:
+      type: object
+      properties:
+        slug: { type: string }
+        label: { type: string }
+    IdeaAuthor:
+      type: object
+      properties:
+        handle: { type: string }
+        name: { type: string }
+        verified: { type: boolean }
+        campus: { $ref: '#/components/schemas/Campus' }
+    IdeaCard:
+      type: object
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        story: { type: string, description: "Sanitized plain-text excerpt for cards." }
+        coverUrl: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        status: { $ref: '#/components/schemas/Status' }
+        moderation:
           type: string
-          format: uuid
-        handle:
-          type: string
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-        avatarUrl:
-          type: string
-        bio:
-          type: string
-        faculty:
-          type: string
-        role:
-          type: string
-          enum: [USER, MODERATOR, ADMIN]
-        memberships:
-          type: array
-          items:
-            $ref: '#/components/schemas/Membership'
-        createdAt:
-          type: string
-          format: date-time
-      required:
-        - id
-        - handle
-        - name
-        - email
-        - role
-        - createdAt
+          enum: [PENDING, APPROVED, HIDDEN, REJECTED]
+          description: Only shown to the author and staff.
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        organizationId: { type: string, nullable: true }
+        campus: { $ref: '#/components/schemas/Campus' }
+        tags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+        author: { $ref: '#/components/schemas/IdeaAuthor' }
+        votes: { type: integer, description: "Weighted votes." }
+        comments: { type: integer }
+        participants: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        eventAt: { type: string, format: date-time }
+        eventLocation: { type: string }
+        eventCapacity: { type: integer }
+        needsRoles: { type: array, items: { type: string } }
+    IdeaView:
+      allOf:
+        - $ref: '#/components/schemas/IdeaCard'
+        - type: object
+          properties:
+            html: { type: string, description: "Sanitized HTML, safe to inject." }
+            text: { type: string }
+            toc:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  text: { type: string }
+                  level: { type: integer }
+            readingMinutes: { type: integer }
+            body: { type: string, description: "Markdown source. Only for those who can edit." }
+            canEdit: { type: boolean }
+            viewer:
+              type: object
+              properties:
+                voted: { type: boolean }
+                votedWeight: { type: integer }
+                participation:
+                  type: object
+                  nullable: true
+                  properties:
+                    state: { type: string, enum: [INTERESTED, JOINED, ACCEPTED, DECLINED] }
+                    role: { type: string }
+    IdeaPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/IdeaCard' } }
+        nextCursor: { type: string, nullable: true }
+    IdeaCreate:
+      type: object
+      additionalProperties: false
+      required: [title, category]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 120 }
+        summary: { type: string, maxLength: 280 }
+        body: { type: string, maxLength: 20000, description: "Markdown. Raw HTML is dropped, images must be https." }
+        coverUrl: { type: string, format: uri, maxLength: 500, description: "https only." }
+        category: { $ref: '#/components/schemas/Category' }
+        tags: { type: array, maxItems: 5, items: { type: string, maxLength: 40 } }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        organizationId: { type: string }
+        status: { type: string, enum: [DRAFT, OPEN] }
+        eventAt: { type: string, format: date-time }
+        eventLocation: { type: string, maxLength: 200 }
+        eventCapacity: { type: integer, minimum: 1, maximum: 100000 }
+        needsRoles: { type: array, maxItems: 10, items: { type: string, maxLength: 40 } }
+    IdeaPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        summary: { type: string }
+        body: { type: string }
+        coverUrl: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        tags: { type: array, items: { type: string } }
+        eventAt: { type: string, format: date-time }
+        eventLocation: { type: string }
+        eventCapacity: { type: integer }
+        needsRoles: { type: array, items: { type: string } }
+    PublicProfile:
+      type: object
+      properties:
+        handle: { type: string }
+        name: { type: string }
+        bio: { type: string }
+        faculty: { type: string }
+        verified: { type: boolean }
+        campus: { $ref: '#/components/schemas/Campus' }
+        role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+        karma: { type: integer }
+        joinedAt: { type: string, format: date-time }
+        ideasCount: { type: integer }
+        ideas: { type: array, items: { $ref: '#/components/schemas/IdeaCard' } }
+    VoteState:
+      type: object
+      properties:
+        votes: { type: integer }
+        voted: { type: boolean }
+        votedWeight: { type: integer }
+    Participation:
+      type: object
+      properties:
+        participation:
+          type: object
+          nullable: true
+          properties:
+            state: { type: string, enum: [INTERESTED, JOINED, ACCEPTED, DECLINED] }
+            role: { type: string }
+        participants: { type: integer }
+    Participant:
+      type: object
+      properties:
+        handle: { type: string }
+        name: { type: string }
+        state: { type: string }
+        role: { type: string }
+        verified: { type: boolean }
+        campus: { $ref: '#/components/schemas/Campus' }
+    PostAuthor:
+      type: object
+      properties:
+        handle: { type: string }
+        name: { type: string }
+        verified: { type: boolean }
+    Post:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        author: { $ref: '#/components/schemas/PostAuthor' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        html: { type: string, description: "Sanitized HTML; empty when deleted." }
+        text: { type: string }
+        deleted: { type: boolean }
+        replies: { type: array, items: { $ref: '#/components/schemas/Post' } }
+    Thread:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ideaSlug: { type: string }
+        count: { type: integer, description: "Posts that are not deleted." }
+        posts: { type: array, items: { $ref: '#/components/schemas/Post' } }
+    QueueItem:
+      type: object
+      properties:
+        caseId: { type: string, format: uuid }
+        ideaId: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        html: { type: string }
+        author: { $ref: '#/components/schemas/Person' }
+        authorKarma: { type: integer }
+        authorApprovedIdeas: { type: integer }
+        state: { type: string, enum: [PENDING, HIDDEN] }
+        source: { type: string, enum: [PREMODERATION, REPORTS] }
+        openedAt: { type: string, format: date-time }
+        openReports: { type: integer }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [COMMENT, VOTE, JOIN, ACCEPTED, APPROVED, HIDDEN, EVENT_REMINDER, SYSTEM] }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Ids and short display strings only, for example `ideaSlug`, `ideaTitle`, `actorHandle`.
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }

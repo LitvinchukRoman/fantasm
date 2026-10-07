@@ -24,6 +24,7 @@ import (
 	identityhttp "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/http"
 	identitypostgres "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/postgres"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/httpx"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/postgres"
 )
 
@@ -195,8 +196,9 @@ func TestHTTPLoginSessionAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux := http.NewServeMux()
-	h.Register(mux)
+	raw := http.NewServeMux()
+	h.Register(raw)
+	mux := httpx.Auth(h.SessionCookie(), h.Resolver())(raw)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/google/login", nil))
 	if w.Code != http.StatusFound {
@@ -318,11 +320,11 @@ func TestSessionUsesCurrentRoleAndExpiry(t *testing.T) {
 	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE users SET role = 'MODERATOR' WHERE id = $1`, u.ID); err != nil {
 		t.Fatal(err)
 	}
-	u, err = r.UserBySession(t.Context(), session.TokenHash, time.Now())
+	u, err = r.UserBySession(t.Context(), session.TokenHash, time.Now(), time.Now().Add(-time.Hour))
 	if err != nil || u.Role != domain.ModeratorRole {
 		t.Fatalf("stale session privileges: %+v %v", u, err)
 	}
-	if _, err := r.UserBySession(t.Context(), session.TokenHash, session.ExpiresAt); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := r.UserBySession(t.Context(), session.TokenHash, session.ExpiresAt, session.ExpiresAt.Add(-time.Hour)); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expired session accepted: %v", err)
 	}
 }
@@ -372,5 +374,61 @@ func TestLegacyRestrictedIdeasKeepOrganizationScope(t *testing.T) {
 	}
 	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE ideas SET visibility = 'PUBLIC' WHERE slug = 'legacy'`); err == nil {
 		t.Fatal("public idea retained organization restriction")
+	}
+}
+
+func TestSessionIdleExpiryAndTouch(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Microsecond)
+	session := domain.Session{TokenHash: strings.Repeat("b", 64), UserID: u.ID, ExpiresAt: now.Add(24 * time.Hour), UserAgent: "test-agent"}
+	if err := r.CreateSession(t.Context(), session); err != nil {
+		t.Fatal(err)
+	}
+	// Seen "now": a cutoff in the future of that moment means the session went idle.
+	if _, err := r.UserBySession(t.Context(), session.TokenHash, now, now.Add(time.Hour)); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("idle session accepted: %v", err)
+	}
+	if err := r.TouchSession(t.Context(), session.TokenHash, now.Add(2*time.Hour), now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.UserBySession(t.Context(), session.TokenHash, now, now.Add(time.Hour)); err != nil {
+		t.Fatalf("touched session rejected: %v", err)
+	}
+	list, err := r.ListSessions(t.Context(), u.ID, now, now.Add(-time.Hour))
+	if err != nil || len(list) != 1 || list[0].UserAgent != "test-agent" {
+		t.Fatalf("sessions = %+v, %v", list, err)
+	}
+	if ok, err := r.DeleteSessionByID(t.Context(), u.ID, list[0].ID); err != nil || !ok {
+		t.Fatalf("delete own session: %v %v", ok, err)
+	}
+	if ok, _ := r.DeleteSessionByID(t.Context(), u.ID, list[0].ID); ok {
+		t.Fatal("deleted twice")
+	}
+}
+
+func TestUpdateProfileHandleCollision(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	a, err := r.UpsertUser(t.Context(), profile("a"), candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := r.UpsertUser(t.Context(), profile("b"), candidate(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	taken := a.Handle
+	if _, err := r.UpdateProfile(t.Context(), b.ID, domain.ProfileUpdate{Handle: &taken}, time.Now()); !errors.Is(err, domain.ErrHandleTaken) {
+		t.Fatalf("collision error = %v", err)
+	}
+	bio := "hello"
+	updated, err := r.UpdateProfile(t.Context(), b.ID, domain.ProfileUpdate{Bio: &bio}, time.Now())
+	if err != nil || updated.Bio != bio || updated.Handle != b.Handle {
+		t.Fatalf("partial update: %+v %v", updated, err)
 	}
 }

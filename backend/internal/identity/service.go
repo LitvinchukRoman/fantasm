@@ -17,8 +17,14 @@ import (
 )
 
 const (
-	LoginTTL   = 10 * time.Minute
-	SessionTTL = 24 * time.Hour
+	LoginTTL = 10 * time.Minute
+	// SessionTTL is the default absolute lifetime of a session; SessionIdleTTL
+	// ends it earlier when the browser stays away. Both are overridable with WithSessionPolicy.
+	SessionTTL     = 30 * 24 * time.Hour
+	SessionIdleTTL = 7 * 24 * time.Hour
+
+	// lastSeenInterval throttles the idle-clock write so reads stay reads.
+	lastSeenInterval = 5 * time.Minute
 )
 
 type Repository interface {
@@ -26,9 +32,33 @@ type Repository interface {
 	ConsumeLogin(context.Context, string, string, domain.Provider, time.Time) (domain.LoginAttempt, error)
 	UpsertUser(context.Context, domain.Identity, domain.User) (domain.User, error)
 	CreateSession(context.Context, domain.Session) error
-	UserBySession(context.Context, string, time.Time) (domain.User, error)
+	// UserBySession finds the owner of a live session: not past its absolute
+	// expiry (now) and seen since idleCutoff.
+	UserBySession(ctx context.Context, tokenHash string, now, idleCutoff time.Time) (domain.User, error)
+	// TouchSession moves the idle clock forward when it is older than staleBefore.
+	TouchSession(ctx context.Context, tokenHash string, now, staleBefore time.Time) error
 	DeleteSession(context.Context, string) error
 	IdentitiesByUser(context.Context, string) ([]domain.Identity, error)
+
+	AccountRepository
+}
+
+// ClientInfo is coarse request metadata stored with a session.
+type ClientInfo struct {
+	IPHash    string
+	UserAgent string
+}
+
+type clientKey struct{}
+
+// WithClient attaches request metadata for CompleteLogin to record.
+func WithClient(ctx context.Context, c ClientInfo) context.Context {
+	return context.WithValue(ctx, clientKey{}, c)
+}
+
+func clientFrom(ctx context.Context) ClientInfo {
+	c, _ := ctx.Value(clientKey{}).(ClientInfo)
+	return c
 }
 
 type Transactor interface {
@@ -50,6 +80,8 @@ type Service struct {
 	transactions     Transactor
 	providers        map[domain.Provider]Provider
 	now              func() time.Time
+	sessionTTL       time.Duration
+	sessionIdleTTL   time.Duration
 }
 
 func NewService(repository Repository, transactions Transactor, providers map[domain.Provider]Provider, options ...func(*Service)) *Service {
@@ -58,11 +90,19 @@ func NewService(repository Repository, transactions Transactor, providers map[do
 		transactions: transactions,
 		providers:    maps.Clone(providers),
 		now:          time.Now,
+
+		sessionTTL:     SessionTTL,
+		sessionIdleTTL: SessionIdleTTL,
 	}
 	for _, option := range options {
 		option(service)
 	}
 	return service
+}
+
+// WithSessionPolicy sets the absolute and idle lifetimes of new sessions.
+func WithSessionPolicy(absolute, idle time.Duration) func(*Service) {
+	return func(s *Service) { s.sessionTTL, s.sessionIdleTTL = absolute, idle }
 }
 
 func WithMembershipPolicy(policy MembershipPolicy) func(*Service) {
@@ -124,14 +164,15 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 	id := randomID()
 	candidate := domain.User{
 		ID: id, Handle: "u_" + strings.ReplaceAll(id, "-", ""),
-		Name: external.Name, Email: external.Email, AvatarURL: external.AvatarURL,
+		Name: domain.CleanName(external.Name), Email: external.Email, AvatarURL: external.AvatarURL,
 		Role:      domain.UserRole,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if candidate.Name == "" {
 		candidate.Name = candidate.Handle
 	}
-	auth := Authentication{Token: randomToken(), ExpiresAt: now.Add(SessionTTL)}
+	client := clientFrom(ctx)
+	auth := Authentication{Token: randomToken(), ExpiresAt: now.Add(s.sessionTTL)}
 	err = s.transactions.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
 		auth.User, err = s.repository.UpsertUser(ctx, external, candidate)
@@ -146,7 +187,10 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 				return fmt.Errorf("rotate session: %w", err)
 			}
 		}
-		if err := s.repository.CreateSession(ctx, domain.Session{TokenHash: hashToken(auth.Token), UserID: auth.User.ID, ExpiresAt: auth.ExpiresAt}); err != nil {
+		if err := s.repository.CreateSession(ctx, domain.Session{
+			TokenHash: hashToken(auth.Token), UserID: auth.User.ID, ExpiresAt: auth.ExpiresAt,
+			UserAgent: client.UserAgent, IPHash: client.IPHash,
+		}); err != nil {
 			return fmt.Errorf("create session: %w", err)
 		}
 		return nil
@@ -161,13 +205,16 @@ func (s *Service) CurrentUser(ctx context.Context, token string) (domain.User, e
 	if !validToken(token) {
 		return domain.User{}, apperr.Unauthorized("authentication required")
 	}
-	user, err := s.repository.UserBySession(ctx, hashToken(token), s.now())
+	now := s.now()
+	user, err := s.repository.UserBySession(ctx, hashToken(token), now, now.Add(-s.sessionIdleTTL))
 	if errors.Is(err, domain.ErrNotFound) {
 		return domain.User{}, apperr.Unauthorized("session expired or revoked")
 	}
 	if err != nil {
 		return domain.User{}, fmt.Errorf("find session user: %w", err)
 	}
+	// Best effort: a failed idle-clock write must not log the user out.
+	_ = s.repository.TouchSession(ctx, hashToken(token), now, now.Add(-lastSeenInterval))
 	if err := s.resolveMemberships(ctx, &user); err != nil {
 		return domain.User{}, err
 	}
