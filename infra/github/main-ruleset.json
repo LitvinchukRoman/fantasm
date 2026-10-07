@@ -4,7 +4,9 @@
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
       "exclude": []
     }
   },
@@ -16,8 +18,12 @@
     }
   ],
   "rules": [
-    { "type": "deletion" },
-    { "type": "non_fast_forward" },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
     {
       "type": "pull_request",
       "parameters": {
@@ -34,11 +40,54 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": true,
         "required_status_checks": [
-          { "context": "lint", "integration_id": 15368 },
-          { "context": "typecheck", "integration_id": 15368 },
-          { "context": "build", "integration_id": 15368 },
-          { "context": "actionlint", "integration_id": 15368 },
-          { "context": "branch-name", "integration_id": 15368 }
+          {
+            "context": "lint",
+            "integration_id": 15368
+          },
+          {
+            "context": "typecheck",
+            "integration_id": 15368
+          },
+          {
+            "context": "build",
+            "integration_id": 15368
+          },
+          {
+            "context": "actionlint",
+            "integration_id": 15368
+          },
+          {
+            "context": "branch-name",
+            "integration_id": 15368
+          },
+          {
+            "context": "backend-checks",
+            "integration_id": 15368
+          },
+          {
+            "context": "backend-test",
+            "integration_id": 15368
+          },
+          {
+            "context": "backend-image",
+            "integration_id": 15368
+          },
+          {
+            "context": "security",
+            "integration_id": 15368
+          }
+        ]
+      }
+    },
+    {
+      "type": "code_scanning",
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "alerts_threshold": "errors",
+            "security_alerts_threshold": "critical",
+            "tool": "CodeQL"
+          }
         ]
       }
     }

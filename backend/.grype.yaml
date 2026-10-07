@@ -1,0 +1,15 @@
+# Grype policy for the production image (see .github/workflows/backend.yml).
+#
+# The CI gate fails on any CRITICAL vulnerability that has a fix available.
+# Do not widen this file casually: every exception below must carry
+#   - the vulnerability id,
+#   - why it does not apply to this image (not reachable / false positive),
+#   - an expiry date after which it is reviewed again.
+#
+# Example (delete when used for real):
+#   ignore:
+#     - vulnerability: CVE-2026-0000
+#       package:
+#         name: busybox
+#       # Reason: <why it is not exploitable here>. Review by 2026-12-01.
+ignore: []

@@ -132,6 +132,8 @@ func (h *Handler) private(w http.ResponseWriter) {
 }
 
 func (h *Handler) setCookie(w http.ResponseWriter, name, value string, expires time.Time, maxAge int) {
+	// Secure follows the config: it is false only for plain-http local development.
+	//nolint:gosec // G124: Secure is deliberately configuration-driven
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: h.secure, SameSite: http.SameSiteLaxMode, Expires: expires, MaxAge: maxAge})
 }
 
