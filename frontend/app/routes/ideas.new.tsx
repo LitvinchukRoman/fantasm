@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { Link } from "react-router";
 import { motion, AnimatePresence, type Variants } from "motion/react";
+import { seo } from "~/lib/seo";
+import type { Route } from "./+types/ideas.new";
 import { Nav } from "~/components/landing/nav";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
@@ -44,6 +46,14 @@ const stepVariants: Variants = {
   },
   exit: { opacity: 0, x: 10, filter: "blur(4px)", transition: { duration: 0.4, ease: EASE_OUT } }
 };
+
+export function meta(_args: Route.MetaArgs) {
+  return seo({
+    title: "Запропонувати ідею",
+    description: "Опублікуй стартап, проєкт, подію чи клуб на Fantasm.",
+    path: "/ideas/new",
+  });
+}
 
 export default function IdeaNewPage() {
   const [step, setStep] = useState(1);
