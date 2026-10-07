@@ -20,10 +20,11 @@ type memoryRepository struct {
 	users       map[string]domain.User
 	sessions    map[string]domain.Session
 	failSession bool
+	seen        map[string]time.Time
 }
 
 func newMemoryRepository() *memoryRepository {
-	return &memoryRepository{identities: make(map[string]domain.Identity), logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session)}
+	return &memoryRepository{identities: make(map[string]domain.Identity), logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session), seen: make(map[string]time.Time)}
 }
 
 func (r *memoryRepository) CreateLogin(_ context.Context, attempt domain.LoginAttempt) error {
@@ -60,9 +61,9 @@ func (r *memoryRepository) CreateSession(_ context.Context, session domain.Sessi
 	return nil
 }
 
-func (r *memoryRepository) UserBySession(_ context.Context, hash string, now time.Time) (domain.User, error) {
+func (r *memoryRepository) UserBySession(_ context.Context, hash string, now, idleCutoff time.Time) (domain.User, error) {
 	s, ok := r.sessions[hash]
-	if ok && s.ExpiresAt.After(now) {
+	if ok && s.ExpiresAt.After(now) && (r.seen[hash].IsZero() || r.seen[hash].After(idleCutoff)) {
 		for _, user := range r.users {
 			if user.ID == s.UserID {
 				return user, nil
@@ -70,6 +71,50 @@ func (r *memoryRepository) UserBySession(_ context.Context, hash string, now tim
 		}
 	}
 	return domain.User{}, domain.ErrNotFound
+}
+
+func (r *memoryRepository) TouchSession(_ context.Context, hash string, now, staleBefore time.Time) error {
+	if _, ok := r.sessions[hash]; ok && (r.seen[hash].IsZero() || r.seen[hash].Before(staleBefore)) {
+		r.seen[hash] = now
+	}
+	return nil
+}
+
+func (r *memoryRepository) UpdateProfile(context.Context, string, domain.ProfileUpdate, time.Time) (domain.User, error) {
+	return domain.User{}, errors.New("not implemented")
+}
+
+func (r *memoryRepository) UserByHandle(context.Context, string) (domain.User, error) {
+	return domain.User{}, domain.ErrNotFound
+}
+
+func (r *memoryRepository) SetRole(context.Context, string, domain.Role, time.Time) (domain.User, error) {
+	return domain.User{}, errors.New("not implemented")
+}
+
+func (r *memoryRepository) ListSessions(context.Context, string, time.Time, time.Time) ([]domain.SessionInfo, error) {
+	return nil, nil
+}
+
+func (r *memoryRepository) DeleteSessionByID(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (r *memoryRepository) DeleteUserSessions(_ context.Context, userID string) error {
+	for hash, s := range r.sessions {
+		if s.UserID == userID {
+			delete(r.sessions, hash)
+		}
+	}
+	return nil
+}
+
+func (r *memoryRepository) IdentitiesByUsers(context.Context, []string) (map[string][]domain.Identity, error) {
+	return nil, nil
+}
+
+func (r *memoryRepository) PurgeExpired(context.Context, time.Time, time.Time) (int64, error) {
+	return 0, nil
 }
 
 func (r *memoryRepository) DeleteSession(_ context.Context, hash string) error {

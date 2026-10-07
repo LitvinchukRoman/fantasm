@@ -202,3 +202,16 @@ func (c condition) matches(i domain.Identity) bool {
 	}
 	return false
 }
+
+// Badge returns the public mark of an organization by id.
+func (p *Policy) Badge(id string) (domain.Badge, bool) {
+	if p == nil {
+		return domain.Badge{}, false
+	}
+	for _, o := range p.organizations {
+		if o.ID == id {
+			return domain.Badge{OrganizationID: o.ID, Label: o.Badge}, true
+		}
+	}
+	return domain.Badge{}, false
+}

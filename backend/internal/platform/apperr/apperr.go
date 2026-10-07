@@ -12,12 +12,18 @@ const (
 	KindNotFound
 	KindConflict
 	KindNotImplemented
+	KindRateLimited
+	KindTooLarge
+	KindUnprocessable
+	KindUnsupportedMedia
+	KindMethodNotAllowed
 )
 
 type Error struct {
-	Kind Kind
-	Msg  string
-	Err  error
+	Kind   Kind
+	Msg    string
+	Err    error
+	Fields map[string]string
 }
 
 func (e *Error) Error() string {
@@ -38,6 +44,14 @@ func Unauthorized(msg string) error { return New(KindUnauthorized, msg) }
 func Forbidden(msg string) error    { return New(KindForbidden, msg) }
 func NotFound(msg string) error     { return New(KindNotFound, msg) }
 func Conflict(msg string) error     { return New(KindConflict, msg) }
+func RateLimited(msg string) error  { return New(KindRateLimited, msg) }
+func TooLarge(msg string) error     { return New(KindTooLarge, msg) }
+
+// Validation reports well-formed input that breaks a domain rule. Fields maps
+// a request field name to a message that is safe to show the client.
+func Validation(fields map[string]string) error {
+	return &Error{Kind: KindUnprocessable, Msg: "validation failed", Fields: fields}
+}
 
 func NotImplemented(what string) error { return New(KindNotImplemented, what+" is not implemented") }
 
@@ -55,4 +69,13 @@ func MessageOf(err error) string {
 		return e.Msg
 	}
 	return err.Error()
+}
+
+// FieldsOf returns the validation fields attached to err, if any.
+func FieldsOf(err error) map[string]string {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Fields
+	}
+	return nil
 }

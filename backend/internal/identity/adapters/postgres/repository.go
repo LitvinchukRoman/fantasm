@@ -79,13 +79,21 @@ func (r *Repository) UpsertUser(ctx context.Context, external domain.Identity, c
 }
 
 func (r *Repository) CreateSession(ctx context.Context, session domain.Session) error {
-	_, err := r.db.Querier(ctx).Exec(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)`, session.TokenHash, session.UserID, session.ExpiresAt)
+	_, err := r.db.Querier(ctx).Exec(ctx, `
+		INSERT INTO sessions (token_hash, user_id, expires_at, user_agent, ip_hash)
+		VALUES ($1, $2, $3, left($4, 200), $5)`, session.TokenHash, session.UserID, session.ExpiresAt, session.UserAgent, session.IPHash)
 	return err
 }
 
-func (r *Repository) UserBySession(ctx context.Context, tokenHash string, now time.Time) (domain.User, error) {
+func (r *Repository) UserBySession(ctx context.Context, tokenHash string, now, idleCutoff time.Time) (domain.User, error) {
 	return scanUser(r.db.Querier(ctx).QueryRow(ctx, `SELECT `+userColumns+`
-		FROM users u JOIN sessions s ON s.user_id = u.id WHERE s.token_hash = $1 AND s.expires_at > $2`, tokenHash, now))
+		FROM users u JOIN sessions s ON s.user_id = u.id
+		WHERE s.token_hash = $1 AND s.expires_at > $2 AND s.last_seen_at > $3`, tokenHash, now, idleCutoff))
+}
+
+func (r *Repository) TouchSession(ctx context.Context, tokenHash string, now, staleBefore time.Time) error {
+	_, err := r.db.Querier(ctx).Exec(ctx, `UPDATE sessions SET last_seen_at = $2 WHERE token_hash = $1 AND last_seen_at < $3`, tokenHash, now, staleBefore)
+	return err
 }
 
 func (r *Repository) DeleteSession(ctx context.Context, tokenHash string) error {
@@ -93,11 +101,11 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash string) error 
 	return err
 }
 
-const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.faculty, u.role, u.created_at, u.updated_at`
+const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.faculty, u.role, u.karma, u.approved_ideas, u.created_at, u.updated_at`
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.Faculty, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.Faculty, &user.Role, &user.Karma, &user.ApprovedIdeas, &user.CreatedAt, &user.UpdatedAt)
 	return user, notFound(err)
 }
 

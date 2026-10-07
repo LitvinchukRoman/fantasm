@@ -1,4 +1,5 @@
-# Grype policy for the production image (see .github/workflows/backend.yml).
+# Grype policy for the production image (see security-backend.yaml and
+# deploy-backend-{dev,prod}.yaml).
 #
 # The CI gate fails on any CRITICAL vulnerability that has a fix available.
 # Do not widen this file casually: every exception below must carry

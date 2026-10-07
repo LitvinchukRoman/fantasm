@@ -27,3 +27,35 @@ tasks:
     desc: "task migrate-new -- <name>"
     cmds:
       - migrate create -ext sql -dir migrations -seq {{.CLI_ARGS}}
+
+  # Tests. Everything that needs Postgres is skipped (not failed) without TEST_DATABASE_URL.
+  test:
+    desc: "unit + integration + regression, with the race detector"
+    cmds:
+      - go test -race -shuffle=on -count=1 ./...
+
+  test-regression:
+    desc: "only the cross-cutting regression suite (internal/regression)"
+    cmds:
+      - go test -race -shuffle=on -count=1 ./internal/regression/ {{.CLI_ARGS}}
+
+  test-regression-repeat:
+    desc: "run the regression suite N times (default 5) to shake out flaky tests; REGRESSION_SEED=<n> replays one workload"
+    cmds:
+      - go test -race -shuffle=on -count={{.N | default "5"}} ./internal/regression/
+
+  fuzz:
+    desc: "task fuzz PKG=./internal/platform/cursor TARGET=FuzzDecode TIME=30s"
+    cmds:
+      - go test {{.PKG | default "./internal/platform/cursor"}} -run '^$' -fuzz '^{{.TARGET | default "FuzzDecode"}}$' -fuzztime {{.TIME | default "30s"}}
+
+  bench:
+    desc: "request-path benchmarks (needs TEST_DATABASE_URL)"
+    cmds:
+      - go test -run '^$' -bench . -benchmem ./internal/regression/
+
+  lint:
+    cmds:
+      - gofmt -l .
+      - go vet ./...
+      - golangci-lint run

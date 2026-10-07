@@ -2,8 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
+	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,8 +25,36 @@ type DB struct {
 	pool *pgxpool.Pool
 }
 
-func Connect(ctx context.Context, url string) (*DB, error) {
-	pool, err := pgxpool.New(ctx, url)
+// Options tunes the pool. Zero values keep pgx defaults.
+type Options struct {
+	MaxConns         int
+	StatementTimeout time.Duration
+}
+
+func Connect(ctx context.Context, url string) (*DB, error) { return ConnectWith(ctx, url, Options{}) }
+
+func ConnectWith(ctx context.Context, url string, opts Options) (*DB, error) {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+	if opts.MaxConns > 0 {
+		cfg.MaxConns = int32(min(opts.MaxConns, math.MaxInt32))
+	}
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnLifetimeJitter = 5 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.HealthCheckPeriod = 30 * time.Second
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	// A runaway query or a forgotten transaction must not hold connections forever.
+	if opts.StatementTimeout > 0 {
+		cfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprint(opts.StatementTimeout.Milliseconds())
+		cfg.ConnConfig.RuntimeParams["lock_timeout"] = fmt.Sprint(opts.StatementTimeout.Milliseconds())
+		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprint((2 * opts.StatementTimeout).Milliseconds())
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
@@ -59,3 +91,21 @@ func (db *DB) WithinTx(ctx context.Context, fn func(ctx context.Context) error) 
 	}
 	return tx.Commit(ctx)
 }
+
+// IsUniqueViolation reports a unique-constraint failure, optionally on one named constraint.
+func IsUniqueViolation(err error, constraint ...string) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
+		return false
+	}
+	return len(constraint) == 0 || pgErr.ConstraintName == constraint[0]
+}
+
+// IsForeignKeyViolation reports a failed foreign key reference.
+func IsForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation
+}
+
+// IsNoRows reports pgx.ErrNoRows without making callers import pgx.
+func IsNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

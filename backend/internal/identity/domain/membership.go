@@ -28,3 +28,22 @@ func (u User) Can(organizationID, capability string) bool {
 	}
 	return false
 }
+
+// Badge is the public mark of an organization member.
+type Badge struct {
+	OrganizationID string `json:"id"`
+	Label          string `json:"label"`
+}
+
+// BadgeOf picks the badge shown next to a person: the membership with the
+// strongest ranking multiplier (first one on a tie).
+func BadgeOf(memberships []Membership) (Badge, bool) {
+	var best Membership
+	found := false
+	for _, m := range memberships {
+		if !found || m.Benefits.RankingMultiplier > best.Benefits.RankingMultiplier {
+			best, found = m, true
+		}
+	}
+	return Badge{OrganizationID: best.OrganizationID, Label: best.Badge}, found
+}
