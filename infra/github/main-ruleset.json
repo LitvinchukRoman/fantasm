@@ -41,39 +41,31 @@
         "do_not_enforce_on_create": true,
         "required_status_checks": [
           {
-            "context": "lint",
+            "context": "Lint frontend",
             "integration_id": 15368
           },
           {
-            "context": "typecheck",
+            "context": "Lint backend",
             "integration_id": 15368
           },
           {
-            "context": "build",
+            "context": "Security frontend",
             "integration_id": 15368
           },
           {
-            "context": "actionlint",
+            "context": "Security backend",
             "integration_id": 15368
           },
           {
-            "context": "branch-name",
+            "context": "Build frontend",
             "integration_id": 15368
           },
           {
-            "context": "backend-checks",
+            "context": "Build backend",
             "integration_id": 15368
           },
           {
-            "context": "backend-test",
-            "integration_id": 15368
-          },
-          {
-            "context": "backend-image",
-            "integration_id": 15368
-          },
-          {
-            "context": "security",
+            "context": "Branch name",
             "integration_id": 15368
           }
         ]

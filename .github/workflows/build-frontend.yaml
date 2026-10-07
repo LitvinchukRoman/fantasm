@@ -1,0 +1,55 @@
+name: Build frontend
+
+# Production build and SEO check. Works only when frontend/ or .github/ changed.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-frontend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm.naukma.com' }}
+
+jobs:
+  build-frontend:
+    name: Build frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/changed.sh frontend
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # --ignore-scripts: a compromised dependency cannot run code at install time.
+      - name: Dependencies
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: Build
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm run build
+      - name: SEO check
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        working-directory: frontend
+        run: npm run check:seo

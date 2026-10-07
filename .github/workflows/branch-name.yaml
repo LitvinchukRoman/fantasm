@@ -1,0 +1,35 @@
+name: Branch name
+
+# Personal accounts cannot use the branch_name_pattern ruleset (enterprise only),
+# so the name is enforced here: type/short-description, type is one of
+# feat, fix, chore, infra, docs. main and dependabot/* are allowed.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  branch-name:
+    name: Branch name
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Branch name
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          name="${HEAD_REF:-$REF_NAME}"
+          if [[ "$name" == "main" || "$name" == dependabot/* ]]; then
+            echo "branch '$name' is allowed"
+            exit 0
+          fi
+          pattern='^(feat|fix|chore|infra|docs)/[a-z0-9]+(-[a-z0-9]+)*$'
+          if [[ ! "$name" =~ $pattern ]]; then
+            echo "::error::branch '$name' must match $pattern"
+            exit 1
+          fi
+          echo "branch '$name' matches"

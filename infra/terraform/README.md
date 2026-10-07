@@ -91,21 +91,21 @@ aws ssm put-parameter --overwrite --type SecureString \
 
 ## Змінні GitHub
 
-Задаються **на рівні environment** (`dev`, `prod`), не репозиторію, щоб prod-джоб ніколи не прочитав dev-значення. Команди друкують обидва стеки: edge дає `VITE_SITE_URL`, `AWS_DEPLOY_ROLE_ARN`, `AWS_FRONTEND_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`; backend дає `ECR_REPOSITORY`, `EC2_INSTANCE_ID`, `SSM_DEPLOY_DOCUMENT`. Старі змінні репозиторію (без environment) лишаються для робочого `ci.yml` до першого деплою з новими ролями; після нього їх і роль `fantasm-frontend-deploy` у `edge/iam.tf` можна видалити.
+Задаються **на рівні environment** (`dev`, `prod`), не репозиторію, щоб prod-джоб ніколи не прочитав dev-значення. Команди друкують обидва стеки: edge дає `VITE_SITE_URL`, `AWS_DEPLOY_ROLE_ARN`, `AWS_FRONTEND_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`; backend дає `ECR_REPOSITORY`, `EC2_INSTANCE_ID`, `SSM_DEPLOY_DOCUMENT`. Старі змінні репозиторію (без environment) workflow більше не читають; їх і роль `fantasm-frontend-deploy` у `edge/iam.tf` можна видалити.
 
 ## Деплой
 
 | Подія | Що відбувається |
 |---|---|
-| merge у `main` (frontend) | `ci.yml`: чеки, потім збірка з dev-URL, S3 dev, інвалідація dev |
-| merge у `main` (backend) | `backend.yml`: тести, збірка arm64 без QEMU, пуш `fantasm-api:sha-<commit>` (immutable), деплой у dev через SSM, smoke через CloudFront |
-| prod | вручну `promote-prod.yml` (`workflow_dispatch`, environment `prod` з рев'юером): беремо вже перевірений на dev тег, ставимо alias `release-<sha>`, деплоїмо, smoke, опційно публікуємо фронтенд |
+| merge у `main` (`frontend/`) | `deploy-frontend-dev.yaml`: збірка з dev-URL, S3 dev, інвалідація dev |
+| merge у `main` (`backend/`) | `deploy-backend-dev.yaml`: збірка arm64, grype, пуш `fantasm-api:sha-<commit>` (immutable), деплой у dev через SSM, smoke через CloudFront |
+| prod | вручну, `deploy-backend-prod.yaml` і `deploy-frontend-prod.yaml` (environment `prod` з рев'юером). Бекенд: тег, що вже працює на dev, повторний grype, alias `release-<sha>`, деплой, smoke. Фронтенд: збірка з prod-URL, S3 prod, інвалідація |
 
 Роль кожного середовища може запускати лише власний SSM-документ `fantasm-deploy-api-<env>`, а не довільні команди (dev-роль не може виконати код на боксі, де живе prod). Тег перевіряє SSM (`^(sha|release)-[0-9a-f]{7,40}$`).
 
 ### Відкат
 
-`deploy-api` на боксі сам повертає попередній образ, якщо новий не став `healthy` за 30 с, і завершується кодом 1. Ручний відкат на відомий тег: запустити `promote-prod.yml` зі старим `image_tag` (ECR зберігає останні 40 образів; `release-*` аліаси позначають промотовані).
+`deploy-api` на боксі сам повертає попередній образ, якщо новий не став `healthy` за 30 с, і завершується кодом 1. Ручний відкат на відомий тег: запустити `deploy-backend-prod.yaml` зі старим `image_tag` (ECR зберігає останні 40 образів; `release-*` аліаси позначають промотовані).
 
 ### Логи і доступ
 

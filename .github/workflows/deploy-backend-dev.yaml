@@ -1,0 +1,91 @@
+name: Deploy backend dev
+
+# Runs after a merge into main that touches backend/, or by hand: build the arm64
+# image, scan it (grype, CRITICAL with a fix fails), push sha-<commit> to ECR,
+# deploy through SSM, smoke test through CloudFront.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend-dev.yaml"
+      - ".github/scripts/deploy-backend.sh"
+      - ".github/scripts/smoke-api.sh"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-backend-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend dev
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE_TAG: sha-${{ github.sha }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          platforms: linux/arm64
+          load: true
+          push: false
+          provenance: false
+          tags: fantasm-api:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=fantasm-api
+          cache-to: type=gha,scope=fantasm-api,mode=max
+      - name: Scan the image (grype, fail on CRITICAL)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: fantasm-api:${{ env.IMAGE_TAG }}
+          grype-version: v0.120.1
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+          config: backend/.grype.yaml
+      - name: SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: fantasm-api:${{ env.IMAGE_TAG }}
+          format: spdx-json
+          artifact-name: fantasm-api-sbom.spdx.json
+          upload-release-assets: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-backend-dev
+      - name: Push the scanned image to ECR
+        run: |
+          set -euo pipefail
+          repo_name="${ECR_REPOSITORY#*/}"
+          # Tags are immutable: a re-run of the same commit reuses the pushed image.
+          if aws ecr describe-images --repository-name "$repo_name" --image-ids "imageTag=${IMAGE_TAG}" >/dev/null 2>&1; then
+            echo "image ${IMAGE_TAG} already in ECR, nothing to push"
+            exit 0
+          fi
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
+          docker tag "fantasm-api:${IMAGE_TAG}" "${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker push "${ECR_REPOSITORY}:${IMAGE_TAG}"
+      - name: Deploy through SSM
+        run: bash .github/scripts/deploy-backend.sh "$IMAGE_TAG"
+      - name: Smoke test through CloudFront
+        run: bash .github/scripts/smoke-api.sh "$SITE_URL"

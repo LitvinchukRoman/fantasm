@@ -1,0 +1,85 @@
+name: Deploy backend prod
+
+# By hand only, with an image tag that already runs on dev. Never rebuilds: the
+# same image is scanned again and deployed. A release-<sha> tag is an image prod
+# already ran (a rollback) and skips the scan, so a scanner can never block a
+# rollback. The prod environment requires a reviewer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag from dev, e.g. sha-<commit> (release-<commit> to roll back)"
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: deploy-backend-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend prod
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate the tag
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_TAG" =~ ^(sha|release)-[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be sha-<commit> or release-<commit>"; exit 1; }
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-backend-prod
+      - name: Pull the image from ECR
+        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
+          docker pull "${ECR_REPOSITORY}:${IMAGE_TAG}"
+      # New CVEs appear after an image was built: scan the exact image again.
+      - name: Scan the image again (grype, fail on CRITICAL)
+        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          grype-version: v0.120.1
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+          config: backend/.grype.yaml
+      - name: Mark the image as released
+        run: |
+          set -euo pipefail
+          repo_name="${ECR_REPOSITORY#*/}"
+          manifest=$(aws ecr batch-get-image --repository-name "$repo_name" --image-ids "imageTag=${IMAGE_TAG}" --query 'images[0].imageManifest' --output text)
+          if [[ -z "$manifest" || "$manifest" == "None" ]]; then
+            echo "::error::${IMAGE_TAG} is not in ECR; deploy it to dev first"
+            exit 1
+          fi
+          # A release-<sha> alias keeps the image from ECR expiry (rollback target).
+          release_tag="release-${IMAGE_TAG#*-}"
+          if [[ "$IMAGE_TAG" != release-* ]] && ! aws ecr describe-images --repository-name "$repo_name" --image-ids "imageTag=${release_tag}" >/dev/null 2>&1; then
+            aws ecr put-image --repository-name "$repo_name" --image-tag "$release_tag" --image-manifest "$manifest" >/dev/null
+          fi
+      - name: Deploy through SSM
+        run: bash .github/scripts/deploy-backend.sh "$IMAGE_TAG"
+      - name: Smoke test through CloudFront
+        run: bash .github/scripts/smoke-api.sh "$SITE_URL"
