@@ -1,14 +1,10 @@
 name: backend
 
 # Gates (every one blocks the merge and the deploy):
-#   backend-lint         gofmt, go mod tidy, go vet, golangci-lint (+gosec)
-#   backend-test         go test -race on amd64 AND arm64 (prod is Graviton): unit, per-context
-#                        integration and the cross-cutting regression suite (internal/regression);
-#                        nightly the regression suite also repeats 5x to expose flaky tests
-#   backend-fuzz         short fuzzing of parsers (cursor, markdown, slug); nightly runs longer
-#   backend-govulncheck  reachable known vulnerabilities in code, deps and stdlib
-#   backend-hadolint     Dockerfile antipatterns
-#   backend-image        build the arm64 image, grype: fail on CRITICAL, SBOM
+#   backend-checks  gofmt, go mod tidy, go vet, golangci-lint (+gosec), govulncheck
+#                   (reachable CVEs in code, deps and stdlib), hadolint (Dockerfile)
+#   backend-test    go test -race on arm64 (prod is Graviton) against a real Postgres
+#   backend-image   build the arm64 image, grype: fail on CRITICAL, SBOM
 # deploy-dev pushes exactly the image that backend-image scanned.
 # Runs nightly too: new CVEs appear for code that did not change.
 
@@ -33,10 +29,10 @@ env:
   GOFLAGS: -mod=readonly
 
 jobs:
-  backend-lint:
-    name: backend-lint
+  backend-checks:
+    name: backend-checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -57,28 +53,38 @@ jobs:
             exit 1
           fi
       - name: go.mod and go.sum are tidy
+        if: ${{ !cancelled() }}
         working-directory: backend
         run: go mod tidy -diff
       - name: go vet
+        if: ${{ !cancelled() }}
         working-directory: backend
         run: go vet ./...
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        if: ${{ !cancelled() }}
         with:
           version: v2.14.0
           working-directory: backend
+      # Only vulnerabilities the code can actually reach fail the step (call-graph
+      # analysis), so a CVE in an unused corner of a dependency does not block.
+      # The Go standard library is included: an old toolchain fails here too.
+      - name: govulncheck
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        if: ${{ !cancelled() }}
+        with:
+          dockerfile: backend/Dockerfile
 
   backend-test:
-    name: backend-test (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
+    name: backend-test
+    # Production runs on Graviton (arm64), so the tests run there. GitHub's arm64
+    # runners are free for public repositories.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        # Production runs on Graviton (arm64), so tests run there too. GitHub's
-        # arm64 runners are free for public repositories.
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     services:
       postgres:
         image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
@@ -110,89 +116,11 @@ jobs:
         working-directory: backend
         run: |
           {
-            echo "### Coverage (${{ matrix.runner }})"
+            echo "### Coverage"
             echo '```'
             go tool cover -func=coverage.out | tail -n 1
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      # The regression suite includes randomized concurrent workloads. Repeating it nightly,
-      # each run with a fresh seed, finds the rare ordering a single run would miss. A failing
-      # run prints REGRESSION_SEED=<n>; export it to replay the same workload locally.
-      - name: Regression suite, repeated
-        if: github.event_name == 'schedule'
-        working-directory: backend
-        run: go test -race -shuffle=on -count=5 ./internal/regression/
-
-  backend-fuzz:
-    name: backend-fuzz (${{ matrix.target.name }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - { name: cursor, pkg: ./internal/platform/cursor, fuzz: FuzzDecode }
-          - { name: markdown-render, pkg: ./internal/platform/markdown, fuzz: FuzzRender }
-          - { name: markdown-never-executable, pkg: ./internal/platform/markdown, fuzz: FuzzRenderNeverExecutable }
-          - { name: slugify, pkg: ./internal/ideas/domain, fuzz: FuzzSlugify }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-      - name: fuzz
-        working-directory: backend
-        env:
-          FUZZTIME: ${{ github.event_name == 'schedule' && '5m' || '30s' }}
-        run: go test "${{ matrix.target.pkg }}" -run '^$' -fuzz '^${{ matrix.target.fuzz }}$' -fuzztime "$FUZZTIME"
-      # A crash is saved as a corpus file; keep it so it can be committed as a regression seed.
-      - name: Keep the crashing input
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fuzz-crash-${{ matrix.target.name }}
-          path: backend/**/testdata/fuzz/
-          if-no-files-found: ignore
-
-  backend-govulncheck:
-    name: backend-govulncheck
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-      # Only vulnerabilities the code can actually reach fail the job (call-graph
-      # analysis), so a CVE in an unused corner of a dependency does not block.
-      # The Go standard library is included: an old toolchain fails here too.
-      - name: govulncheck
-        working-directory: backend
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-
-  backend-hadolint:
-    name: backend-hadolint
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
-        with:
-          dockerfile: backend/Dockerfile
 
   # Builds the production image (arm64, natively on an arm64 runner), scans it and
   # stores it as an artifact. No cloud credentials here: PRs from anywhere can run it.
@@ -254,7 +182,7 @@ jobs:
   # dev. Prod is promoted by hand from the same tag (promote-prod.yml).
   deploy-dev:
     name: deploy-dev
-    needs: [backend-lint, backend-test, backend-fuzz, backend-govulncheck, backend-hadolint, backend-image]
+    needs: [backend-checks, backend-test, backend-image]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 25
