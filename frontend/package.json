@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-router/express": "^7.18.4",
+    "@react-router/express": "^8.4.0",
     "@react-router/node": "^7.9.0",
     "compression": "^1.8.2",
     "express": "^4.22.3",
