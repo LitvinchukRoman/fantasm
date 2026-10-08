@@ -35,6 +35,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) == 3 && os.Args[1] == "seed" {
+		if err := runSeed(ctx, cfg, logger, os.Args[2]); err != nil {
+			logger.Error("seed failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("fantasm api stopped", "error", err)
 		os.Exit(1)
