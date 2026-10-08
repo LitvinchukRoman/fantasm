@@ -2,6 +2,13 @@
 # plus two API containers (prod :8080, dev :8081, loopback only). The host is
 # configured by the SSM document in host.tf, not by user data, so config changes
 # do not replace the instance. No SSH key pair: access is SSM Session Manager.
+check "container_memory_headroom" {
+  assert {
+    condition     = (2 * var.api_memory_mb) + (2 * var.frontend_memory_mb) <= 1536
+    error_message = "API + frontend Docker limits must leave at least 512 MiB of t4g.small RAM for the host."
+  }
+}
+
 resource "aws_instance" "backend" {
   ami                    = data.aws_ami.al2023_arm.id
   instance_type          = var.instance_type

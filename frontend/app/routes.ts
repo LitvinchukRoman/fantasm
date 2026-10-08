@@ -7,6 +7,9 @@ export default [
   route("ideas/new", "routes/ideas.new.tsx"),
   route("ideas/:slug", "routes/idea.tsx"),
   route("events", "routes/events.tsx"),
+  route("notifications", "routes/notifications.tsx"),
+  route("moderation", "routes/moderation.tsx"),
+  route("logout", "routes/logout.ts"),
   layout("routes/auth-layout.tsx", [
     route("login", "routes/login.tsx"),
     route("register", "routes/register.tsx"),

@@ -1,5 +1,5 @@
 [Unit]
-Description=Caddy (fantasm API edge: TLS, origin check, rate limits)
+Description=Caddy (fantasm API and SSR origin)
 After=network-online.target
 Wants=network-online.target
 

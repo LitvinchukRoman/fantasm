@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Link, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { EventsCalendar, formatDay, nextRange, type DayRange } from "~/components/events/calendar";
 import { GuideFrame } from "~/components/guides/frame";
 import { EmptyState } from "~/components/landing/empty-state";
 import { Chip } from "~/components/ui/chip";
 import { IconArrowRight, IconCalendar, IconUsers } from "~/components/landing/icons";
 import { NAUKMA, eventTime, kyivDayKey, type IdeaCard } from "~/lib/ideas";
-import { getIdeas, toCard } from "~/lib/ideas.server";
+import { getEvents, routeApi } from "~/lib/api.server";
+import { toIdeaCard } from "~/lib/ideas";
 import { noindexSeo, seo } from "~/lib/seo";
 import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
 import { useHydrated } from "~/lib/use-hydrated";
@@ -15,18 +16,14 @@ import type { Route } from "./+types/events";
 const TITLE = "Найближчі події, Fantasm";
 const DESCRIPTION = "Події спільноти НаУКМА: ігри, лекції, зустрічі та воркшопи. Обери день у календарі й приходь.";
 
-export function loader() {
-  const events = getIdeas()
-    .filter((idea) => idea.category === "EVENT" && idea.eventAt)
-    .map(toCard)
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const response = await routeApi(getEvents(request, url.searchParams.get("from") ?? undefined, url.searchParams.get("to") ?? undefined));
+  const events = response.items
+    .map(toIdeaCard)
+    .filter((idea) => idea.eventAt)
     .sort((a, b) => Date.parse(a.eventAt!) - Date.parse(b.eventAt!));
   return { events };
-}
-
-/** Вибір дня живе в query-рядку й застосовується на клієнті: лоадер від нього не залежить. */
-export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
-  if (currentUrl.pathname === nextUrl.pathname) return false;
-  return defaultShouldRevalidate;
 }
 
 export function meta({ data }: Route.MetaArgs) {

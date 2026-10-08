@@ -4,6 +4,7 @@
  * пізніше, без зміни URL (`/ideas/:slug#discussion`).
  */
 import type { IdeaAuthor } from "./ideas";
+import type { Post as ApiPost, Thread as ApiThread } from "./api-types";
 
 export type ForumPost = {
   id: string;
@@ -30,4 +31,24 @@ export const FORUM_MAX_DEPTH = 3;
 
 export function countPosts(posts: ForumPost[]): number {
   return posts.reduce((sum, post) => sum + (post.deleted ? 0 : 1) + countPosts(post.replies), 0);
+}
+
+function toPost(post: ApiPost): ForumPost {
+  return {
+    id: post.id,
+    author: {
+      handle: post.author.handle,
+      name: post.author.name,
+      verified: post.author.verified ?? false,
+    },
+    createdAt: post.createdAt,
+    html: post.html ?? "",
+    text: post.text ?? "",
+    deleted: post.deleted ?? false,
+    replies: (post.replies ?? []).map(toPost),
+  };
+}
+
+export function toForumThread(thread: ApiThread): ForumThread {
+  return { id: thread.id, ideaSlug: thread.ideaSlug, count: thread.count, posts: thread.posts.map(toPost) };
 }

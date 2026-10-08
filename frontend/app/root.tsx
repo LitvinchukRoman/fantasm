@@ -1,5 +1,7 @@
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
+import { api, getCurrentUser, routeApi } from "~/lib/api.server";
+import type { User } from "~/lib/api-types";
 import type { Route } from "./+types/root";
 
 import "./app.css";
@@ -35,6 +37,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return <Outlet />;
+}
+
+export type RootData = { currentUser: User | null; unread: number };
+
+export async function loader({ request }: Route.LoaderArgs): Promise<RootData> {
+  const currentUser = await routeApi(getCurrentUser(request));
+  if (!currentUser) return { currentUser: null, unread: 0 };
+  try {
+    const notifications = await api<{ unread: number }>(request, "/api/me/notifications/unread-count");
+    return { currentUser, unread: notifications.unread };
+  } catch {
+    return { currentUser, unread: 0 };
+  }
 }
 
 const LINK_PRIMARY =

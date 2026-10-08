@@ -6,3 +6,10 @@ resource "aws_cloudwatch_log_group" "api" {
   name              = "/${var.project_name}/${each.key}/api"
   retention_in_days = 14
 }
+
+resource "aws_cloudwatch_log_group" "frontend" {
+  for_each = local.envs
+
+  name              = "/${var.project_name}/${each.key}/frontend"
+  retention_in_days = 14
+}

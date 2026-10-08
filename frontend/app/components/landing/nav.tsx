@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, NavLink, useFetcher, useLocation, useRouteLoaderData } from "react-router";
 import { Button } from "~/components/ui/button";
+import type { RootData } from "~/root";
 import { IconArrowRight } from "./icons";
 
 const NAV_LINKS = [
@@ -18,6 +19,8 @@ const NAV_LINKS = [
  * за кнопкою-бургером: великі цілі натискання, кнопка «Ідея» теж тут.
  */
 export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
+  const root = useRouteLoaderData<RootData>("root");
+  const logout = useFetcher();
   const [solid, setSolid] = useState(forceSolid);
   // Шторка відкрита для конкретної сторінки: перехід кудись інде закриває її без ефектів.
   const { pathname } = useLocation();
@@ -79,6 +82,11 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
               {link.label}
             </NavLink>
           ))}
+          {(root?.currentUser?.role === "MODERATOR" || root?.currentUser?.role === "ADMIN") && (
+            <NavLink to="/moderation" className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+              Модерація
+            </NavLink>
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -89,13 +97,33 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
           >
             Ідея
           </Link>
-          <Link
-            to="/login"
-            prefetch="intent"
-            className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-200 hover:bg-[var(--color-surface-strong)] hover:scale-105 sm:px-4"
-          >
-            Увійти
-          </Link>
+          {root?.currentUser ? (
+            <>
+              <Link
+                to="/notifications"
+                className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3 py-2 text-sm text-[var(--color-text)]"
+                aria-label={`Сповіщення, непрочитаних: ${root.unread}`}
+              >
+                Сповіщення{root.unread > 0 ? ` · ${root.unread}` : ""}
+              </Link>
+              <Link to={`/u/${root.currentUser.handle}`} className="hidden text-sm text-[var(--color-text)] md:inline">
+                @{root.currentUser.handle}
+              </Link>
+              <logout.Form method="post" action="/logout">
+                <button className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm text-[var(--color-text)]">
+                  Вийти
+                </button>
+              </logout.Form>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              prefetch="intent"
+              className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-200 hover:bg-[var(--color-surface-strong)] hover:scale-105 sm:px-4"
+            >
+              Увійти
+            </Link>
+          )}
           <button
             type="button"
             aria-label={menuOpen ? "Закрити меню" : "Відкрити меню"}

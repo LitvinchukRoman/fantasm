@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { data, Link } from "react-router";
+import { data, Link, useFetcher, useRouteLoaderData } from "react-router";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { IconArrowRight } from "~/components/landing/icons";
@@ -19,18 +19,25 @@ import { RelativeTime } from "~/components/ui/relative-time";
 import { SectionLabel } from "~/components/ui/section-label";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
-import { getThread } from "~/lib/forum.server";
 import { CATEGORY_LABELS, eventWhen } from "~/lib/ideas";
+import { toIdeaView } from "~/lib/ideas";
 import {
+  ApiError,
+  createPost,
+  decideParticipant,
   getIdea,
-  getIdeas,
   getNextIdea,
-  ideasSeedEnabled,
-  toCard,
-  toView,
-} from "~/lib/ideas.server";
-import { getAuthorPreview, type AuthorPreview } from "~/lib/users.server";
+  getParticipants,
+  getProfile,
+  getThread,
+  participate,
+  reportIdea,
+  routeApi,
+  vote,
+} from "~/lib/api.server";
+import type { AuthorPreview } from "~/lib/users.server";
 import type { ForumPost } from "~/lib/forum";
+import { toForumThread } from "~/lib/forum";
 import { seo } from "~/lib/seo";
 import {
   breadcrumbList,
@@ -40,14 +47,23 @@ import {
   webPage,
 } from "~/lib/structured-data";
 import type { Route } from "./+types/idea";
+import type { RootData } from "~/root";
 
-export function loader({ params }: Route.LoaderArgs) {
-  const idea = getIdea(params.slug);
-  if (!idea) throw data("Not found", { status: 404 });
-  const thread = getThread(idea.slug, ideasSeedEnabled());
+export async function loader({ params, request }: Route.LoaderArgs) {
+  if (!params.slug) throw data("Not found", { status: 404 });
+  const [rawIdea, rawThread, rawNext, participants] = await routeApi(Promise.all([
+    getIdea(request, params.slug),
+    getThread(request, params.slug),
+    getNextIdea(request, params.slug),
+    getParticipants(request, params.slug),
+  ]));
+  const idea = toIdeaView(rawIdea);
+  const thread = toForumThread(rawThread);
+  const next = rawNext ? { ...rawNext, summary: rawNext.summary ?? "" } : null;
 
   // Профілі автора ідеї й усіх, хто писав у гілці: клік по імені відкриває панель на місці.
   const handles = new Set<string>([idea.author.handle]);
+  for (const participant of participants.items) handles.add(participant.handle);
   const walk = (posts: ForumPost[]) =>
     posts.forEach((post) => {
       if (!post.deleted) handles.add(post.author.handle);
@@ -55,19 +71,54 @@ export function loader({ params }: Route.LoaderArgs) {
     });
   walk(thread.posts);
 
-  const cards = getIdeas().map(toCard);
   const profiles: Record<string, AuthorPreview> = {};
-  for (const handle of handles) {
-    const preview = getAuthorPreview(handle, cards);
-    if (preview) profiles[handle] = preview;
-  }
+  await routeApi(Promise.all([...handles].map(async (handle) => {
+    const profile = await getProfile(request, handle);
+    profiles[handle] = {
+      handle: profile.handle,
+      name: profile.name,
+      bio: profile.bio ?? "",
+      faculty: profile.faculty,
+      verified: profile.verified ?? false,
+      karma: profile.karma ?? 0,
+      joinedAt: profile.joinedAt,
+      ideasCount: profile.ideasCount ?? profile.ideas?.length ?? 0,
+      ideas: (profile.ideas ?? []).slice(0, 3).map(({ slug, title }) => ({ slug, title })),
+    };
+  })));
 
   return {
-    idea: toView(idea),
+    idea,
     thread,
-    next: getNextIdea(idea.slug),
+    next,
+    participants: participants.items,
     profiles,
   };
+}
+
+export async function action({ request, params }: Route.ActionArgs) {
+  if (!params.slug) return data({ error: "Ідею не знайдено" }, { status: 404 });
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "");
+  try {
+    if (intent === "vote") return data(await vote(request, params.slug, form.get("remove") === "true"));
+    if (intent === "participate") return data(await participate(request, params.slug, String(form.get("state") || "JOINED"), String(form.get("role") || "") || undefined));
+    if (intent === "leave") return data(await participate(request, params.slug));
+    if (intent === "participant-decision") {
+      const decision = String(form.get("decision"));
+      if (decision !== "accept" && decision !== "decline") return data({ error: "Некоректне рішення" }, { status: 400 });
+      return data(await decideParticipant(request, params.slug, String(form.get("handle")), decision));
+    }
+    if (intent === "post") return data(await createPost(request, params.slug, String(form.get("body") ?? ""), String(form.get("parentId") || "") || undefined), { status: 201 });
+    if (intent === "report") {
+      await reportIdea(request, params.slug, String(form.get("reason") ?? ""));
+      return data({ ok: true });
+    }
+    return data({ error: "Невідома дія" }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ApiError) return data(error.body, { status: error.status });
+    throw error;
+  }
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -154,8 +205,53 @@ function Stagger({
   );
 }
 
+function ParticipationControl({ joined, isEvent }: { joined: boolean; isEvent: boolean }) {
+  const root = useRouteLoaderData<RootData>("root");
+  const fetcher = useFetcher();
+  if (!root?.currentUser) return <Button to="/login" variant="secondary">{isEvent ? "Я піду" : "Долучитися"}</Button>;
+  return (
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value={joined ? "leave" : "participate"} />
+      {!joined && <input type="hidden" name="state" value="JOINED" />}
+      <Button type="submit" variant="secondary" disabled={fetcher.state !== "idle"}>
+        {joined ? "Не долучатися" : isEvent ? "Я піду" : "Долучитися"}
+      </Button>
+    </fetcher.Form>
+  );
+}
+
+function ReportControl() {
+  const root = useRouteLoaderData<RootData>("root");
+  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  if (!root?.currentUser) return null;
+  return (
+    <details className="mt-4 text-sm text-[var(--color-text-muted)]">
+      <summary className="cursor-pointer">Поскаржитися</summary>
+      <fetcher.Form method="post" className="mt-2 flex max-w-xl gap-2">
+        <input type="hidden" name="intent" value="report" />
+        <input name="reason" required maxLength={500} placeholder="Причина скарги" className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-transparent px-3 py-2" />
+        <Button type="submit" size="sm" variant="secondary" disabled={fetcher.state !== "idle"}>Надіслати</Button>
+      </fetcher.Form>
+      {fetcher.data?.ok && <p role="status" className="mt-2">Скаргу надіслано.</p>}
+      {fetcher.data?.error && <p role="alert" className="mt-2 text-red-300">{fetcher.data.error}</p>}
+    </details>
+  );
+}
+
+function ParticipantActions({ handle }: { handle: string }) {
+  const fetcher = useFetcher();
+  return (
+    <fetcher.Form method="post" className="inline-flex gap-2">
+      <input type="hidden" name="intent" value="participant-decision" />
+      <input type="hidden" name="handle" value={handle} />
+      <Button type="submit" name="decision" value="accept" size="sm" disabled={fetcher.state !== "idle"}>Прийняти</Button>
+      <Button type="submit" name="decision" value="decline" size="sm" variant="secondary" disabled={fetcher.state !== "idle"}>Відхилити</Button>
+    </fetcher.Form>
+  );
+}
+
 export default function IdeaPage({ loaderData }: Route.ComponentProps) {
-  const { idea, thread, next, profiles } = loaderData;
+  const { idea, thread, next, participants, profiles } = loaderData;
   const isEvent = idea.category === "EVENT" && !!idea.eventAt;
 
   const index = useMemo<IndexItem[]>(() => {
@@ -222,11 +318,10 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                     id={IDEA_ACTIONS_ID}
                     className="mt-8 flex flex-wrap items-center gap-3"
                   >
-                    <VoteControl score={idea.votes} />
-                    <Button to="/login" variant="secondary">
-                      {isEvent ? "Я піду" : "Долучитися"}
-                    </Button>
+                    <VoteControl score={idea.votes} voted={idea.viewer?.voted} />
+                    <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />
                   </div>
+                  <ReportControl />
                 </Stagger>
 
                 <Stagger step={3}>
@@ -237,12 +332,12 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                         value: (
                           <span className="flex flex-wrap gap-2">
                             <Chip>{CATEGORY_LABELS[idea.category]}</Chip>
-                            {idea.visibility === "UKMA_ONLY" && (
+                            {idea.visibility !== "PUBLIC" && (
                               <Chip
                                 tone="strong"
                                 title="Тільки для спільноти НаУКМА"
                               >
-                                UKMA_ONLY
+                                {idea.visibility}
                               </Chip>
                             )}
                           </span>
@@ -359,9 +454,20 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                         "Ще нікого. Будь першим."
                       )}
                     </p>
-                    <Button to="/login" variant="secondary" arrow>
-                      {isEvent ? "Я піду" : "Долучитися"}
-                    </Button>
+                    {participants.length > 0 && (
+                      <ul className="space-y-2">
+                        {participants.map((participant) => (
+                          <li key={participant.handle} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] p-3">
+                            <span>
+                              <AuthorLink handle={participant.handle} className="font-medium hover:underline">{participant.name}</AuthorLink>
+                              <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || participant.state}</span>
+                            </span>
+                            {idea.canEdit && (participant.state === "JOINED" || participant.state === "INTERESTED") && <ParticipantActions handle={participant.handle} />}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />
                   </div>
                 </section>
 

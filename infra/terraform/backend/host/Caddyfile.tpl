@@ -12,62 +12,75 @@ __ACME_EMAIL__
 	}
 }
 
-# args: 0 upstream port, 1 origin secret, 2 global req/s, 3 per-IP req/min, 4 auth req/min
-(api_origin) {
+# args: 0 API port, 1 frontend port, 2 origin secret,
+#       3 global req/s, 4 per-IP req/min, 5 auth req/min, 6 public host
+(app_origin) {
 	route {
 		# 1. Reject anything that did not come through our CloudFront distribution.
-		@not_cloudfront not header X-Fantasm-Origin {args[1]}
+		@not_cloudfront not header X-Fantasm-Origin {args[2]}
 		respond @not_cloudfront "forbidden" 403
 
-		# 2. Rate limits. Global ceiling first (protects Go and the DB pool),
-		#    then per client IP, then a tighter bucket for login routes.
-		rate_limit {
-			zone global {
-				key    static
-				events {args[2]}
-				window 1s
+		# API behavior is unchanged: rate limits, bounded bodies and verified
+		# forwarding headers continue to protect Go.
+		handle /api/* {
+			rate_limit {
+				zone global {
+					key    static
+					events {args[3]}
+					window 1s
+				}
+				zone per_ip {
+					key    {client_ip}
+					events {args[4]}
+					window 1m
+				}
 			}
-			zone per_ip {
-				key    {client_ip}
-				events {args[3]}
-				window 1m
+			@auth path /api/auth/*/login /api/auth/*/callback
+			rate_limit @auth {
+				zone auth {
+					key    {client_ip}
+					events {args[5]}
+					window 1m
+				}
 			}
-		}
-		# Only the routes that start or finish a sign-in. /api/auth/providers is read
-		# on every visit to the login page and must not share this small bucket.
-		@auth path /api/auth/*/login /api/auth/*/callback
-		rate_limit @auth {
-			zone auth {
-				key    {client_ip}
-				events {args[4]}
-				window 1m
+
+			request_body {
+				max_size 1MB
+			}
+
+			reverse_proxy 127.0.0.1:{args[0]} {
+				header_up X-Forwarded-For {client_ip}
+				header_up X-Real-IP {client_ip}
+				transport http {
+					dial_timeout 2s
+					response_header_timeout 20s
+				}
 			}
 		}
 
-		# 3. Bound the work a single request can cause.
-		request_body {
-			max_size 1MB
-		}
-
-		reverse_proxy 127.0.0.1:{args[0]} {
-			# Replace (not append to) the forwarding headers with the address
-			# Caddy verified above. The API trusts the Docker bridge as its
-			# proxy and reads the right-most untrusted X-Forwarded-For entry,
-			# which is then exactly this single, unspoofable value.
-			header_up X-Forwarded-For {client_ip}
-			header_up X-Real-IP {client_ip}
-			transport http {
-				dial_timeout 2s
-				response_header_timeout 20s
+		# CloudFront sends non-asset HTML here only when this environment's
+		# frontend_delivery_mode is "ssr".
+		handle {
+			reverse_proxy 127.0.0.1:{args[1]} {
+				# CloudFront connects with the private origin Host. Restore the
+				# browser-facing host so React Router constructs public URLs and
+				# unsafe SSR API calls send the backend's expected Origin.
+				header_up Host {args[6]}
+				header_up X-Forwarded-For {client_ip}
+				header_up X-Real-IP {client_ip}
+				transport http {
+					dial_timeout 2s
+					response_header_timeout 30s
+				}
 			}
 		}
 	}
 }
 
 __ORIGIN_HOST_PROD__ {
-	import api_origin __PORT_PROD__ __SECRET_PROD__ __RL_GLOBAL_PROD__ __RL_IP__ __RL_AUTH__
+	import app_origin __PORT_PROD__ __FRONTEND_PORT_PROD__ __SECRET_PROD__ __RL_GLOBAL_PROD__ __RL_IP__ __RL_AUTH__ __PUBLIC_HOST_PROD__
 }
 
 __ORIGIN_HOST_DEV__ {
-	import api_origin __PORT_DEV__ __SECRET_DEV__ __RL_GLOBAL_DEV__ __RL_IP__ __RL_AUTH__
+	import app_origin __PORT_DEV__ __FRONTEND_PORT_DEV__ __SECRET_DEV__ __RL_GLOBAL_DEV__ __RL_IP__ __RL_AUTH__ __PUBLIC_HOST_DEV__
 }

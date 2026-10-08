@@ -18,6 +18,16 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.api.repository_url
 }
 
+output "frontend_ecr_repository_url" {
+  description = "Immutable ECR repository for the arm64 SSR image."
+  value       = aws_ecr_repository.frontend.repository_url
+}
+
+output "frontend_ecr_cache_url" {
+  description = "Mutable ECR repository used only for BuildKit registry cache manifests."
+  value       = aws_ecr_repository.frontend_cache.repository_url
+}
+
 output "rds_endpoint" {
   description = "RDS endpoint (private)."
   value       = aws_db_instance.main.address
@@ -26,6 +36,11 @@ output "rds_endpoint" {
 output "deploy_documents" {
   description = "SSM deploy document per environment."
   value       = { for env, d in aws_ssm_document.deploy_api : env => d.name }
+}
+
+output "frontend_deploy_documents" {
+  description = "Frontend SSM deploy document per environment."
+  value       = { for env, d in aws_ssm_document.deploy_frontend : env => d.name }
 }
 
 output "oauth_parameters" {
@@ -40,6 +55,9 @@ output "github_environment_commands" {
     gh variable set ECR_REPOSITORY   --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_ecr_repository.api.repository_url}"
     gh variable set EC2_INSTANCE_ID  --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_instance.backend.id}"
     gh variable set SSM_DEPLOY_DOCUMENT --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_ssm_document.deploy_api[env].name}"
+    gh variable set FRONTEND_ECR_REPOSITORY --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_ecr_repository.frontend.repository_url}"
+    gh variable set FRONTEND_ECR_CACHE      --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_ecr_repository.frontend_cache.repository_url}"
+    gh variable set FRONTEND_SSM_DEPLOY_DOCUMENT --repo LitvinchukRoman/fantasm --env ${env} --body "${aws_ssm_document.deploy_frontend[env].name}"
 %{endfor~}
   EOT
 }

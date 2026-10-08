@@ -9,32 +9,22 @@ import { IdeaKinds } from "~/components/landing/idea-kinds";
 import { MohylianPerks } from "~/components/landing/mohylian-perks";
 import { Nav } from "~/components/landing/nav";
 import { PageLoader } from "~/components/ui/page-loader";
-import { getIdeas, toCard } from "~/lib/ideas.server";
+import { getEvents, getIdeas, routeApi } from "~/lib/api.server";
+import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { webPage } from "~/lib/structured-data";
 import type { Route } from "./+types/_index";
 
 /** Три «гарячі» ідеї для тизера: публічні, не тестові, за активністю, потім за свіжістю. */
-export function loader() {
-  const hot = getIdeas()
-    .filter((idea) => idea.visibility === "PUBLIC" && !idea.fixture)
-    .sort(
-      (a, b) =>
-        b.votes + b.comments + b.participants - (a.votes + a.comments + a.participants) ||
-        Date.parse(b.createdAt) - Date.parse(a.createdAt),
-    )
-    .slice(0, 3)
-    .map(toCard);
-  // Найближчі події для тизера. Тестові (fixture) події є лише в dev: `getIdeas()` додає їх лише при `ideasSeedEnabled()`,
-  // тож на проді без справжніх подій тизер показує порожній стан.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const events = getIdeas()
-    .filter((idea) => idea.category === "EVENT" && idea.eventAt && Date.parse(idea.eventAt) >= startOfToday.getTime())
-    .sort((a, b) => Date.parse(a.eventAt!) - Date.parse(b.eventAt!))
-    .slice(0, 3)
-    .map(toCard);
-  return { hot, events };
+export async function loader({ request }: Route.LoaderArgs) {
+  const [hotPage, eventsPage] = await routeApi(Promise.all([
+    getIdeas(request, { sort: "hot", limit: 3 }),
+    getEvents(request, new Date().toISOString()),
+  ]));
+  return {
+    hot: hotPage.items.map(toIdeaCard),
+    events: eventsPage.items.slice(0, 3).map(toIdeaCard),
+  };
 }
 
 export function meta() {

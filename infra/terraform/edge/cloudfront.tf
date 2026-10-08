@@ -96,7 +96,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   comment             = "${var.project_name} frontend${each.value.suffix}"
   aliases             = [each.value.hostname]
-  default_root_object = "index.html"
+  default_root_object = var.frontend_delivery_mode[each.key] == "s3" ? "index.html" : null
   is_ipv6_enabled     = true
   http_version        = "http2and3"
   price_class         = "PriceClass_100"
@@ -110,8 +110,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend[each.key].id
   }
 
-  # EC2 API origin (Caddy -> Go). HTTPS only: Caddy holds a Let's Encrypt
-  # certificate for the origin hostname.
+  # EC2 application origin (Caddy -> Go for /api, Node for SSR HTML).
   origin {
     domain_name = var.origin_hostnames[each.key]
     origin_id   = "api-origin"
@@ -132,17 +131,44 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   default_cache_behavior {
-    target_origin_id           = "s3-frontend"
-    allowed_methods            = ["GET", "HEAD"]
-    cached_methods             = ["GET", "HEAD"]
-    compress                   = true
-    viewer_protocol_policy     = "redirect-to-https"
-    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
+    target_origin_id = var.frontend_delivery_mode[each.key] == "ssr" ? "api-origin" : "s3-frontend"
+    allowed_methods = var.frontend_delivery_mode[each.key] == "ssr" ? [
+      "GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE",
+    ] : ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+    cache_policy_id = var.frontend_delivery_mode[each.key] == "ssr" ? (
+      data.aws_cloudfront_cache_policy.caching_disabled.id
+    ) : aws_cloudfront_cache_policy.frontend.id
+    origin_request_policy_id = var.frontend_delivery_mode[each.key] == "ssr" ? (
+      data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    ) : null
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
 
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.pretty_urls.arn
+    dynamic "function_association" {
+      for_each = var.frontend_delivery_mode[each.key] == "s3" ? [1] : []
+      content {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.pretty_urls.arn
+      }
+    }
+  }
+
+  # Hashed browser assets stay private in S3 when SSR is enabled; Node never
+  # spends memory or bandwidth serving them. Omit this behavior in S3 mode so
+  # the staged change does not touch the production distribution at all.
+  dynamic "ordered_cache_behavior" {
+    for_each = var.frontend_delivery_mode[each.key] == "ssr" ? [1] : []
+    content {
+      path_pattern               = "/assets/*"
+      target_origin_id           = "s3-frontend"
+      allowed_methods            = ["GET", "HEAD"]
+      cached_methods             = ["GET", "HEAD"]
+      compress                   = true
+      viewer_protocol_policy     = "redirect-to-https"
+      cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
     }
   }
 
@@ -167,11 +193,14 @@ resource "aws_cloudfront_distribution" "frontend" {
   # responses are distribution-wide and would hide genuine 403s from /api/*.
   # Trade-off: a 404 from /api/* also gets this HTML body (status stays 404), so
   # API clients must branch on the status code, not on the 404 body.
-  custom_error_response {
-    error_code            = 404
-    response_code         = 404
-    response_page_path    = "/404.html"
-    error_caching_min_ttl = 0
+  dynamic "custom_error_response" {
+    for_each = var.frontend_delivery_mode[each.key] == "s3" ? [1] : []
+    content {
+      error_code            = 404
+      response_code         = 404
+      response_page_path    = "/404.html"
+      error_caching_min_ttl = 0
+    }
   }
 
   restrictions {

@@ -43,9 +43,9 @@ variable "origin_hostnames" {
 # ── Compute ──
 
 variable "instance_type" {
-  description = "EC2 type for the single API box (prod + dev containers). t4g.micro = 1 GiB; Go needs ~30 MB per process. Bump to t4g.small if the box gets tight."
+  description = "EC2 type for the shared API + SSR box. t4g.small provides 2 GiB for four bounded containers plus Caddy and the host."
   type        = string
-  default     = "t4g.micro"
+  default     = "t4g.small"
 }
 
 variable "root_volume_gb" {
@@ -58,6 +58,17 @@ variable "api_memory_mb" {
   description = "Docker memory limit per API container (swap allowance is 1.5x)."
   type        = number
   default     = 256
+}
+
+variable "frontend_memory_mb" {
+  description = "Docker memory limit per Node SSR container. Two API and two frontend limits total 1280 MiB, leaving about 768 MiB of t4g.small RAM for Caddy, Docker and the OS."
+  type        = number
+  default     = 384
+
+  validation {
+    condition     = var.frontend_memory_mb >= 256 && var.frontend_memory_mb <= 512
+    error_message = "frontend_memory_mb must be between 256 and 512 MiB to preserve host headroom."
+  }
 }
 
 variable "db_pool_max_conns" {

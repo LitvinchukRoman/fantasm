@@ -1,0 +1,9 @@
+.git
+.github
+.react-router
+build
+node_modules
+*.log
+.env
+.env.*
+.agents

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Link } from "react-router";
+import { data, Link, redirect, useFetcher, useRouteLoaderData } from "react-router";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { seo } from "~/lib/seo";
 import type { Route } from "./+types/ideas.new";
@@ -8,15 +8,16 @@ import { SiteFooter } from "~/components/ui/site-footer";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Button } from "~/components/ui/button";
 import { CATEGORY_LABELS, type IdeaCategory } from "~/lib/ideas";
+import { ApiError, createIdea, getCurrentUser, routeApi } from "~/lib/api.server";
+import type { IdeaCreate } from "~/lib/api-types";
+import type { RootData } from "~/root";
 import {
-  IconArrowRight,
   IconSpark,
   IconLayers,
   IconCalendar,
   IconUsers,
   IconDots,
   IconPenLine,
-  IconCheck,
   IconEyeOff,
   IconClose,
 } from "~/components/landing/icons";
@@ -26,10 +27,29 @@ const CATEGORY_ICONS: Record<IdeaCategory, any> = {
   PROJECT: IconLayers,
   EVENT: IconCalendar,
   COMMUNITY: IconUsers,
+  VOLUNTEERING: IconUsers,
   OTHER: IconDots,
 };
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as IdeaCategory[];
+
+export async function action({ request }: Route.ActionArgs) {
+  const form = await request.formData();
+  try {
+    const payload = JSON.parse(String(form.get("payload") ?? "{}")) as IdeaCreate;
+    const idea = await createIdea(request, payload);
+    return redirect(`/ideas/${idea.slug}`);
+  } catch (error) {
+    if (error instanceof ApiError) return data(error.body, { status: error.status });
+    return data({ error: "Некоректні дані форми" }, { status: 400 });
+  }
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await routeApi(getCurrentUser(request));
+  if (!user) throw redirect("/login");
+  return { user };
+}
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -56,6 +76,8 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export default function IdeaNewPage() {
+  const root = useRouteLoaderData<RootData>("root");
+  const fetcher = useFetcher<{ error?: string; fields?: Record<string, string> }>();
   const [step, setStep] = useState(1);
   const [shakeStep, setShakeStep] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +90,7 @@ export default function IdeaNewPage() {
     body: "",
     tags: [] as string[],
     needsRoles: [] as string[],
-    visibility: "PUBLIC" as "PUBLIC" | "UKMA_ONLY",
+    visibility: "PUBLIC" as "PUBLIC" | "MEMBERS_ONLY",
   });
 
   const [tagInput, setTagInput] = useState("");
@@ -120,8 +142,22 @@ export default function IdeaNewPage() {
   const isStep1Valid = !!(formData.title.trim() && formData.summary.trim() && formData.category && (formData.category !== "EVENT" || (formData.eventAt && formData.eventLocation.trim())));
   const isStep2Valid = formData.body.trim().length > 5;
 
-  const canProceed = step === 1 ? isStep1Valid : step === 2 ? isStep2Valid : true;
   const steps = ["Суть", "Деталі", "Публікація"];
+
+  function publish() {
+    if (!root?.currentUser) {
+      window.location.assign("/login");
+      return;
+    }
+    const payload: IdeaCreate = {
+      ...formData,
+      category: formData.category!,
+      status: "OPEN",
+      eventAt: formData.eventAt ? new Date(formData.eventAt).toISOString() : undefined,
+      eventLocation: formData.eventLocation || undefined,
+    };
+    fetcher.submit({ payload: JSON.stringify(payload) }, { method: "post" });
+  }
 
   return (
     <div className="flex flex-col bg-[var(--color-bg)]">
@@ -559,13 +595,13 @@ export default function IdeaNewPage() {
 
                           <button
                             type="button"
-                            onClick={() => update({ visibility: "UKMA_ONLY" })}
-                            className={`group select-none flex flex-col items-start gap-2 rounded-[20px] border p-5 text-left transition-all active:scale-[0.98] ${formData.visibility === "UKMA_ONLY"
+                            onClick={() => update({ visibility: "MEMBERS_ONLY" })}
+                            className={`group select-none flex flex-col items-start gap-2 rounded-[20px] border p-5 text-left transition-all active:scale-[0.98] ${formData.visibility === "MEMBERS_ONLY"
                                 ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] shadow-[0_0_24px_rgba(255,99,99,0.1)]"
                                 : "border-[var(--color-border-strong)] bg-[var(--color-surface)] hover:border-[var(--color-text-muted)]"
                               }`}
                           >
-                            <div className={`flex items-center gap-2 transition-colors ${formData.visibility === "UKMA_ONLY" ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}>
+                            <div className={`flex items-center gap-2 transition-colors ${formData.visibility === "MEMBERS_ONLY" ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}>
                               <IconEyeOff className="size-5" />
                               <span className="font-medium text-base">Лише для НаУКМА</span>
                             </div>
@@ -611,12 +647,15 @@ export default function IdeaNewPage() {
                 ) : (
                   <Button
                     arrow
+                    onClick={publish}
+                    disabled={fetcher.state !== "idle"}
                     className="active:scale-[0.97] transition-transform shadow-[0_0_20px_rgba(255,99,99,0.3)] hover:shadow-[0_0_30px_rgba(255,99,99,0.4)]"
                   >
-                    Опублікувати
+                    {fetcher.state === "idle" ? "Опублікувати" : "Публікуємо…"}
                   </Button>
                 )}
               </motion.div>
+              {fetcher.data?.error ? <p role="alert" className="mt-3 text-sm text-red-300">{fetcher.data.error}</p> : null}
             </div>
 
             {/* Right Column: Live Preview */}
@@ -689,7 +728,7 @@ function IdeaPreviewCard({ data }: { data: any }) {
               {CATEGORY_LABELS[data.category as IdeaCategory]}
             </span>
           )}
-          {data.visibility === "UKMA_ONLY" && (
+          {data.visibility === "MEMBERS_ONLY" && (
             <span className="inline-flex items-center gap-1.5 rounded-[var(--radius-chip)] border border-[var(--color-accent)] px-2 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-accent)]">
               <IconEyeOff className="size-3" />
               ТІЛЬКИ НАУКМА

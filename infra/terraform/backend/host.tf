@@ -8,22 +8,31 @@
 
 locals {
   host_env = {
-    REGION           = var.aws_region
-    PROJECT          = var.project_name
-    ECR_REPO         = aws_ecr_repository.api.repository_url
-    ORIGIN_HOST_PROD = var.origin_hostnames["prod"]
-    ORIGIN_HOST_DEV  = var.origin_hostnames["dev"]
-    PORT_PROD        = local.envs["prod"].api_port
-    PORT_DEV         = local.envs["dev"].api_port
-    POOL_PROD        = var.db_pool_max_conns["prod"]
-    POOL_DEV         = var.db_pool_max_conns["dev"]
-    API_MEMORY       = "${var.api_memory_mb}m"
-    API_MEMORY_SWAP  = "${floor(var.api_memory_mb * 1.5)}m"
-    RL_GLOBAL_PROD   = var.rate_limit_global_per_sec["prod"]
-    RL_GLOBAL_DEV    = var.rate_limit_global_per_sec["dev"]
-    RL_IP_PER_MIN    = var.rate_limit_ip_per_min
-    RL_AUTH_PER_MIN  = var.rate_limit_auth_per_min
-    ACME_EMAIL       = var.acme_email
+    REGION                = var.aws_region
+    PROJECT               = var.project_name
+    ECR_REPO              = aws_ecr_repository.api.repository_url
+    FRONTEND_ECR_REPO     = aws_ecr_repository.frontend.repository_url
+    ORIGIN_HOST_PROD      = var.origin_hostnames["prod"]
+    ORIGIN_HOST_DEV       = var.origin_hostnames["dev"]
+    PUBLIC_HOST_PROD      = var.public_hostnames["prod"]
+    PUBLIC_HOST_DEV       = var.public_hostnames["dev"]
+    PORT_PROD             = local.envs["prod"].api_port
+    PORT_DEV              = local.envs["dev"].api_port
+    FRONTEND_PORT_PROD    = local.envs["prod"].frontend_port
+    FRONTEND_PORT_DEV     = local.envs["dev"].frontend_port
+    API_INTERNAL_URL_PROD = "http://127.0.0.1:${local.envs["prod"].api_port}"
+    API_INTERNAL_URL_DEV  = "http://127.0.0.1:${local.envs["dev"].api_port}"
+    POOL_PROD             = var.db_pool_max_conns["prod"]
+    POOL_DEV              = var.db_pool_max_conns["dev"]
+    API_MEMORY            = "${var.api_memory_mb}m"
+    API_MEMORY_SWAP       = "${floor(var.api_memory_mb * 1.5)}m"
+    FRONTEND_MEMORY       = "${var.frontend_memory_mb}m"
+    FRONTEND_MEMORY_SWAP  = "${floor(var.frontend_memory_mb * 1.5)}m"
+    RL_GLOBAL_PROD        = var.rate_limit_global_per_sec["prod"]
+    RL_GLOBAL_DEV         = var.rate_limit_global_per_sec["dev"]
+    RL_IP_PER_MIN         = var.rate_limit_ip_per_min
+    RL_AUTH_PER_MIN       = var.rate_limit_auth_per_min
+    ACME_EMAIL            = var.acme_email
     # Networks the API believes for X-Forwarded-For (TRUSTED_PROXY_CIDRS): the Docker bridge
     # (Caddy reaches the published loopback port through it) and loopback.
     TRUSTED_PROXIES = "172.16.0.0/12,127.0.0.1/32"
@@ -34,13 +43,14 @@ locals {
   # path on the box => [mode, source]. Every file is shipped gzip+base64 so the
   # shell scripts need no escaping inside the document.
   host_files = {
-    "/usr/local/lib/fantasm/common.sh"         = ["644", file("${path.module}/host/common.sh")]
-    "/usr/local/lib/fantasm/configure-host.sh" = ["755", file("${path.module}/host/configure-host.sh")]
-    "/usr/local/lib/fantasm/deploy-api.sh"     = ["755", file("${path.module}/host/deploy-api.sh")]
-    "/usr/local/lib/fantasm/refresh-env.sh"    = ["755", file("${path.module}/host/refresh-env.sh")]
-    "/usr/local/lib/fantasm/init-db.sh"        = ["755", file("${path.module}/host/init-db.sh")]
-    "/usr/local/lib/fantasm/Caddyfile.tpl"     = ["644", file("${path.module}/host/Caddyfile.tpl")]
-    "/usr/local/lib/fantasm/caddy.service"     = ["644", file("${path.module}/host/caddy.service")]
+    "/usr/local/lib/fantasm/common.sh"          = ["644", file("${path.module}/host/common.sh")]
+    "/usr/local/lib/fantasm/configure-host.sh"  = ["755", file("${path.module}/host/configure-host.sh")]
+    "/usr/local/lib/fantasm/deploy-api.sh"      = ["755", file("${path.module}/host/deploy-api.sh")]
+    "/usr/local/lib/fantasm/deploy-frontend.sh" = ["755", file("${path.module}/host/deploy-frontend.sh")]
+    "/usr/local/lib/fantasm/refresh-env.sh"     = ["755", file("${path.module}/host/refresh-env.sh")]
+    "/usr/local/lib/fantasm/init-db.sh"         = ["755", file("${path.module}/host/init-db.sh")]
+    "/usr/local/lib/fantasm/Caddyfile.tpl"      = ["644", file("${path.module}/host/Caddyfile.tpl")]
+    "/usr/local/lib/fantasm/caddy.service"      = ["644", file("${path.module}/host/caddy.service")]
   }
 
   host_commands = concat(
@@ -108,6 +118,34 @@ resource "aws_ssm_document" "deploy_api" {
       inputs = {
         timeoutSeconds = "600"
         runCommand     = ["/usr/local/bin/deploy-api ${each.key} {{ tag }}"]
+      }
+    }]
+  })
+}
+
+resource "aws_ssm_document" "deploy_frontend" {
+  for_each = local.envs
+
+  name            = "${var.project_name}-deploy-frontend-${each.key}"
+  document_type   = "Command"
+  document_format = "JSON"
+
+  content = jsonencode({
+    schemaVersion = "2.2"
+    description   = "Deploy fantasm-frontend:<tag> to ${each.key} with health-check rollback."
+    parameters = {
+      tag = {
+        type           = "String"
+        description    = "Environment-specific immutable image tag ${each.key}-sha-<commit>."
+        allowedPattern = "^${each.key}-sha-[0-9a-f]{40}$"
+      }
+    }
+    mainSteps = [{
+      action = "aws:runShellScript"
+      name   = "deploy"
+      inputs = {
+        timeoutSeconds = "600"
+        runCommand     = ["/usr/local/bin/deploy-frontend ${each.key} {{ tag }}"]
       }
     }]
   })
