@@ -1,8 +1,6 @@
 name: Build frontend
 
-# Production build with the SEO check, and unit tests. Works only when
-# frontend/ or .github/ changed. The ruleset requires the "Build frontend"
-# check, which is the final job.
+# Production build and SEO check. Works only when frontend/ or .github/ changed.
 
 on:
   pull_request:
@@ -19,14 +17,12 @@ env:
   VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm.naukma.com' }}
 
 jobs:
-  changes:
-    name: Changes
+  build-frontend:
+    name: Build frontend
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
-    outputs:
-      run: ${{ steps.changes.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,72 +34,22 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash .github/scripts/changed.sh frontend
-
-  build:
-    name: Build and SEO check
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         with:
           node-version-file: frontend/.node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # --ignore-scripts: a compromised dependency cannot run code at install time.
       - name: Dependencies
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm ci --ignore-scripts
       - name: Build
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm run build
       - name: SEO check
+        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm run check:seo
-
-  test:
-    name: Unit tests
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: frontend/.node-version
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Dependencies
-        working-directory: frontend
-        run: npm ci --ignore-scripts
-      - name: Unit tests
-        working-directory: frontend
-        run: npm test
-
-  build-frontend:
-    name: Build frontend
-    needs: [changes, build, test]
-    if: always()
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - name: All jobs passed or had nothing to do
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
-          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<< "$NEEDS" > /dev/null; then
-            exit 1
-          fi

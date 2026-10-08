@@ -1,8 +1,8 @@
 name: Deploy backend prod
 
-# Called by deploy-backend-dev on main after the dev smoke test passed, with the
-# exact image that run tested. Manual dispatch is retained only for an explicit
-# deploy/rollback. The prod environment scopes credentials and only allows main.
+# Called by deploy-backend-dev on main after its dev job succeeded, with the
+# exact image that job deployed. The prod environment scopes credentials and
+# only allows main. Manual dispatch is retained only for an explicit deploy/rollback.
 #
 # Prod never rebuilds. A release-<sha> tag is an image prod already ran (a
 # rollback) and skips the scan, so a newly published scanner rule can never
@@ -28,20 +28,21 @@ concurrency:
   group: deploy-backend-prod
   cancel-in-progress: false
 
-env:
-  IMAGE_TAG: ${{ inputs.image_tag }}
-
 jobs:
-  verify:
-    name: Verify image
+  deploy:
+    name: Deploy backend prod
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: prod
     permissions:
       id-token: write
       contents: read
     env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,32 +74,6 @@ jobs:
           only-fixed: true
           output-format: table
           config: backend/.grype.yaml
-
-  deploy:
-    name: Deploy prod
-    needs: verify
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: prod
-    permissions:
-      id-token: write
-      contents: read
-    outputs:
-      site-url: ${{ env.SITE_URL }}
-    env:
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
-      SITE_URL: ${{ vars.VITE_SITE_URL }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: eu-central-1
-          role-session-name: fantasm-backend-prod
       - name: Mark the image as released
         run: |
           set -euo pipefail
@@ -115,19 +90,5 @@ jobs:
           fi
       - name: Deploy through SSM
         run: bash .github/scripts/deploy-backend.sh "$IMAGE_TAG"
-
-  smoke:
-    name: Smoke test prod
-    needs: deploy
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: Smoke test through CloudFront
-        env:
-          SITE_URL: ${{ needs.deploy.outputs.site-url }}
         run: bash .github/scripts/smoke-api.sh "$SITE_URL"
