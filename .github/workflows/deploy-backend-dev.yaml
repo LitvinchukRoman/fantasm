@@ -10,6 +10,7 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/deploy-backend-dev.yaml"
+      - ".github/workflows/deploy-backend-prod.yaml"
       - ".github/scripts/deploy-backend.sh"
       - ".github/scripts/smoke-api.sh"
   workflow_dispatch:
