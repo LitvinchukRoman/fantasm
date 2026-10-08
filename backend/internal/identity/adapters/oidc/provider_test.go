@@ -184,3 +184,16 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
+
+func TestExchangeFailureKeepsOnlyCodes(t *testing.T) {
+	err := &oauth2.RetrieveError{ErrorCode: "invalid_client", ErrorDescription: "AADSTS7000215: Invalid client secret provided for person@ukma.edu.ua. Trace ID: 1"}
+	if got := exchangeFailure(err); got != ": invalid_client AADSTS7000215" {
+		t.Fatalf("got %q", got)
+	}
+	if got := exchangeFailure(&oauth2.RetrieveError{ErrorCode: "<script>"}); got != ":" {
+		t.Fatalf("untrusted code leaked: %q", got)
+	}
+	if got := exchangeFailure(http.ErrHandlerTimeout); got != "" {
+		t.Fatalf("non-OAuth error: %q", got)
+	}
+}

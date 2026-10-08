@@ -130,7 +130,7 @@ func (h *Handler) completeLogin(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	auth, err := h.service.CompleteLogin(ctx, provider, query.Get("state"), cookieValue(r, h.loginCookie), query.Get("code"), cookieValue(r, h.sessionCookie))
 	if err != nil {
-		h.log(r).WarnContext(ctx, "login failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err),
+		h.log(r).WarnContext(ctx, "login failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err), "reason", apperr.MessageOf(err),
 			"provider_error", oauthErrorCode(query.Get("error")), "provider_detail", aadstsCode.FindString(query.Get("error_description")))
 		h.loginError(w, r, err)
 		return
