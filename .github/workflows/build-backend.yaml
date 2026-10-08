@@ -2,7 +2,8 @@ name: Build backend
 
 # go build and go test -race with Postgres, on arm64 (prod is Graviton; GitHub's
 # arm64 runners are free for public repositories). Works only when something
-# outside frontend/ changed.
+# outside frontend/ changed. The ruleset requires the "Build backend" check,
+# which is the final job.
 
 on:
   pull_request:
@@ -21,8 +22,50 @@ env:
   GOFLAGS: -mod=readonly
 
 jobs:
-  build-backend:
-    name: Build backend
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/changed.sh backend
+
+  build:
+    name: go build
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+
+  test:
+    name: go test
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     permissions:
@@ -46,29 +89,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - name: Changes
-        id: changes
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash .github/scripts/changed.sh backend
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
-      - name: Build
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
-        working-directory: backend
-        run: go build ./...
       - name: Tests
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: backend
         run: go test -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage.out ./...
       - name: Coverage
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: backend
         run: |
           {
@@ -77,3 +106,20 @@ jobs:
             go tool cover -func=coverage.out | tail -n 1
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  build-backend:
+    name: Build backend
+    needs: [changes, build, test]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or had nothing to do
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<< "$NEEDS" > /dev/null; then
+            exit 1
+          fi

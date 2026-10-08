@@ -1,8 +1,9 @@
 name: Lint backend
 
 # gofmt, go mod tidy, go vet, golangci-lint (+gosec), hadolint, actionlint.
-# Does its work when anything outside frontend/ changed; every step runs even
-# if an earlier one failed, so one run lists all problems.
+# Does its work when anything outside frontend/ changed. Every tool is its own
+# job, so the run shows which one failed and one run lists all problems.
+# The ruleset requires the "Lint backend" check, which is the final job.
 
 on:
   pull_request:
@@ -21,12 +22,14 @@ env:
   GOFLAGS: -mod=readonly
 
 jobs:
-  lint-backend:
-    name: Lint backend
+  changes:
+    name: Changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,13 +41,24 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash .github/scripts/changed.sh backend
+
+  go:
+    name: gofmt, go mod tidy, go vet
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - name: gofmt
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: backend
         run: |
           unformatted="$(gofmt -l .)"
@@ -54,24 +68,81 @@ jobs:
             exit 1
           fi
       - name: go mod tidy
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         working-directory: backend
         run: go mod tidy -diff
       - name: go vet
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         working-directory: backend
         run: go vet ./...
+
+  golangci-lint:
+    name: golangci-lint
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: golangci-lint
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
           working-directory: backend
+
+  hadolint:
+    name: hadolint
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: hadolint
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: backend/Dockerfile
+
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: actionlint
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+
+  lint-backend:
+    name: Lint backend
+    needs: [changes, go, golangci-lint, hadolint, actionlint]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or had nothing to do
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<< "$NEEDS" > /dev/null; then
+            exit 1
+          fi

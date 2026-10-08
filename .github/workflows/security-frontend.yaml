@@ -3,7 +3,8 @@ name: Security frontend
 # gitleaks over the history of frontend/, npm registry signatures, npm audit
 # (CRITICAL fails), CodeQL for TypeScript. Runs nightly too: new CVEs appear for
 # code that did not change. On a pull request it works only when frontend/ or
-# .github/ changed.
+# .github/ changed. Every scanner is its own job; the ruleset requires the
+# "Security frontend" check, which is the final job.
 
 on:
   pull_request:
@@ -19,13 +20,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  security-frontend:
-    name: Security frontend
+  changes:
+    name: Changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     permissions:
       contents: read
-      security-events: write
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,35 +39,69 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash .github/scripts/changed.sh frontend
+
+  gitleaks:
+    name: Secrets (gitleaks)
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Secrets (gitleaks)
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         run: |
           docker run --rm -v "$PWD:/repo" \
             ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             git /repo --log-opts="-- frontend" --redact --no-banner --verbose
+
+  npm:
+    name: npm signatures and audit
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         with:
           node-version-file: frontend/.node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # --ignore-scripts: a compromised dependency cannot run code at install time.
       - name: Dependencies
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm ci --ignore-scripts
       - name: npm registry signatures
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm audit signatures
       - name: npm audit (fail on CRITICAL)
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
+        if: ${{ !cancelled() }}
         working-directory: frontend
         run: npm audit --audit-level=critical
-      # Dependabot cannot bump .node-version, so the nightly run compares it with
-      # the newest release of the same major line (security fixes land in patches).
+
+  # Dependabot cannot bump .node-version, so the nightly run compares it with
+  # the newest release of the same major line (security fixes land in patches).
+  node-version:
+    name: Node is the newest patch of its line
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Node is the newest patch of its line
-        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         run: |
           set -euo pipefail
           pinned="$(tr -d '[:space:]' < frontend/.node-version)"
@@ -77,15 +113,44 @@ jobs:
             echo "::error file=frontend/.node-version::Node ${pinned} is behind ${latest}. Update frontend/.node-version."
             exit 1
           fi
+
+  codeql:
+    name: CodeQL (TypeScript)
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: CodeQL init
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: javascript-typescript
           build-mode: none
           queries: security-extended
       - name: CodeQL analyze
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: /language:javascript-typescript
+
+  security-frontend:
+    name: Security frontend
+    needs: [changes, gitleaks, npm, node-version, codeql]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or had nothing to do
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<< "$NEEDS" > /dev/null; then
+            exit 1
+          fi

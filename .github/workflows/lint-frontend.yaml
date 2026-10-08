@@ -1,7 +1,9 @@
 name: Lint frontend
 
-# oxlint and typecheck. Does its work only when frontend/ or .github/ changed;
-# every step runs even if an earlier one failed, so one run lists all problems.
+# oxlint and typecheck. Does its work only when frontend/ or .github/ changed.
+# Each check is its own job, so the run shows which one failed and one run
+# lists all problems. The ruleset requires the "Lint frontend" check, which is
+# the final job.
 
 on:
   pull_request:
@@ -15,12 +17,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lint-frontend:
-    name: Lint frontend
+  changes:
+    name: Changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,22 +36,69 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash .github/scripts/changed.sh frontend
+
+  oxlint:
+    name: oxlint
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         with:
           node-version-file: frontend/.node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # --ignore-scripts: a compromised dependency cannot run code at install time.
       - name: Dependencies
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm ci --ignore-scripts
       - name: oxlint
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm run lint
+
+  typecheck:
+    name: Typecheck
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
       - name: Typecheck
-        if: ${{ !cancelled() && steps.changes.outputs.run == 'true' }}
         working-directory: frontend
         run: npm run typecheck
+
+  lint-frontend:
+    name: Lint frontend
+    needs: [changes, oxlint, typecheck]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or had nothing to do
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<< "$NEEDS" > /dev/null; then
+            exit 1
+          fi
