@@ -91,7 +91,7 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
             />
 
             {isOwner && (
-              <Button variant="secondary" size="sm">
+              <Button to="/settings" variant="secondary" size="sm">
                 Редагувати профіль
               </Button>
             )}

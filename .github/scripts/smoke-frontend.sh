@@ -42,3 +42,24 @@ if [[ "$code" != "200" ]]; then
   exit 1
 fi
 echo "ok: ${base}${asset} -> 200"
+
+# Every form is a React Router action. Its CSRF check compares the browser Origin
+# with the URL Node reconstructs behind Caddy, and the action then calls the API,
+# which checks Origin again. Logging out without a session is a harmless no-op
+# that crosses both checks.
+action() {
+  curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H "Origin: $1" -H 'Content-Type: application/x-www-form-urlencoded' --data '' "${base}/logout.data" || echo 000
+}
+code=$(action "$base")
+if [[ ! "$code" =~ ^[23] ]]; then
+  echo "::error::same-origin form action -> ${code} (forms are broken)"
+  exit 1
+fi
+echo "ok: same-origin form action -> ${code}"
+code=$(action "https://smoke-foreign-origin.invalid")
+if [[ "$code" != "400" ]]; then
+  echo "::error::foreign-origin form action -> ${code}, expected 400 (CSRF check is off)"
+  exit 1
+fi
+echo "ok: foreign-origin form action -> 400"

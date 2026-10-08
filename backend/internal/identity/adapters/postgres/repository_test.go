@@ -104,7 +104,7 @@ func TestConcurrentIdentityCreation(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range count {
 		wg.Go(func() {
-			user, err := repository.UpsertUser(t.Context(), profile("same-subject"), candidate(i+1))
+			user, err := repository.UpsertUser(t.Context(), profile("same-subject"), candidate(i+1), nil)
 			results <- user
 			errors <- err
 		})
@@ -128,16 +128,38 @@ func TestConcurrentIdentityCreation(t *testing.T) {
 	if err := db.Querier(t.Context()).QueryRow(t.Context(), "SELECT count(*) FROM users").Scan(&users); err != nil || users != 1 {
 		t.Fatalf("user count = %d, error = %v", users, err)
 	}
-	other, err := repository.UpsertUser(t.Context(), profile("other-subject"), candidate(100))
+	other, err := repository.UpsertUser(t.Context(), profile("other-subject"), candidate(100), nil)
 	if err != nil || other.ID == id {
 		t.Fatalf("same email merged identities: %+v, %v", other, err)
 	}
 	if _, err := db.Querier(t.Context()).Exec(t.Context(), `UPDATE users SET role = 'ADMIN', name = 'Edited name', bio = 'Edited bio' WHERE id = $1`, id); err != nil {
 		t.Fatal(err)
 	}
-	updated, err := repository.UpsertUser(t.Context(), profile("same-subject"), candidate(200))
+	updated, err := repository.UpsertUser(t.Context(), profile("same-subject"), candidate(200), nil)
 	if err != nil || updated.Role != domain.AdminRole || updated.Name != "Edited name" || updated.Bio != "Edited bio" {
 		t.Fatalf("login overwrote managed fields: %+v, %v", updated, err)
+	}
+}
+
+func TestFirstLoginTakesFirstFreeHandle(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	handles := []string{"anna-bell", "anna-bell-2"}
+	first, err := r.UpsertUser(t.Context(), profile("first"), candidate(1), handles)
+	if err != nil || first.Handle != "anna-bell" {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	second, err := r.UpsertUser(t.Context(), profile("second"), candidate(2), handles)
+	if err != nil || second.Handle != "anna-bell-2" {
+		t.Fatalf("second = %+v, %v", second, err)
+	}
+	third, err := r.UpsertUser(t.Context(), profile("third"), candidate(3), handles)
+	if err != nil || third.Handle != "user_3" {
+		t.Fatalf("third should fall back to the generated handle: %+v, %v", third, err)
+	}
+	again, err := r.UpsertUser(t.Context(), profile("first"), candidate(4), []string{"other"})
+	if err != nil || again.ID != first.ID || again.Handle != "anna-bell" {
+		t.Fatalf("returning login changed the user: %+v, %v", again, err)
 	}
 }
 
@@ -309,7 +331,7 @@ func TestFailedSessionRollsBackNewUser(t *testing.T) {
 func TestSessionUsesCurrentRoleAndExpiry(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
-	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1))
+	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +355,7 @@ func TestIdentityEvidenceRefresh(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
 	external := profile("subject")
-	user, err := r.UpsertUser(t.Context(), external, candidate(1))
+	user, err := r.UpsertUser(t.Context(), external, candidate(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +365,7 @@ func TestIdentityEvidenceRefresh(t *testing.T) {
 	}
 	external.Email = "new@other.example"
 	external.EmailVerified = false
-	if _, err := r.UpsertUser(t.Context(), external, candidate(2)); err != nil {
+	if _, err := r.UpsertUser(t.Context(), external, candidate(2), nil); err != nil {
 		t.Fatal(err)
 	}
 	evidence, err = r.IdentitiesByUser(t.Context(), user.ID)
@@ -380,7 +402,7 @@ func TestLegacyRestrictedIdeasKeepOrganizationScope(t *testing.T) {
 func TestSessionIdleExpiryAndTouch(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
-	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1))
+	u, err := r.UpsertUser(t.Context(), profile("subject"), candidate(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,11 +436,11 @@ func TestSessionIdleExpiryAndTouch(t *testing.T) {
 func TestUpdateProfileHandleCollision(t *testing.T) {
 	db := database(t)
 	r := identitypostgres.NewRepository(db)
-	a, err := r.UpsertUser(t.Context(), profile("a"), candidate(1))
+	a, err := r.UpsertUser(t.Context(), profile("a"), candidate(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := r.UpsertUser(t.Context(), profile("b"), candidate(2))
+	b, err := r.UpsertUser(t.Context(), profile("b"), candidate(2), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
