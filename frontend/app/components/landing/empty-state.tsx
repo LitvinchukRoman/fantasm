@@ -3,11 +3,8 @@ import { Link } from "react-router";
 import type { IconProps } from "./icons";
 
 /**
- * Порожній стан секції — поки немає реальних даних (стрічка/події) з
- * бекенду, який ще не підключено до нового фронтенду. Текст title/body/
- * action узгоджений з legacy/app/page.tsx (EmptyState для hot-feed і
- * подій): це те саме, що зараз реально показує https://ideas.naukma.com/,
- * коли даних немає, а не вигадана заглушка.
+ * Порожній стан секції, коли стрічка чи події порожні. Текст title/body/
+ * action узятий з порожнього стану MVP (hot-feed і події), а не вигаданий.
  */
 export function EmptyState({
   icon: Icon,

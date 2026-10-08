@@ -8,7 +8,6 @@
 | --- | --- |
 | `frontend/` | новий клієнт, React + TypeScript |
 | `backend/` | новий сервер, Go |
-| `legacy/` | заморожений фронтенд MVP (Next.js). Не розвивати |
 | `infra/` | Terraform: `edge/` (S3 + CloudFront, dev і prod) і `backend/` (EC2 з Caddy і Go, RDS, ECR). Деталі: [infra/terraform/README.md](infra/terraform/README.md) |
 
 ## Гілки

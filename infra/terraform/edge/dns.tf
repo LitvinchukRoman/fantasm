@@ -1,10 +1,11 @@
 resource "aws_acm_certificate" "frontend" {
   for_each = local.envs
 
-  provider          = aws.us_east_1
-  domain_name       = each.value.hostname
-  validation_method = "DNS"
-  tags              = merge(local.tags, { Environment = each.key })
+  provider                  = aws.us_east_1
+  domain_name               = each.value.hostname
+  subject_alternative_names = each.value.redirects
+  validation_method         = "DNS"
+  tags                      = merge(local.tags, { Environment = each.key })
 
   lifecycle {
     create_before_destroy = true
@@ -43,30 +44,35 @@ resource "aws_acm_certificate_validation" "frontend" {
   ]
 }
 
+# Every hostname a distribution answers, canonical or redirect: hostname => env.
+# allow_overwrite turns creation into an UPSERT, so a hostname that still
+# points elsewhere (ideas.naukma.com at the MVP box) switches in one change.
 resource "aws_route53_record" "frontend_a" {
-  for_each = local.envs
+  for_each = local.site_hosts
 
-  zone_id = data.aws_route53_zone.root.zone_id
-  name    = each.value.hostname
-  type    = "A"
+  zone_id         = data.aws_route53_zone.root.zone_id
+  name            = each.key
+  type            = "A"
+  allow_overwrite = true
 
   alias {
-    name                   = aws_cloudfront_distribution.frontend[each.key].domain_name
-    zone_id                = aws_cloudfront_distribution.frontend[each.key].hosted_zone_id
+    name                   = aws_cloudfront_distribution.frontend[each.value].domain_name
+    zone_id                = aws_cloudfront_distribution.frontend[each.value].hosted_zone_id
     evaluate_target_health = false
   }
 }
 
 resource "aws_route53_record" "frontend_aaaa" {
-  for_each = local.envs
+  for_each = local.site_hosts
 
-  zone_id = data.aws_route53_zone.root.zone_id
-  name    = each.value.hostname
-  type    = "AAAA"
+  zone_id         = data.aws_route53_zone.root.zone_id
+  name            = each.key
+  type            = "AAAA"
+  allow_overwrite = true
 
   alias {
-    name                   = aws_cloudfront_distribution.frontend[each.key].domain_name
-    zone_id                = aws_cloudfront_distribution.frontend[each.key].hosted_zone_id
+    name                   = aws_cloudfront_distribution.frontend[each.value].domain_name
+    zone_id                = aws_cloudfront_distribution.frontend[each.value].hosted_zone_id
     evaluate_target_health = false
   }
 }

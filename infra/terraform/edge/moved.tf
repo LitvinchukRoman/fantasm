@@ -56,3 +56,22 @@ moved {
   from = aws_cloudfront_response_headers_policy.frontend
   to   = aws_cloudfront_response_headers_policy.frontend["prod"]
 }
+
+# DNS records are keyed by hostname since the ideas.naukma.com cutover; the
+# existing fantasm[-dev].naukma.com records keep their real resources.
+moved {
+  from = aws_route53_record.frontend_a["prod"]
+  to   = aws_route53_record.frontend_a["fantasm.naukma.com"]
+}
+moved {
+  from = aws_route53_record.frontend_aaaa["prod"]
+  to   = aws_route53_record.frontend_aaaa["fantasm.naukma.com"]
+}
+moved {
+  from = aws_route53_record.frontend_a["dev"]
+  to   = aws_route53_record.frontend_a["fantasm-dev.naukma.com"]
+}
+moved {
+  from = aws_route53_record.frontend_aaaa["dev"]
+  to   = aws_route53_record.frontend_aaaa["fantasm-dev.naukma.com"]
+}

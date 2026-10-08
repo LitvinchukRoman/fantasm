@@ -13,7 +13,7 @@
 
 ```mermaid
 flowchart LR
-  user[Browser] --> cf["CloudFront: fantasm.naukma.com, fantasm-dev.naukma.com"]
+  user[Browser] --> cf["CloudFront: ideas.naukma.com, fantasm-dev.naukma.com"]
   cf -->|"/assets/*"| s3["S3 per env, private, OAC"]
   cf -->|"pages (SSR) and /api/* + origin secret"| caddy["EC2 t4g.small: Caddy"]
   subgraph ec2 [one box, EIP, no SSH]
@@ -82,7 +82,7 @@ aws ssm list-command-invocations --details --max-items 1   # статус і в�
 
 Клієнти реєструються вручну; redirect URI для кожного середовища:
 
-- `https://fantasm.naukma.com/api/auth/google/callback`, `https://fantasm.naukma.com/api/auth/entra/callback`
+- `https://ideas.naukma.com/api/auth/google/callback`, `https://ideas.naukma.com/api/auth/entra/callback`
 - `https://fantasm-dev.naukma.com/api/auth/google/callback`, `https://fantasm-dev.naukma.com/api/auth/entra/callback`
 
 ```bash
@@ -134,4 +134,4 @@ Default behavior обох дистрибутивів іде на EC2-origin з d
 
 - Один `t4g.small` обслуговує dev і prod API+SSR. Деплої та lock/state/container names розділені, але падіння або reboot хоста вимикає обидва середовища. Зміна `t4g.micro` -> `t4g.small` відбувається in-place із кількахвилинною зупинкою.
 - Стек backend живе в спільній VPC `naukma-coffee-*` (підмережі та SG-якір `naukma-coffee-rds-sg`). Знесення random-coffee-стека зачепить і його.
-- Cutover на `ideas.naukma.com`: змінити `hostnames["prod"]` в `edge`, `public_hostnames["prod"]` в `backend`, перезібрати фронтенд з `VITE_SITE_URL=https://ideas.naukma.com`, зареєструвати нові redirect URI, 301 зі старого хоста. Legacy-стек `naukma-ideas` знищується окремо після `pg_dump` його бази.
+- Прод живе на `ideas.naukma.com` з 2026-10-09. `fantasm.naukma.com` лишився аліасом prod-дистрибутива: CloudFront Function `fantasm-canonical-host` віддає 301 на той самий шлях на `ideas.naukma.com` (`redirect_hostnames` в `edge`). Зміна прод-хоста — це `hostnames` в `edge`, `public_hostnames` в `backend`, змінна `VITE_SITE_URL` середовища `prod` і redirect URI в Google та Entra, потім обидва прод-деплої.
