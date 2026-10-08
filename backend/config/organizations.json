@@ -1,4 +1,24 @@
 {
   "version": 1,
-  "organizations": []
+  "organizations": [
+    {
+      "id": "naukma",
+      "name": "НаУКМА",
+      "badge": "Могилянець",
+      "match": {
+        "all": [
+          { "provider": "entra" },
+          { "tenantId": "b8cbfe43-c90c-4bea-84ae-be5d6d8a5f52" },
+          { "verifiedEmailDomain": "ukma.edu.ua" }
+        ]
+      },
+      "capabilities": ["ideas.read_internal", "ideas.create_internal"],
+      "benefits": {
+        "voteWeight": 2,
+        "rankingMultiplier": 1.5,
+        "karmaMultiplier": 1.5,
+        "skipPremoderation": true
+      }
+    }
+  ]
 }
