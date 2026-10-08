@@ -97,8 +97,10 @@ jobs:
           push: false
           provenance: false
           tags: fantasm-api:checks
-          cache-from: type=gha,scope=fantasm-api
-          cache-to: type=gha,scope=fantasm-api,mode=max
+          # Not the deploy's scope: it builds on arm64, and the build stage runs on
+          # $BUILDPLATFORM, so sharing one scope only overwrites each other's cache.
+          cache-from: type=gha,scope=fantasm-api-amd64
+          cache-to: type=gha,scope=fantasm-api-amd64,mode=max,ignore-error=true
       # Fails on a CRITICAL vulnerability that has a fix; never on one that cannot
       # be patched yet. Exceptions go to backend/.grype.yaml with a reason.
       - name: Image vulnerabilities (grype)

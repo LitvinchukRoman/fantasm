@@ -2,7 +2,8 @@ name: Deploy backend dev
 
 # Runs after a merge into main that touches backend/, or by hand: build the arm64
 # image, scan it (grype, CRITICAL with a fix fails), push sha-<commit> to ECR,
-# deploy through SSM, smoke test through CloudFront.
+# deploy through SSM, smoke test through CloudFront. Each stage is its own job;
+# the image is built once and handed to the next jobs as an artifact.
 
 on:
   push:
@@ -21,21 +22,16 @@ concurrency:
   group: deploy-backend-dev
   cancel-in-progress: false
 
+env:
+  IMAGE_TAG: sha-${{ github.sha }}
+
 jobs:
-  deploy:
-    name: Deploy backend dev
+  build:
+    name: Build image
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
-    environment: dev
+    timeout-minutes: 15
     permissions:
-      id-token: write
       contents: read
-    env:
-      IMAGE_TAG: sha-${{ github.sha }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
-      SITE_URL: ${{ vars.VITE_SITE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,12 +42,35 @@ jobs:
         with:
           context: backend
           platforms: linux/arm64
-          load: true
-          push: false
           provenance: false
           tags: fantasm-api:${{ env.IMAGE_TAG }}
+          outputs: type=docker,dest=${{ runner.temp }}/fantasm-api.tar
           cache-from: type=gha,scope=fantasm-api
-          cache-to: type=gha,scope=fantasm-api,mode=max
+          cache-to: type=gha,scope=fantasm-api,mode=max,ignore-error=true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fantasm-api-image
+          path: ${{ runner.temp }}/fantasm-api.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  scan:
+    name: Scan image
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fantasm-api-image
+          path: ${{ runner.temp }}
+      - name: Load the image
+        run: docker load --input "$RUNNER_TEMP/fantasm-api.tar"
       - name: Scan the image (grype, fail on CRITICAL)
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
@@ -69,6 +88,31 @@ jobs:
           format: spdx-json
           artifact-name: fantasm-api-sbom.spdx.json
           upload-release-assets: false
+
+  deploy:
+    name: Deploy dev
+    needs: scan
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      site-url: ${{ env.SITE_URL }}
+    env:
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fantasm-api-image
+          path: ${{ runner.temp }}
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
@@ -83,10 +127,25 @@ jobs:
             echo "image ${IMAGE_TAG} already in ECR, nothing to push"
             exit 0
           fi
+          docker load --input "$RUNNER_TEMP/fantasm-api.tar"
           aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
           docker tag "fantasm-api:${IMAGE_TAG}" "${ECR_REPOSITORY}:${IMAGE_TAG}"
           docker push "${ECR_REPOSITORY}:${IMAGE_TAG}"
       - name: Deploy through SSM
         run: bash .github/scripts/deploy-backend.sh "$IMAGE_TAG"
+
+  smoke:
+    name: Smoke test dev
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Smoke test through CloudFront
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.site-url }}
         run: bash .github/scripts/smoke-api.sh "$SITE_URL"

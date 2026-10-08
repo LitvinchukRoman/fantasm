@@ -1,6 +1,8 @@
 name: Deploy frontend prod
 
 # Manual only. The protected prod environment must require a reviewer.
+# Tests run next to the image build; the arm64 image is built on a native arm64
+# runner (no QEMU) with the ECR registry cache. Assets are staged from that image.
 on:
   workflow_dispatch:
 
@@ -10,24 +12,19 @@ concurrency:
   group: deploy-frontend-prod
   cancel-in-progress: false
 
+env:
+  IMAGE_TAG: prod-sha-${{ github.sha }}
+
 jobs:
-  deploy:
-    name: Build and stage frontend prod
+  # Holds no credentials and publishes nothing, so it may use the npm cache.
+  test:
+    name: Test and build
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    environment: prod
+    timeout-minutes: 15
     permissions:
-      id-token: write
       contents: read
     env:
-      VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
-      IMAGE_TAG: prod-sha-${{ github.sha }}
-      FRONTEND_ECR_REPOSITORY: ${{ vars.FRONTEND_ECR_REPOSITORY }}
-      FRONTEND_ECR_CACHE: ${{ vars.FRONTEND_ECR_CACHE }}
-      FRONTEND_SSM_DEPLOY_DOCUMENT: ${{ vars.FRONTEND_SSM_DEPLOY_DOCUMENT }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-      AWS_FRONTEND_BUCKET: ${{ vars.AWS_FRONTEND_BUCKET }}
-      SITE_URL: ${{ vars.VITE_SITE_URL }}
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm.naukma.com' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,17 +32,40 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: frontend/.node-version
-          # This job publishes a runtime image. Do not restore a PR-writable
-          # package cache into a privileged artifact-producing job.
-          package-manager-cache: false
-      - name: Test and build
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dependencies
         working-directory: frontend
-        run: |
-          npm ci --ignore-scripts
-          npm run typecheck
-          npm test
-          npm run build
-          npm run check:seo
+        run: npm ci --ignore-scripts
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+      - name: SEO check
+        working-directory: frontend
+        run: npm run check:seo
+
+  image:
+    name: Build image
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+      FRONTEND_ECR_REPOSITORY: ${{ vars.FRONTEND_ECR_REPOSITORY }}
+      FRONTEND_ECR_CACHE: ${{ vars.FRONTEND_ECR_CACHE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
@@ -61,13 +81,10 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        if: steps.image.outputs.exists != 'true'
-        with:
-          platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.image.outputs.exists != 'true'
       - name: Log in to ECR
+        if: steps.image.outputs.exists != 'true'
         run: aws ecr get-login-password | docker login --username AWS --password-stdin "${FRONTEND_ECR_REPOSITORY%%/*}"
       - name: Build and push immutable arm64 image
         if: steps.image.outputs.exists != 'true'
@@ -81,12 +98,40 @@ jobs:
           tags: ${{ env.FRONTEND_ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           build-args: VITE_SITE_URL=${{ env.VITE_SITE_URL }}
           cache-from: type=registry,ref=${{ env.FRONTEND_ECR_CACHE }}:buildcache-prod
-          cache-to: type=registry,ref=${{ env.FRONTEND_ECR_CACHE }}:buildcache-prod,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true
+          cache-to: type=registry,ref=${{ env.FRONTEND_ECR_CACHE }}:buildcache-prod,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true,ignore-error=true
+
+  deploy:
+    name: Stage and deploy prod
+    needs: [test, image]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      site-url: ${{ env.SITE_URL }}
+    env:
+      FRONTEND_ECR_REPOSITORY: ${{ vars.FRONTEND_ECR_REPOSITORY }}
+      FRONTEND_SSM_DEPLOY_DOCUMENT: ${{ vars.FRONTEND_SSM_DEPLOY_DOCUMENT }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      AWS_FRONTEND_BUCKET: ${{ vars.AWS_FRONTEND_BUCKET }}
+      SITE_URL: ${{ vars.VITE_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: fantasm-frontend-prod
       - name: Extract assets from the immutable image
         run: |
           set -euo pipefail
-          docker pull --platform linux/arm64 "${FRONTEND_ECR_REPOSITORY}:${IMAGE_TAG}"
-          container=$(docker create --platform linux/arm64 "${FRONTEND_ECR_REPOSITORY}:${IMAGE_TAG}")
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${FRONTEND_ECR_REPOSITORY%%/*}"
+          docker pull "${FRONTEND_ECR_REPOSITORY}:${IMAGE_TAG}"
+          container=$(docker create "${FRONTEND_ECR_REPOSITORY}:${IMAGE_TAG}")
           trap 'docker rm "$container" >/dev/null' EXIT
           rm -rf /tmp/frontend-client
           mkdir -p /tmp/frontend-client
@@ -99,5 +144,19 @@ jobs:
         run: bash .github/scripts/publish-frontend.sh
       - name: Deploy through SSM
         run: bash .github/scripts/deploy-frontend.sh "$IMAGE_TAG"
-      - name: Smoke test without switching prod
+
+  smoke:
+    name: Smoke test without switching prod
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Smoke test
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.site-url }}
         run: bash .github/scripts/smoke-frontend.sh "$SITE_URL"
