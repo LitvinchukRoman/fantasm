@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { MetaFunction } from "react-router";
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 import { motion, type Variants } from "motion/react";
 import { IconArrowRight } from "../components/landing/icons";
 import { noindexSeo } from "~/lib/seo";
@@ -11,6 +11,11 @@ export const meta: MetaFunction = () =>
     description: "Реєстрація на Fantasm, платформі ідей НаУКМА.",
     path: "/register",
   });
+
+/** OIDC creates a profile on first successful sign-in; there is no separate registration flow. */
+export function loader() {
+  return redirect("/login");
+}
 
 export default function RegisterRoute() {
   const [name, setName] = useState("");

@@ -1,4 +1,6 @@
 import { Button } from "~/components/ui/button";
+import { useFetcher, useRouteLoaderData } from "react-router";
+import type { RootData } from "~/root";
 
 function IconUp({ className }: { className?: string }) {
   return (
@@ -8,13 +10,23 @@ function IconUp({ className }: { className?: string }) {
   );
 }
 
-/** Голос за ідею. Клік веде на вхід, доки немає сесії і Go-API. */
-export function VoteControl({ score, variant = "primary", size = "md" }: { score: number; variant?: "primary" | "secondary"; size?: "md" | "sm" }) {
+export function VoteControl({ score, voted = false, variant = "primary", size = "md" }: { score: number; voted?: boolean; variant?: "primary" | "secondary"; size?: "md" | "sm" }) {
+  const fetcher = useFetcher<{ votes?: number; voted?: boolean; error?: string }>();
+  const root = useRouteLoaderData<RootData>("root");
+  const active = fetcher.data?.voted ?? voted;
+  const count = fetcher.data?.votes ?? score;
+  if (!root?.currentUser) {
+    return <Button to="/login" variant={variant} size={size}><IconUp className="size-4" />Підтримати <span className="tabular-nums opacity-70">{count}</span></Button>;
+  }
   return (
-    <Button to="/login" variant={variant} size={size} aria-label={`Підтримати ідею, зараз голосів: ${score}`}>
-      <IconUp className="size-4" />
-      <span>Підтримати</span>
-      <span className="tabular-nums opacity-70">{score}</span>
-    </Button>
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value="vote" />
+      <input type="hidden" name="remove" value={active ? "true" : "false"} />
+      <Button type="submit" disabled={fetcher.state !== "idle"} variant={active ? "secondary" : variant} size={size} aria-label={`${active ? "Забрати голос" : "Підтримати ідею"}, зараз голосів: ${count}`}>
+        <IconUp className="size-4" />
+        <span>{active ? "Підтримано" : "Підтримати"}</span>
+        <span className="tabular-nums opacity-70">{count}</span>
+      </Button>
+    </fetcher.Form>
   );
 }

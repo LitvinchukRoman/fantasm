@@ -4,18 +4,20 @@
  * Кампус — рядок `{ id, label }`, не окремий тип «могилянець».
  */
 import type { TocItem } from "./content-meta";
+import type { IdeaCard as ApiIdeaCard, IdeaView as ApiIdeaView } from "./api-types";
 
 export type Campus = { id: string; label: string };
 
 export const NAUKMA: Campus = { id: "naukma", label: "Могилянка" };
 
-export type IdeaCategory = "STARTUP" | "PROJECT" | "EVENT" | "COMMUNITY" | "OTHER";
+export type IdeaCategory = "STARTUP" | "PROJECT" | "EVENT" | "COMMUNITY" | "VOLUNTEERING" | "OTHER";
 
 export const CATEGORY_LABELS: Record<IdeaCategory, string> = {
   STARTUP: "Стартап",
   PROJECT: "Проєкт",
   EVENT: "Подія",
   COMMUNITY: "Спільнота",
+  VOLUNTEERING: "Волонтерство",
   OTHER: "Інше",
 };
 
@@ -45,7 +47,10 @@ export type Idea = {
   eventLocation?: string;
   /** Кого шукають: ролі окремими рядками, у UI це чипи. */
   needsRoles?: string[];
-  visibility: "PUBLIC" | "UKMA_ONLY";
+  visibility: "PUBLIC" | "MEMBERS_ONLY" | "ORGANIZATION_ONLY" | "UKMA_ONLY";
+  status?: string;
+  canEdit?: boolean;
+  viewer?: ApiIdeaView["viewer"];
   /** Тестові картки для верстки: у прод-білд не потрапляють (див. IDEAS_SEED). */
   fixture?: boolean;
 };
@@ -58,6 +63,44 @@ export type IdeaView = Omit<Idea, "body"> & { html: string; toc: TocItem[]; read
 
 /** Наступна ідея внизу сторінки: лише те, що потрібно для блоку, без тіла. */
 export type IdeaNext = Pick<Idea, "slug" | "title" | "summary" | "category">;
+
+export function toIdeaCard(value: ApiIdeaCard): IdeaCard {
+  return {
+    slug: value.slug,
+    title: value.title,
+    summary: value.summary ?? "",
+    story: value.story ?? value.summary ?? "",
+    category: value.category,
+    campus: value.campus ?? null,
+    tags: value.tags ?? [],
+    author: {
+      handle: value.author.handle,
+      name: value.author.name,
+      verified: value.author.verified ?? false,
+    },
+    votes: value.votes ?? 0,
+    comments: value.comments ?? 0,
+    participants: value.participants ?? 0,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    eventAt: value.eventAt,
+    eventLocation: value.eventLocation,
+    needsRoles: value.needsRoles,
+    visibility: value.visibility,
+    status: value.status,
+  };
+}
+
+export function toIdeaView(value: ApiIdeaView): IdeaView {
+  return {
+    ...toIdeaCard(value),
+    html: value.html ?? "",
+    toc: (value.toc ?? []).map(({ id, text, level }) => ({ id, text, depth: level === 3 ? 3 : 2 })),
+    readingMinutes: value.readingMinutes ?? 1,
+    canEdit: value.canEdit,
+    viewer: value.viewer,
+  };
+}
 
 /**
  * Дати форматуються в часовому поясі кампусу: білд-сервер і браузер

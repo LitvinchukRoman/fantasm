@@ -1,10 +1,12 @@
-import { Link } from "react-router";
+import { Link, useFetcher, useRouteLoaderData } from "react-router";
+import { useState } from "react";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { Button } from "~/components/ui/button";
 import { RelativeTime } from "~/components/ui/relative-time";
 import { AuthorLink } from "~/components/idea/author-popover";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { FORUM_MAX_DEPTH, type ForumPost, type ForumThread } from "~/lib/forum";
+import type { RootData } from "~/root";
 
 function Avatar({ name }: { name: string }) {
   return (
@@ -70,6 +72,9 @@ function Post({ post, depth, isIdeaAuthor }: { post: ForumPost; depth: number; i
  * сторінки (її описує DiscussionForumPosting). Писати можна лише після входу, поки немає Go-API.
  */
 export function Forum({ thread, authorHandle }: { thread: ForumThread; authorHandle: string }) {
+  const root = useRouteLoaderData<RootData>("root");
+  const fetcher = useFetcher<{ error?: string }>();
+  const [body, setBody] = useState("");
   const isIdeaAuthor = (handle: string) => handle === authorHandle;
   return (
     <div>
@@ -77,12 +82,19 @@ export function Forum({ thread, authorHandle }: { thread: ForumThread; authorHan
         Тут домовляються про ролі, час і формат. Обговорення лишається біля ідеї, а не в чаті, який потім ніхто не знайде.
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
-        <p className="text-sm text-[var(--color-text-muted)]">Щоб написати допис або відповісти, увійди.</p>
-        <Button to="/login" size="sm">
-          Увійти й написати
-        </Button>
-      </div>
+      {root?.currentUser ? (
+        <fetcher.Form method="post" className="mt-6 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5" onSubmit={() => setBody("")}>
+          <input type="hidden" name="intent" value="post" />
+          <textarea name="body" required maxLength={5000} value={body} onChange={(event) => setBody(event.target.value)} rows={3} placeholder="Напишіть допис…" className="w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm" />
+          {fetcher.data?.error ? <p role="alert" className="mt-2 text-sm text-red-300">{fetcher.data.error}</p> : null}
+          <Button type="submit" size="sm" className="mt-3" disabled={fetcher.state !== "idle" || !body.trim()}>Опублікувати</Button>
+        </fetcher.Form>
+      ) : (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
+          <p className="text-sm text-[var(--color-text-muted)]">Щоб написати допис або відповісти, увійди.</p>
+          <Button to="/login" size="sm">Увійти й написати</Button>
+        </div>
+      )}
 
       {thread.posts.length === 0 ? (
         <div className="mt-8 border-y border-dashed border-[var(--color-border-strong)] py-12 text-center">

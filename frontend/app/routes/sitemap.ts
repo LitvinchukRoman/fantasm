@@ -1,5 +1,5 @@
 import { getAllDocs } from "~/lib/content.server";
-import { getIdeas } from "~/lib/ideas.server";
+import { api, routeApi } from "~/lib/api.server";
 import { absoluteUrl } from "~/lib/seo";
 
 type Entry = { path: string; lastmod?: string };
@@ -22,23 +22,19 @@ function day(iso: string | undefined) {
  * (/events, /ideas/new) і тестові картки сюди не потрапляють. Sitemap з
  * noindex-адресами — суперечливий сигнал, Search Console позначає його як помилку.
  */
-export function loader() {
+export async function loader({ request }: { request: Request }) {
   const docs = getAllDocs();
-  const ideas = getIdeas().filter((idea) => !idea.fixture);
-  const ideaDates = ideas.map((idea) => idea.updatedAt ?? idea.createdAt);
+  const { items: ideas } = await routeApi(api<{ items: Array<{ slug: string; updatedAt: string }> }>(request, "/api/sitemap/ideas"));
+  const ideaDates = ideas.map((idea) => idea.updatedAt);
   const docDates = docs.map((doc) => doc.frontmatter.updatedAt ?? doc.frontmatter.publishedAt);
-
-  const events = ideas.filter((idea) => idea.category === "EVENT" && idea.eventAt);
-  const eventDates = events.map((idea) => idea.updatedAt ?? idea.createdAt);
 
   const entries: Entry[] = [
     { path: "/", lastmod: latest([...ideaDates, ...docDates]) },
     { path: "/ideas", lastmod: latest(ideaDates) },
     { path: "/guides", lastmod: latest(docDates) },
-    // /events без жодної справжньої події noindex, тож у sitemap її теж немає.
-    ...(events.length > 0 ? [{ path: "/events", lastmod: latest(eventDates) }] : []),
+    { path: "/events" },
     ...docs.map((doc) => ({ path: doc.path, lastmod: doc.frontmatter.updatedAt ?? doc.frontmatter.publishedAt })),
-    ...ideas.map((idea) => ({ path: `/ideas/${idea.slug}`, lastmod: idea.updatedAt ?? idea.createdAt })),
+    ...ideas.map((idea) => ({ path: `/ideas/${idea.slug}`, lastmod: idea.updatedAt })),
   ];
 
   const urls = entries.map(({ path, lastmod }) => {

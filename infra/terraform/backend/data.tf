@@ -79,14 +79,16 @@ locals {
   # and only Caddy talks to them.
   envs = {
     prod = {
-      db_name  = "fantasm_prod"
-      db_role  = "fantasm_prod"
-      api_port = 8080
+      db_name       = "fantasm_prod"
+      db_role       = "fantasm_prod"
+      api_port      = 8080
+      frontend_port = 3000
     }
     dev = {
-      db_name  = "fantasm_dev"
-      db_role  = "fantasm_dev"
-      api_port = 8081
+      db_name       = "fantasm_dev"
+      db_role       = "fantasm_dev"
+      api_port      = 8081
+      frontend_port = 3001
     }
   }
 

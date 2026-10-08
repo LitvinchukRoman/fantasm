@@ -16,7 +16,7 @@ install_if_changed() { # src dst mode owner -> returns 0 when dst changed
   return 0
 }
 
-# ── swap: 1 GiB box, headroom for Docker + two Go processes + Caddy ──
+# ── swap: emergency cushion; bounded containers leave physical-RAM headroom ──
 if ! swapon --show=NAME --noheadings | grep -q '^/swapfile$'; then
   log "enabling 1 GiB swap"
   [ -f /swapfile ] || { dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none; chmod 600 /swapfile; mkswap /swapfile >/dev/null; }
@@ -87,8 +87,12 @@ sed \
   -e "s|__ACME_EMAIL__|$acme_line|" \
   -e "s|__ORIGIN_HOST_PROD__|$ORIGIN_HOST_PROD|g" \
   -e "s|__ORIGIN_HOST_DEV__|$ORIGIN_HOST_DEV|g" \
+  -e "s|__PUBLIC_HOST_PROD__|$PUBLIC_HOST_PROD|g" \
+  -e "s|__PUBLIC_HOST_DEV__|$PUBLIC_HOST_DEV|g" \
   -e "s|__PORT_PROD__|$PORT_PROD|g" \
   -e "s|__PORT_DEV__|$PORT_DEV|g" \
+  -e "s|__FRONTEND_PORT_PROD__|$FRONTEND_PORT_PROD|g" \
+  -e "s|__FRONTEND_PORT_DEV__|$FRONTEND_PORT_DEV|g" \
   -e "s|__SECRET_PROD__|$secret_prod|g" \
   -e "s|__SECRET_DEV__|$secret_dev|g" \
   -e "s|__RL_GLOBAL_PROD__|$RL_GLOBAL_PROD|g" \
@@ -116,6 +120,7 @@ fi
 
 # ── deploy tooling ──
 install -m 755 /usr/local/lib/fantasm/deploy-api.sh /usr/local/bin/deploy-api
+install -m 755 /usr/local/lib/fantasm/deploy-frontend.sh /usr/local/bin/deploy-frontend
 install -m 755 /usr/local/lib/fantasm/refresh-env.sh /usr/local/bin/refresh-env
 install -m 755 /usr/local/lib/fantasm/init-db.sh /usr/local/bin/init-db
 

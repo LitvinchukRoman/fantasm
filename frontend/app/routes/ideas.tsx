@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { CurvedRows } from "~/components/ideas/curved-rows";
 import { FilterMenu, FilterOption, FilterPanelHeader, FilterReset, FilterToggle } from "~/components/ideas/filter-bar";
 import { IdeaRow } from "~/components/ideas/idea-row";
@@ -11,7 +11,8 @@ import { Button } from "~/components/ui/button";
 import { HudLabel } from "~/components/ui/hud-label";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
-import { getIdeas, toCard } from "~/lib/ideas.server";
+import { getIdeas, routeApi } from "~/lib/api.server";
+import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
 import { readFeedPosition, saveFeedPosition } from "~/lib/feed-position";
@@ -26,6 +27,7 @@ const TYPE_HINTS: Record<IdeaCategory, string> = {
   PROJECT: "Спільна справа з конкретними ролями",
   EVENT: "Зустріч із датою і місцем",
   COMMUNITY: "Клуб або регулярна ініціатива",
+  VOLUNTEERING: "Допомога спільноті або місту",
   OTHER: "Те, що не лягає в інші види",
 };
 
@@ -39,14 +41,19 @@ const DAY = 86_400_000;
 const TITLE = "Ідеї, Fantasm";
 const DESCRIPTION = "Стрічка ідей спільноти: стартапи, події, клуби й волонтерство.";
 
-export function loader() {
-  return { ideas: getIdeas().map(toCard) };
-}
-
-/** Фільтри живуть у query-рядку і застосовуються на клієнті: лоадер від них не залежить. */
-export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
-  if (currentUrl.pathname === nextUrl.pathname) return false;
-  return defaultShouldRevalidate;
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const sort = url.searchParams.get("sort");
+  const page = await routeApi(getIdeas(request, {
+    sort: sort === "votes" ? "top" : "new",
+    category: url.searchParams.get("type")?.toUpperCase(),
+    status: url.searchParams.get("status") ?? undefined,
+    tag: url.searchParams.get("tag") ?? undefined,
+    campus: url.searchParams.get("campus") === "naukma" ? NAUKMA.id : undefined,
+    cursor: url.searchParams.get("cursor") ?? undefined,
+    limit: 50,
+  }));
+  return { ideas: page.items.map(toIdeaCard), nextCursor: page.nextCursor ?? null };
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -412,6 +419,16 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
                   </li>
                 ))}
               </ul>
+            )}
+            {loaderData.nextCursor && (
+              <div className="mt-8 text-center">
+                <Link
+                  className="inline-flex rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-5 py-2.5 text-sm"
+                  to={`?${new URLSearchParams([...searchParams, ["cursor", loaderData.nextCursor]]).toString()}`}
+                >
+                  Наступна сторінка
+                </Link>
+              </div>
             )}
           </main>
           <SiteFooter />

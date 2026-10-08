@@ -38,9 +38,8 @@ data "aws_iam_policy_document" "github_assume" {
   }
 }
 
-# Per-environment deploy roles: publish that environment's frontend bucket and
-# invalidate its distribution. The backend stack attaches the API deploy
-# permissions (ECR push, SSM deploy document) to these same roles by name.
+# Per-environment deploy roles stage immutable assets in that environment's
+# bucket. The backend stack adds API/frontend ECR and scoped SSM deploy access.
 resource "aws_iam_role" "deploy_env" {
   for_each = local.envs
 
@@ -63,16 +62,9 @@ data "aws_iam_policy_document" "deploy_env" {
     actions = [
       "s3:GetObject",
       "s3:PutObject",
-      "s3:DeleteObject",
       "s3:AbortMultipartUpload",
     ]
     resources = ["${aws_s3_bucket.frontend[each.key].arn}/*"]
-  }
-
-  statement {
-    sid       = "InvalidateFrontend"
-    actions   = ["cloudfront:CreateInvalidation"]
-    resources = [aws_cloudfront_distribution.frontend[each.key].arn]
   }
 }
 

@@ -1,28 +1,19 @@
 import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
-import { useState } from "react";
 import { motion, type Variants } from "motion/react";
-import { IconArrowRight } from "../components/landing/icons";
+import { getProviders, routeApi } from "~/lib/api.server";
 import { noindexSeo } from "~/lib/seo";
+import type { Route } from "./+types/login";
 
 export const meta: MetaFunction = () =>
   noindexSeo({ title: "Увійти, Fantasm", description: "Вхід до Fantasm, платформи ідей НаУКМА.", path: "/login" });
 
-export default function LoginRoute() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [isShaking, setIsShaking] = useState(false);
+export async function loader({ request }: Route.LoaderArgs) {
+  const { providers } = await routeApi(getProviders(request));
+  return { providers, error: new URL(request.url).searchParams.get("error") };
+}
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 500);
-      return;
-    }
-    // Proceed with login
-  };
+export default function LoginRoute({ loaderData }: Route.ComponentProps) {
 
   const containerVariants: Variants = {
     hidden: { opacity: 1, y: 0, scale: 1 },
@@ -36,117 +27,47 @@ export default function LoginRoute() {
         staggerChildren: 0.08 
       } 
     },
-    shake: { 
-      opacity: 1, 
-      y: 0, 
-      scale: 1, 
-      x: [-10, 10, -10, 10, -5, 5, 0], 
-      transition: { duration: 0.4 } 
-    }
   };
 
   const itemVariants: Variants = {
     hidden: { opacity: 1, y: 0 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
-    shake: { opacity: 1, y: 0 }
   };
 
   return (
-    <motion.div variants={containerVariants} initial={false} animate={isShaking ? "shake" : "visible"}>
+    <motion.div variants={containerVariants} initial={false} animate="visible">
           <motion.div variants={itemVariants}>
             <h1 className="text-center text-xl font-semibold text-[var(--color-text)]">
-              З поверненням
+              Увійти до Fantasm
             </h1>
             <p className="mt-2 text-center text-sm text-[var(--color-text-muted)]">
-              Увійдіть через корпоративну пошту, щоб отримати повний доступ.
+              Оберіть Google або корпоративний Microsoft Entra. Паролів у Fantasm немає.
             </p>
           </motion.div>
 
           <div className="auth-stage">
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-            <motion.div variants={itemVariants}>
-              <label className="block text-sm font-medium text-[var(--color-text)]">
-                Електронна пошта
-              </label>
-              <input
-                type="email"
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="email@ukma.edu.ua"
-                className={`mt-1.5 block w-full rounded-[var(--radius-control)] border ${
-                  isShaking && !email ? "border-red-500" : "border-[var(--color-border)]"
-                } bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
-              />
-            </motion.div>
+          {loaderData.error ? (
+            <p role="alert" className="mt-6 rounded-lg border border-red-500/40 p-3 text-sm text-red-300">
+              Не вдалося увійти. Спробуйте ще раз.
+            </p>
+          ) : null}
 
-            <motion.div variants={itemVariants}>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-[var(--color-text)]">
-                  Пароль
-                </label>
-                <Link
-                  to="#"
-                  className="inline-block text-xs font-medium text-[var(--color-accent)] transition-all hover:scale-105 hover:text-[var(--color-accent-strong)]"
-                >
-                  Забули пароль?
-                </Link>
-              </div>
-              <div className="relative mt-1.5">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={`block w-full rounded-[var(--radius-control)] border ${
-                    isShaking && !password ? "border-red-500" : "border-[var(--color-border)]"
-                  } bg-[var(--color-bg)] pl-3 pr-10 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-faint)] transition-all hover:scale-110 hover:text-[var(--color-accent)]"
-                  aria-label={showPassword ? "Приховати пароль" : "Показати пароль"}
-                >
-                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
-              </div>
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <button
-                type="submit"
-                className="btn-shimmer mt-2 flex w-full items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-[var(--color-bg)] transition-all hover:bg-[var(--color-accent-strong)] hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Увійти
-                <IconArrowRight className="size-4" />
-              </button>
-            </motion.div>
-          </form>
-
-          <motion.div variants={itemVariants} className="auth-reveal my-6 flex items-center gap-3 text-[var(--color-text-faint)]">
-            <div className="h-px flex-1 bg-[var(--color-border)]" />
-            <span className="text-xs font-medium uppercase tracking-wider">
-              або
-            </span>
-            <div className="h-px flex-1 bg-[var(--color-border)]" />
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="auth-reveal space-y-3">
-            <button
-              type="button"
+          <motion.div variants={itemVariants} className="mt-8 space-y-3">
+            {loaderData.providers.includes("entra") && <a
+              href="/api/auth/entra/login"
               className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
             >
               <MicrosoftIcon />
               Увійти через Microsoft
-            </button>
-            <button
-              type="button"
+            </a>}
+            {loaderData.providers.includes("google") && <a
+              href="/api/auth/google/login"
               className="flex w-full items-center justify-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
             >
               <GoogleIcon />
               Увійти через Google
-            </button>
+            </a>}
+            {loaderData.providers.length === 0 && <p role="status" className="text-center text-sm text-[var(--color-text-muted)]">Провайдери входу зараз недоступні.</p>}
           </motion.div>
 
           <motion.div variants={itemVariants} className="auth-reveal mt-8 text-center text-sm text-[var(--color-text-muted)]">
@@ -181,26 +102,6 @@ function MicrosoftIcon() {
       <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
       <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
       <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <line x1="2" y1="2" x2="22" y2="22" />
     </svg>
   );
 }

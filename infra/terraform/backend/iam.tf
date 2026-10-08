@@ -35,7 +35,10 @@ data "aws_iam_policy_document" "backend" {
       "ecr:GetDownloadUrlForLayer",
       "ecr:BatchCheckLayerAvailability",
     ]
-    resources = [aws_ecr_repository.api.arn]
+    resources = [
+      aws_ecr_repository.api.arn,
+      aws_ecr_repository.frontend.arn,
+    ]
   }
 
   # Both environments' parameters and the shared DB admin credentials; the box
@@ -47,9 +50,12 @@ data "aws_iam_policy_document" "backend" {
   }
 
   statement {
-    sid       = "ApiLogs"
-    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = [for g in aws_cloudwatch_log_group.api : "${g.arn}:*"]
+    sid     = "ApiLogs"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = concat(
+      [for g in aws_cloudwatch_log_group.api : "${g.arn}:*"],
+      [for g in aws_cloudwatch_log_group.frontend : "${g.arn}:*"],
+    )
   }
 }
 
@@ -98,10 +104,37 @@ data "aws_iam_policy_document" "deploy_backend" {
   }
 
   statement {
+    sid = "EcrFrontendPush"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:DescribeImages",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+    ]
+    resources = [
+      aws_ecr_repository.frontend.arn,
+      aws_ecr_repository.frontend_cache.arn,
+    ]
+  }
+
+  statement {
     sid     = "RunDeployDocument"
     actions = ["ssm:SendCommand"]
     resources = [
       aws_ssm_document.deploy_api[each.key].arn,
+      aws_instance.backend.arn,
+    ]
+  }
+
+  statement {
+    sid     = "RunFrontendDeployDocument"
+    actions = ["ssm:SendCommand"]
+    resources = [
+      aws_ssm_document.deploy_frontend[each.key].arn,
       aws_instance.backend.arn,
     ]
   }

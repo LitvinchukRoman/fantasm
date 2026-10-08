@@ -15,10 +15,17 @@ import morgan from "morgan";
 const CLIENT_DIR = path.resolve("build/client");
 const build = await import(path.resolve("build/server/index.js"));
 const port = Number(process.env.PORT) || 3000;
+const host = process.env.HOST || "127.0.0.1";
 
 const app = express();
 app.disable("x-powered-by");
 app.use(compression());
+
+// Stable container health endpoint; never enters React Router or the API client.
+app.get("/healthz", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).type("text/plain").send("ok");
+});
 
 app.use((req, res, next) => {
   if (req.path.length > 1 && req.path.endsWith("/")) {
@@ -51,8 +58,8 @@ app.use(express.static("public", { maxAge: "1h", index: false, redirect: false }
 app.use(morgan("tiny"));
 app.all("*", createRequestHandler({ build, mode: process.env.NODE_ENV }));
 
-const server = app.listen(port, process.env.HOST, () => {
-  console.log(`[fantasm] http://localhost:${port}`);
+const server = app.listen(port, host, () => {
+  console.log(`[fantasm] http://${host}:${port}`);
 });
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.once(signal, () => server.close(console.error));

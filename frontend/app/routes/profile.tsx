@@ -10,35 +10,26 @@ import { MetaGrid } from "~/components/ui/meta-grid";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { formatShortDate } from "~/lib/ideas";
-import { getIdeas, toCard } from "~/lib/ideas.server";
-import { getUserProfile } from "~/lib/users.server";
+import { getCurrentUser, getProfile, routeApi } from "~/lib/api.server";
+import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { useCurvedMode } from "~/lib/use-curved-mode";
 import type { Route } from "./+types/profile";
 
-const MOCK_CURRENT_USER = {
-  handle: "naukma-ideas", 
-  verified: true,
-};
-
-export function loader({ params }: Route.LoaderArgs) {
-  const profile = getUserProfile(params.handle);
-  if (!profile) throw data("Not found", { status: 404 });
-  
-  const currentUser = MOCK_CURRENT_USER;
-  const isOwner = currentUser?.handle === profile.handle;
-  const isVerifiedGuest = currentUser?.verified === true;
-
-  let userIdeas = getIdeas()
-    .filter(idea => idea.author.handle === profile.handle)
-    .filter(idea => {
-      if (isOwner) return true;
-      if (isVerifiedGuest) return true;
-      return idea.visibility === "PUBLIC";
-    })
-    .map(toCard);
-  
-  return { profile, ideas: userIdeas, isOwner };
+export async function loader({ params, request }: Route.LoaderArgs) {
+  if (!params.handle) throw data("Not found", { status: 404 });
+  const [profile, currentUser] = await routeApi(Promise.all([getProfile(request, params.handle), getCurrentUser(request)]));
+  return {
+    profile: {
+      ...profile,
+      bio: profile.bio ?? "",
+      verified: profile.verified ?? false,
+      role: profile.role ?? "USER",
+      karma: profile.karma ?? 0,
+    },
+    ideas: (profile.ideas ?? []).map(toIdeaCard),
+    isOwner: currentUser?.handle === profile.handle,
+  };
 }
 
 export function meta({ data }: Route.MetaArgs) {
