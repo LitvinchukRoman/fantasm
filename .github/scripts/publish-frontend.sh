@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Stage only hashed assets for SSR. Deliberately never sync or delete HTML:
-# prod remains on its existing S3 site until frontend_delivery_mode is changed
-# by a separate reviewed Terraform apply.
+# Stage only hashed assets: CloudFront serves /assets/* from S3 and every page
+# from Node SSR. Nothing is deleted, so pages the previous container is still
+# rendering keep their assets.
 set -euo pipefail
 
 if [[ -z "${AWS_FRONTEND_BUCKET:-}" ]]; then

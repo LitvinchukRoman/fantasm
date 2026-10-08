@@ -50,23 +50,6 @@ variable "origin_hostnames" {
   }
 }
 
-variable "frontend_delivery_mode" {
-  description = "Default HTML delivery per environment. Keep prod on S3 until the reviewed cutover apply; dev exercises EC2 SSR."
-  type        = map(string)
-  default = {
-    prod = "s3"
-    dev  = "ssr"
-  }
-
-  validation {
-    condition = (
-      toset(keys(var.frontend_delivery_mode)) == toset(["dev", "prod"]) &&
-      alltrue([for mode in values(var.frontend_delivery_mode) : contains(["s3", "ssr"], mode)])
-    )
-    error_message = "frontend_delivery_mode must contain dev and prod, each set to s3 or ssr."
-  }
-}
-
 variable "enable_waf" {
   description = "Attach a WAFv2 web ACL (rate-based rule + AWS common rules) to both distributions. About 7 USD/month; off by default because Caddy and Go already rate limit."
   type        = bool

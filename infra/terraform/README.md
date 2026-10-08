@@ -14,8 +14,8 @@
 ```mermaid
 flowchart LR
   user[Browser] --> cf["CloudFront: fantasm.naukma.com, fantasm-dev.naukma.com"]
-  cf -->|"/assets/* both; prod default until cutover"| s3["S3 per env, private, OAC"]
-  cf -->|"dev default SSR; /api/* both + origin secret"| caddy["EC2 t4g.small: Caddy"]
+  cf -->|"/assets/*"| s3["S3 per env, private, OAC"]
+  cf -->|"pages (SSR) and /api/* + origin secret"| caddy["EC2 t4g.small: Caddy"]
   subgraph ec2 [one box, EIP, no SSH]
     caddy -->|"127.0.0.1:8080"| apiProd["api-prod container"]
     caddy -->|"127.0.0.1:8081"| apiDev["api-dev container"]
@@ -27,6 +27,8 @@ flowchart LR
 ```
 
 Фронтенд і API стоять за одним хостом (same-origin), тому `__Host-` cookie сесії та OIDC callback `/api/auth/{google|entra}/callback` працюють без CORS.
+
+`dev` і `prod` мають однакову архітектуру: той самий CloudFront-конфіг, той самий Caddy-блок, однакові контейнери й деплой-пайплайни. Відрізняються лише хост, дані (окремі бази), розмір пулу БД і rate limit (prod більший), а поза prod CloudFront додає `X-Robots-Tag: noindex`.
 
 ## Захист бекенду
 
@@ -99,23 +101,20 @@ aws ssm put-parameter --overwrite --type SecureString \
 
 | Подія | Що відбувається |
 |---|---|
-| merge у `main` (`frontend/` або frontend deploy files) | `deploy-frontend-dev.yaml`: typecheck/tests/build/SEO, arm64 image `dev-sha-<commit>`, ECR registry cache, immutable `/assets` у S3, SSM deploy з rollback, public smoke |
+| merge у `main` (`frontend/` або frontend deploy files) | `deploy-frontend-dev.yaml`: typecheck/tests/build/SEO, нативна arm64 image `dev-sha-<commit>`, ECR registry cache, immutable `/assets` у S3, SSM deploy з rollback, public smoke |
+| успішний dev frontend на `main` | `deploy-frontend-prod.yaml` (`workflow_run`): той самий коміт, окрема image `prod-sha-<commit>` (prod URL baked in), assets, SSM deploy з rollback, smoke. Вручну — `workflow_dispatch` |
 | merge у `main` (`backend/`) | `deploy-backend-dev.yaml`: збірка arm64, grype, пуш `fantasm-api:sha-<commit>` (immutable), деплой у dev через SSM, smoke через CloudFront |
-| prod | вручну, protected environment `prod`. Frontend збирає окремий `prod-sha-<commit>` (prod URL baked in), staging-ить лише immutable assets, запускає prod Node через власний SSM document і smoke; HTML у live S3 не змінює |
+| успішний dev backend на `main` | `deploy-backend-prod.yaml` (`workflow_run`): та сама image без перезбірки, повторний grype, `release-<sha>`, SSM deploy, smoke. Вручну — rollback на `release-<sha>` |
+
+Smoke фронтенду падає, якщо `/` віддає S3 замість Node, тож розходження архітектури середовищ ламає CI.
 
 Frontend release ECR immutable. BuildKit cache винесений у окремий mutable `fantasm-frontend-cache`, бо cache manifest треба перезаписувати; обидва репозиторії мають scanning і lifecycle. Ролі `fantasm-deploy-dev/prod` можуть push лише ці ECR repositories та запускати тільки свій `fantasm-deploy-frontend-<env>` document.
 
-## Поетапний SSR cutover
+## SSR на CloudFront
 
-1. Для вже розгорнутих стеків цього rollout спершу apply **backend**: EC2 зміниться з `t4g.micro` на `t4g.small` із короткою зупинкою; створяться frontend/cache ECR, IAM, logs і SSM documents. Повторно запусти `fantasm-configure-host` і команди GitHub variables. (Для порожнього акаунта загальний bootstrap-порядок вище все одно edge → backend.)
-2. Запусти dev workflow, поки dev edge ще S3. SSM `/healthz` доведе здоров'я Node, assets будуть staged; public root smoke на цьому першому запуску ще перевіряє старий S3.
-3. Apply edge з `frontend_delivery_mode = { dev = "ssr", prod = "s3" }`, потім повторно запусти dev workflow/smoke. Це **не перемикає prod**: default behavior prod залишається S3; додається лише явний immutable `/assets/*`.
-4. Перевір dev SSR routes, auth cookies, direct dynamic idea URL, `/api/*`, assets, SEO і автоматичний rollback.
-5. Запусти protected prod workflow на `main`. Він підготує prod image/container і assets, але live HTML лишиться в S3. Public smoke в цей момент перевіряє старий S3 root + API; здоров'я нового Node доводить SSM `/healthz`.
-6. Окремий reviewed Terraform change ставить лише `frontend_delivery_mode["prod"] = "ssr"`. Переглянь plan, тоді apply через дозволений infra процес; CloudFront вручну не змінювати.
-7. Після cutover перевір `/`, dynamic routes, login/callback, `/api/*`, query/cookies і `/assets/*`. Rollback edge — повернути mode у `s3`; container rollback — повторити deploy старого immutable `prod-sha-*`.
+Default behavior обох дистрибутивів іде на EC2-origin з disabled cache і forward усіх cookies/query/viewer headers крім Host; Caddy відновлює публічний Host для Node. `/api/*` має окремий behavior (той самий origin, без кешу), `/assets/*` — S3 з immutable cache. Custom error responses немає: статуси й тіла помилок віддають Node та Go. Статичного S3-режиму більше немає (prod переведено на SSR 2026-10-08); S3 зберігає лише `/assets`.
 
-У SSR mode default behavior має disabled cache і forward усіх cookies/query/viewer headers крім Host. `/api/*` зберігає окремий behavior. Distribution-wide 404 rewrite існує лише у S3 mode; в SSR mode Node/API error bodies не переписуються.
+Відкат фронтенду — контейнерний: `deploy-frontend` на боксі сам повертає попередню image, якщо нова не стала healthy; вручну — `deploy-frontend-prod.yaml` з потрібного коміту (`prod-sha-<commit>` immutable, повторний запуск бере готову image з ECR).
 
 Роль кожного середовища може запускати лише власний SSM-документ `fantasm-deploy-api-<env>`, а не довільні команди (dev-роль не може виконати код на боксі, де живе prod). Тег перевіряє SSM (`^(sha|release)-[0-9a-f]{7,40}$`).
 
@@ -131,7 +130,6 @@ Frontend release ECR immutable. BuildKit cache винесений у окрем�
 
 ## Обмеження, про які варто памʼятати
 
-- API-відповіді 404 отримують HTML-тіло сторінки 404 (статус лишається 404): кастомні відповіді CloudFront діють на весь дистрибутив. Клієнт API орієнтується на статус, не на тіло 404. 403 свідомо не переписується.
 - Один `t4g.small` обслуговує dev і prod API+SSR. Деплої та lock/state/container names розділені, але падіння або reboot хоста вимикає обидва середовища. Зміна `t4g.micro` -> `t4g.small` відбувається in-place із кількахвилинною зупинкою.
 - Стек backend живе в спільній VPC `naukma-coffee-*` (підмережі та SG-якір `naukma-coffee-rds-sg`). Знесення random-coffee-стека зачепить і його.
 - Cutover на `ideas.naukma.com`: змінити `hostnames["prod"]` в `edge`, `public_hostnames["prod"]` в `backend`, перезібрати фронтенд з `VITE_SITE_URL=https://ideas.naukma.com`, зареєструвати нові redirect URI, 301 зі старого хоста. Legacy-стек `naukma-ideas` знищується окремо після `pg_dump` його бази.
