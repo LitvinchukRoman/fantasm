@@ -1,28 +1,16 @@
 name: Deploy backend prod
 
-# A successful main-branch dev deployment automatically promotes the exact same
-# image to prod. The prod environment scopes credentials and only allows main.
-# Manual dispatch with an empty tag promotes what the latest successful
-# main-branch dev deployment runs; a release-<commit> tag rolls back.
+# Run by hand from main, no inputs. Prod gets the image dev built for the last
+# commit that changed backend/; prod never rebuilds. The prod environment scopes
+# credentials and only allows main.
 #
-# Prod never rebuilds. A release-<sha> tag is an image prod already ran (a
-# rollback) and skips the scan, so a newly published scanner rule can never
-# block a rollback.
+# Rollback: re-run an older run of this workflow. It resolves the same commit,
+# so it deploys the same image. Once promoted, an image also carries a
+# release-<sha> alias that outlives ECR expiry; a release-<sha> image already
+# ran on prod and skips the scan, so a new scanner rule never blocks a rollback.
 
-# workflow_run is safe here: "Deploy backend dev" runs only on push to main or
-# by hand, this workflow checks out main (never the triggering ref) and runs
-# only for a successful main-branch run.
-on: # zizmor: ignore[dangerous-triggers]
-  workflow_run:
-    workflows: ["Deploy backend dev"]
-    types: [completed]
+on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Leave empty to promote what dev runs now. release-<commit> rolls back; sha-<commit> picks a dev image"
-        type: string
-        required: false
-        default: ""
 
 permissions: {}
 
@@ -30,23 +18,15 @@ concurrency:
   group: deploy-backend-prod
   cancel-in-progress: false
 
-env:
-  IMAGE_TAG: ${{ github.event_name == 'workflow_run' && format('sha-{0}', github.event.workflow_run.head_sha) || inputs.image_tag }}
-
 jobs:
   verify:
     name: Verify image
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     environment: prod
     permissions:
       id-token: write
       contents: read
-      actions: read
     outputs:
       image-tag: ${{ steps.tag.outputs.tag }}
     env:
@@ -54,28 +34,29 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Resolve and validate the tag
-        id: tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="$IMAGE_TAG"
-          if [[ -z "$tag" ]]; then
-            sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-backend-dev.yaml --branch main \
-              --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
-            [[ -n "$sha" ]] || { echo "::error::no successful dev deployment on main to promote"; exit 1; }
-            tag="sha-${sha}"
-            echo "Promoting the image dev runs: ${tag}"
-          fi
-          [[ "$tag" =~ ^(sha|release)-[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be sha-<commit> or release-<commit>"; exit 1; }
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-central-1
           role-session-name: fantasm-backend-prod
+      - name: Resolve the image
+        id: tag
+        run: |
+          set -euo pipefail
+          commit=$(git log -1 --format=%H "$GITHUB_SHA" -- backend)
+          repo_name="${ECR_REPOSITORY#*/}"
+          tag=""
+          for candidate in "sha-${commit}" "release-${commit}"; do
+            if aws ecr describe-images --repository-name "$repo_name" --image-ids "imageTag=${candidate}" >/dev/null 2>&1; then
+              tag="$candidate"
+              break
+            fi
+          done
+          [[ -n "$tag" ]] || { echo "::error::no image for ${commit} in ECR; deploy backend dev for that commit first"; exit 1; }
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Backend prod: \`${tag}\` (last backend/ commit at ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
       - name: Pull the image from ECR
         if: ${{ !startsWith(steps.tag.outputs.tag, 'release-') }}
         env:
