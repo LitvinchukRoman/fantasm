@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useFetcher, useLocation, useRouteLoaderData } from "react-router";
 import { Button } from "~/components/ui/button";
 import type { RootData } from "~/root";
-import { IconArrowRight } from "./icons";
+import { IconArrowRight, IconUser } from "./icons";
 
 const NAV_LINKS = [
   { href: "/ideas", label: "Ідеї" },
@@ -60,8 +60,9 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
           : "border-b border-transparent bg-transparent"
       }`}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-        <Link to="/" prefetch="intent" className="flex items-center gap-2" aria-label="Fantasm, головна">
+      {/* Рівні бокові колонки тримають навігацію по центру незалежно від ширини правого блоку. */}
+      <div className="mx-auto grid h-16 max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-5 sm:px-8">
+        <Link to="/" prefetch="intent" className="flex items-center gap-2 justify-self-start" aria-label="Fantasm, головна">
           <img src="/favicon.jpg" alt="" width={32} height={32} className="size-8 rounded-lg" />
           <span className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]">
             Fantasm
@@ -89,7 +90,7 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
           )}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="col-start-3 flex items-center gap-2 justify-self-end">
           <Link
             to="/ideas/new"
             prefetch="intent"
@@ -108,10 +109,11 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
               </Link>
               <Link
                 to={`/u/${root.currentUser.handle}`}
-                className="hidden max-w-40 truncate text-sm text-[var(--color-text)] md:inline"
-                title={`@${root.currentUser.handle}`}
+                className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--color-border-strong)] text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-strong)]"
+                aria-label={`Профіль: ${root.currentUser.name}`}
+                title={root.currentUser.name}
               >
-                {root.currentUser.name}
+                <IconUser className="size-4" />
               </Link>
               <logout.Form method="post" action="/logout">
                 <button className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm text-[var(--color-text)]">

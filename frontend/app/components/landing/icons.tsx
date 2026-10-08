@@ -45,6 +45,15 @@ export function IconPulse({ className }: IconProps) {
   );
 }
 
+export function IconUser({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M10 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      <path d="M4.5 16.5c0-2.75 2.45-4.75 5.5-4.75s5.5 2 5.5 4.75" />
+    </svg>
+  );
+}
+
 export function IconUsers({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">
