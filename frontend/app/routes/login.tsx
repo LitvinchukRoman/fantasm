@@ -47,7 +47,7 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
 
           <div className="auth-stage">
           {loaderData.error ? (
-            <p role="alert" className="mt-6 rounded-lg border border-red-500/40 p-3 text-sm text-red-300">
+            <p role="alert" className="mt-6 rounded-lg border border-red-500/40 p-3 text-center text-sm text-red-300">
               Не вдалося увійти. Спробуйте ще раз.
             </p>
           ) : null}
