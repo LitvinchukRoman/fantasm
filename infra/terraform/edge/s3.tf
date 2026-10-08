@@ -62,8 +62,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "frontend" {
 }
 
 # s3:ListBucket for the distribution makes S3 answer 404 (NoSuchKey) instead of
-# 403 for a missing key. That lets us drop the distribution-wide 403 -> 404.html
-# rewrite, which would otherwise also swallow real 403 responses from the API.
+# 403 for a missing /assets/* key.
 resource "aws_s3_bucket_policy" "frontend" {
   for_each = local.envs
 

@@ -1,6 +1,6 @@
 # edge
 
-Стек фронтенду і входу: S3 + CloudFront + ACM + Route53 для `prod` і `dev`, `/api/*` та SSR на EC2-origin, OIDC-ролі деплою, секрет origin, опційний WAF. `frontend_delivery_mode` навмисно має `dev = "ssr"`, `prod = "s3"`; перемикання prod — окремий reviewed plan/apply, не ручна зміна CloudFront. Повний опис, порядок apply і змінні GitHub — у [../README.md](../README.md).
+Стек фронтенду і входу: S3 + CloudFront + ACM + Route53 для `prod` і `dev`, OIDC-ролі деплою, секрет origin, опційний WAF. Обидва дистрибутиви однакові: сторінки рендерить Node SSR на EC2-origin, `/api/*` іде в Go там само, з S3 віддаються лише immutable `/assets/*`. Єдина різниця між середовищами — `X-Robots-Tag: noindex` поза prod. CloudFront не змінювати вручну, лише через plan/apply цього стека. Повний опис, порядок apply і змінні GitHub — у [../README.md](../README.md).
 
 ```bash
 terraform init -reconfigure -backend-config=backend.hcl

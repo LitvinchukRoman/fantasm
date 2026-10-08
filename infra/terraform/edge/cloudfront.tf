@@ -8,16 +8,8 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_function" "pretty_urls" {
-  name    = "${var.project_name}-frontend-pretty-urls"
-  runtime = "cloudfront-js-2.0"
-  comment = "Directory index and trailing-slash canonical for the prerendered frontend"
-  publish = true
-  code    = file("${path.module}/functions/pretty-urls.js")
-}
-
 # Origin Cache-Control decides the TTL (bounded by min/max below).
-# CI sets immutable on /assets and max-age=0 on HTML and *.data.
+# CI uploads /assets with an immutable one-year Cache-Control.
 resource "aws_cloudfront_cache_policy" "frontend" {
   name        = "${var.project_name}-frontend-origin-cache"
   comment     = "Honor object Cache-Control from the frontend publish"
@@ -96,7 +88,6 @@ resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   comment             = "${var.project_name} frontend${each.value.suffix}"
   aliases             = [each.value.hostname]
-  default_root_object = var.frontend_delivery_mode[each.key] == "s3" ? "index.html" : null
   is_ipv6_enabled     = true
   http_version        = "http2and3"
   price_class         = "PriceClass_100"
@@ -130,51 +121,36 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # HTML is server-rendered by Node on EC2 (Caddy routes it by Host). Pages
+  # carry session state, so nothing is cached; cookies, query string and viewer
+  # headers except Host are forwarded.
   default_cache_behavior {
-    target_origin_id = var.frontend_delivery_mode[each.key] == "ssr" ? "api-origin" : "s3-frontend"
-    allowed_methods = var.frontend_delivery_mode[each.key] == "ssr" ? [
-      "GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE",
-    ] : ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id = var.frontend_delivery_mode[each.key] == "ssr" ? (
-      data.aws_cloudfront_cache_policy.caching_disabled.id
-    ) : aws_cloudfront_cache_policy.frontend.id
-    origin_request_policy_id = var.frontend_delivery_mode[each.key] == "ssr" ? (
-      data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
-    ) : null
+    target_origin_id           = "api-origin"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    viewer_protocol_policy     = "redirect-to-https"
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
-
-    dynamic "function_association" {
-      for_each = var.frontend_delivery_mode[each.key] == "s3" ? [1] : []
-      content {
-        event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.pretty_urls.arn
-      }
-    }
   }
 
-  # Hashed browser assets stay private in S3 when SSR is enabled; Node never
-  # spends memory or bandwidth serving them. Omit this behavior in S3 mode so
-  # the staged change does not touch the production distribution at all.
-  dynamic "ordered_cache_behavior" {
-    for_each = var.frontend_delivery_mode[each.key] == "ssr" ? [1] : []
-    content {
-      path_pattern               = "/assets/*"
-      target_origin_id           = "s3-frontend"
-      allowed_methods            = ["GET", "HEAD"]
-      cached_methods             = ["GET", "HEAD"]
-      compress                   = true
-      viewer_protocol_policy     = "redirect-to-https"
-      cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
-      response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
-    }
+  # Hashed browser assets stay private in S3; Node never spends memory or
+  # bandwidth serving them.
+  ordered_cache_behavior {
+    path_pattern               = "/assets/*"
+    target_origin_id           = "s3-frontend"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    viewer_protocol_policy     = "redirect-to-https"
+    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
   }
 
   # Same-origin API: the browser talks to one host, so __Host- session cookies
   # and the OIDC callback work without CORS. Never cached; cookies, query string
-  # and Origin are forwarded. No pretty-urls function here.
+  # and Origin are forwarded.
   ordered_cache_behavior {
     path_pattern               = "/api/*"
     target_origin_id           = "api-origin"
@@ -187,21 +163,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
   }
 
-  # Missing prerendered key: S3 answers 404 (the bucket policy grants ListBucket
-  # to this distribution). Serve the static page with a real 404 so crawlers do
-  # not index a soft 200. There is deliberately NO 403 rewrite: custom error
-  # responses are distribution-wide and would hide genuine 403s from /api/*.
-  # Trade-off: a 404 from /api/* also gets this HTML body (status stays 404), so
-  # API clients must branch on the status code, not on the 404 body.
-  dynamic "custom_error_response" {
-    for_each = var.frontend_delivery_mode[each.key] == "s3" ? [1] : []
-    content {
-      error_code            = 404
-      response_code         = 404
-      response_page_path    = "/404.html"
-      error_caching_min_ttl = 0
-    }
-  }
+  # No custom error responses: they are distribution-wide and would replace the
+  # status pages Node renders and the JSON error bodies the API returns.
 
   restrictions {
     geo_restriction {

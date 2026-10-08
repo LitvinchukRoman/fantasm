@@ -3,6 +3,7 @@ name: Deploy frontend dev
 # Runs after a merge into main that touches frontend/, or by hand. Tests run
 # next to the image build; the arm64 image is built on a native arm64 runner
 # (no QEMU) with the ECR registry cache. Assets are staged from that image.
+# A successful main-branch run starts deploy-frontend-prod.yaml.
 
 on:
   push:
@@ -10,6 +11,7 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/deploy-frontend-dev.yaml"
+      - ".github/workflows/deploy-frontend-prod.yaml"
       - ".github/scripts/deploy-frontend.sh"
       - ".github/scripts/publish-frontend.sh"
       - ".github/scripts/smoke-frontend.sh"

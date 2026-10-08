@@ -58,8 +58,8 @@ __ACME_EMAIL__
 			}
 		}
 
-		# CloudFront sends non-asset HTML here only when this environment's
-		# frontend_delivery_mode is "ssr".
+		# Every page is server-rendered by Node; CloudFront serves only
+		# /assets/* from S3.
 		handle {
 			reverse_proxy 127.0.0.1:{args[1]} {
 				# CloudFront connects with the private origin Host. Restore the

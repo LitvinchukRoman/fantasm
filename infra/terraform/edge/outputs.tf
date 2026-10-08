@@ -3,11 +3,6 @@ output "site_urls" {
   value       = { for env, c in local.envs : env => c.site_url }
 }
 
-output "frontend_delivery_mode" {
-  description = "Current default HTML delivery mode per environment."
-  value       = var.frontend_delivery_mode
-}
-
 output "bucket_names" {
   description = "S3 bucket per environment that CI syncs build/client into."
   value       = { for env, b in aws_s3_bucket.frontend : env => b.id }
