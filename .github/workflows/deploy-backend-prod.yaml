@@ -2,7 +2,8 @@ name: Deploy backend prod
 
 # A successful main-branch dev deployment automatically promotes the exact same
 # image to prod. The prod environment scopes credentials and only allows main.
-# Manual dispatch is retained only for an explicit deploy/rollback.
+# Manual dispatch with an empty tag promotes what the latest successful
+# main-branch dev deployment runs; a release-<commit> tag rolls back.
 #
 # Prod never rebuilds. A release-<sha> tag is an image prod already ran (a
 # rollback) and skips the scan, so a newly published scanner rule can never
@@ -18,9 +19,10 @@ on: # zizmor: ignore[dangerous-triggers]
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag from dev, e.g. sha-<commit> (release-<commit> to roll back)"
+        description: "Leave empty to promote what dev runs now. release-<commit> rolls back; sha-<commit> picks a dev image"
         type: string
-        required: true
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -44,33 +46,50 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      actions: read
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
     env:
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate the tag
+      - name: Resolve and validate the tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          [[ "$IMAGE_TAG" =~ ^(sha|release)-[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be sha-<commit> or release-<commit>"; exit 1; }
+          tag="$IMAGE_TAG"
+          if [[ -z "$tag" ]]; then
+            sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-backend-dev.yaml --branch main \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+            [[ -n "$sha" ]] || { echo "::error::no successful dev deployment on main to promote"; exit 1; }
+            tag="sha-${sha}"
+            echo "Promoting the image dev runs: ${tag}"
+          fi
+          [[ "$tag" =~ ^(sha|release)-[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be sha-<commit> or release-<commit>"; exit 1; }
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-central-1
           role-session-name: fantasm-backend-prod
       - name: Pull the image from ECR
-        if: ${{ !startsWith(env.IMAGE_TAG, 'release-') }}
+        if: ${{ !startsWith(steps.tag.outputs.tag, 'release-') }}
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
           docker pull "${ECR_REPOSITORY}:${IMAGE_TAG}"
       # New CVEs appear after an image was built: scan the exact image again.
       - name: Scan the image again (grype, fail on CRITICAL)
-        if: ${{ !startsWith(env.IMAGE_TAG, 'release-') }}
+        if: ${{ !startsWith(steps.tag.outputs.tag, 'release-') }}
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
-          image: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          image: ${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}
           grype-version: v0.120.1
           fail-build: true
           severity-cutoff: critical
@@ -90,6 +109,7 @@ jobs:
     outputs:
       site-url: ${{ env.SITE_URL }}
     env:
+      IMAGE_TAG: ${{ needs.verify.outputs.image-tag }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}

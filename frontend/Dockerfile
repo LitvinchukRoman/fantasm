@@ -15,6 +15,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --omit=dev && npm cache clean --force
 COPY --from=build --chown=node:node /app/build ./build
 COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/content ./content
 COPY --chown=node:node server.js ./
 USER node
 EXPOSE 3000

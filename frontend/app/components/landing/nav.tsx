@@ -16,7 +16,8 @@ const NAV_LINKS = [
  * зливались із контентом. Посилання: Ідеї, Події, Гайди.
  *
  * На телефонах (< sm) пункти не вміщаються в шапку, тому вони живуть у меню-шторці
- * за кнопкою-бургером: великі цілі натискання, кнопка «Ідея» теж тут.
+ * за кнопкою-бургером: великі цілі натискання, «Запропонувати ідею» теж тут.
+ * На десктопі шапка навмисно легка: навігація, профіль, вихід.
  */
 export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
   const root = useRouteLoaderData<RootData>("root");
@@ -91,29 +92,19 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
         </nav>
 
         <div className="col-start-3 flex items-center gap-2 justify-self-end">
-          <Link
-            to="/ideas/new"
-            prefetch="intent"
-            className="hidden rounded-[var(--radius-control)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] transition-all duration-200 hover:bg-[var(--color-accent-strong)] hover:scale-105 sm:inline-flex"
-          >
-            Ідея
-          </Link>
           {root?.currentUser ? (
             <>
-              <Link
-                to="/notifications"
-                className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3 py-2 text-sm text-[var(--color-text)]"
-                aria-label={`Сповіщення, непрочитаних: ${root.unread}`}
-              >
-                Сповіщення{root.unread > 0 ? ` · ${root.unread}` : ""}
-              </Link>
+              {/* Сповіщення живуть у профілі; тут лише крапка, що є непрочитані. */}
               <Link
                 to={`/u/${root.currentUser.handle}`}
-                className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--color-border-strong)] text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-strong)]"
-                aria-label={`Профіль: ${root.currentUser.name}`}
+                className="relative grid size-9 shrink-0 place-items-center rounded-full border border-[var(--color-border-strong)] text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface-strong)]"
+                aria-label={`Профіль: ${root.currentUser.name}${root.unread > 0 ? `, непрочитаних сповіщень: ${root.unread}` : ""}`}
                 title={root.currentUser.name}
               >
                 <IconUser className="size-4" />
+                {root.unread > 0 && (
+                  <span aria-hidden="true" className="absolute top-0 right-0 size-2.5 rounded-full border-2 border-[var(--color-bg)] bg-[var(--color-accent)]" />
+                )}
               </Link>
               <logout.Form method="post" action="/logout">
                 <button className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm text-[var(--color-text)]">
