@@ -40,13 +40,13 @@ Required check не можна пропустити фільтром шляхі�
 | Workflow | Коли | Що робить |
 | --- | --- | --- |
 | `deploy-frontend-dev.yaml` | merge у `main` зі змінами в `frontend/`, або вручну | збірка з dev-URL, S3 dev, інвалідація CloudFront |
-| `deploy-frontend-prod.yaml` | лише вручну | збірка з prod-URL, S3 prod, інвалідація CloudFront |
+| `deploy-frontend-prod.yaml` | лише вручну з `main`, без полів | збірка з prod-URL, assets у S3, деплой через SSM, smoke |
 | `deploy-backend-dev.yaml` | merge у `main` зі змінами в `backend/`, або вручну | збірка arm64-образу, grype, пуш `sha-<commit>` в ECR, деплой через SSM, smoke |
-| `deploy-backend-prod.yaml` | лише вручну, тег образу з dev | повторний grype того самого образу, alias `release-<sha>`, деплой через SSM, smoke |
+| `deploy-backend-prod.yaml` | лише вручну з `main`, без полів | образ із dev для останнього коміту в `backend/`, повторний grype, alias `release-<sha>`, деплой через SSM, smoke |
 
 Залежності оновлює Dependabot (`.github/dependabot.yaml`): actions, npm, Go, Docker, Terraform, з затримкою 7 днів на нові релізи.
 
-Кожен степ виконується, навіть якщо попередній упав, тож один запуск показує всі проблеми. Нічні запуски security-чеків ловлять нові CVE в коді, який не змінювався. Прод деплоїться лише вручну (environment `prod` з рев'юером); відкат: `deploy-backend-prod.yaml` з тегом `release-<sha>`, сканування для відкату пропускається, щоб сканер не блокував відкат.
+Кожен степ виконується, навіть якщо попередній упав, тож один запуск показує всі проблеми. Нічні запуски security-чеків ловлять нові CVE в коді, який не змінювався. Прод деплоїться лише вручну (environment `prod` з рев'юером); тег виводиться з коміту, вводити нічого не треба. Відкат: Re-run старого прод-запуску; для образу `release-<sha>` сканування пропускається, щоб сканер не блокував відкат.
 
 Виняток із політики додається в `backend/.grype.yaml` з причиною і датою перегляду. Версію Node підіймають у `frontend/.node-version`; нічний `Security frontend` падає, якщо там не остання патч-версія гілки.
 

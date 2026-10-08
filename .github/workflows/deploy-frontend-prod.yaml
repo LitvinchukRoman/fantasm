@@ -1,18 +1,16 @@
 name: Deploy frontend prod
 
-# A successful main-branch dev deployment automatically deploys the same commit
-# to prod, exactly like the backend. The image is built again only because
-# VITE_SITE_URL is baked in at build time. The prod environment scopes
-# credentials and only allows main. Manual dispatch deploys the dispatched ref.
-# Tests run next to the image build; the arm64 image is built on a native arm64
-# runner (no QEMU) with the ECR registry cache. Assets are staged from that image.
+# Run by hand from main, no inputs: deploys the main commit it was started on.
+# The image is built again (not promoted from dev) only because VITE_SITE_URL
+# is baked in at build time. The prod environment scopes credentials and only
+# allows main. Tests run next to the image build; the arm64 image is built on a
+# native arm64 runner (no QEMU) with the ECR registry cache. Assets are staged
+# from that image.
+#
+# Rollback: re-run an older run of this workflow. prod-sha-<commit> is
+# immutable, so the re-run reuses that image instead of building it again.
 
-# workflow_run is safe here: "Deploy frontend dev" runs only on push to main or
-# by hand, and this workflow runs only for a successful main-branch run.
-on: # zizmor: ignore[dangerous-triggers]
-  workflow_run:
-    workflows: ["Deploy frontend dev"]
-    types: [completed]
+on:
   workflow_dispatch:
 
 permissions: {}
@@ -22,17 +20,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-  IMAGE_TAG: prod-sha-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  IMAGE_TAG: prod-sha-${{ github.sha }}
 
 jobs:
   # Holds no credentials and publishes nothing, so it may use the npm cache.
   test:
     name: Test and build
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -42,7 +35,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -67,10 +59,6 @@ jobs:
 
   image:
     name: Build image
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     environment: prod
@@ -84,7 +72,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -140,7 +127,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -176,7 +162,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - name: Smoke test through CloudFront
         env:

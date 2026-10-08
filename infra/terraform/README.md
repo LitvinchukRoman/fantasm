@@ -102,9 +102,11 @@ aws ssm put-parameter --overwrite --type SecureString \
 | Подія | Що відбувається |
 |---|---|
 | merge у `main` (`frontend/` або frontend deploy files) | `deploy-frontend-dev.yaml`: typecheck/tests/build/SEO, нативна arm64 image `dev-sha-<commit>`, ECR registry cache, immutable `/assets` у S3, SSM deploy з rollback, public smoke |
-| успішний dev frontend на `main` | `deploy-frontend-prod.yaml` (`workflow_run`): той самий коміт, окрема image `prod-sha-<commit>` (prod URL baked in), assets, SSM deploy з rollback, smoke. Вручну — `workflow_dispatch` |
+| Run workflow з `main` (без полів) | `deploy-frontend-prod.yaml`: коміт, на якому запущено, окрема image `prod-sha-<commit>` (prod URL baked in), assets, SSM deploy з rollback, smoke |
 | merge у `main` (`backend/`) | `deploy-backend-dev.yaml`: збірка arm64, grype, пуш `fantasm-api:sha-<commit>` (immutable), деплой у dev через SSM, smoke через CloudFront |
-| успішний dev backend на `main` | `deploy-backend-prod.yaml` (`workflow_run`): та сама image без перезбірки, повторний grype, `release-<sha>`, SSM deploy, smoke. Вручну з порожнім тегом — викотити те, що зараз на dev; `release-<sha>` — rollback |
+| Run workflow з `main` (без полів) | `deploy-backend-prod.yaml`: image, яку dev зібрав для останнього коміту зі змінами в `backend/`, без перезбірки, повторний grype, `release-<sha>`, SSM deploy, smoke |
+
+Прод запускається тільки вручну й нічого не питає: тег виводиться з коміту. Відкат — Re-run старого прод-запуску: він бере той самий коміт, а отже ту саму image.
 
 Smoke фронтенду падає, якщо `/` віддає S3 замість Node, тож розходження архітектури середовищ ламає CI.
 
@@ -114,13 +116,13 @@ Frontend release ECR immutable. BuildKit cache винесений у окрем�
 
 Default behavior обох дистрибутивів іде на EC2-origin з disabled cache і forward усіх cookies/query/viewer headers крім Host; Caddy відновлює публічний Host для Node. `/api/*` має окремий behavior (той самий origin, без кешу), `/assets/*` — S3 з immutable cache. Custom error responses немає: статуси й тіла помилок віддають Node та Go. Статичного S3-режиму більше немає (prod переведено на SSR 2026-10-08); S3 зберігає лише `/assets`.
 
-Відкат фронтенду — контейнерний: `deploy-frontend` на боксі сам повертає попередню image, якщо нова не стала healthy; вручну — `deploy-frontend-prod.yaml` з потрібного коміту (`prod-sha-<commit>` immutable, повторний запуск бере готову image з ECR).
+Відкат фронтенду — контейнерний: `deploy-frontend` на боксі сам повертає попередню image, якщо нова не стала healthy; вручну — Re-run потрібного запуску `deploy-frontend-prod.yaml` (`prod-sha-<commit>` immutable, повторний запуск бере готову image з ECR).
 
 Роль кожного середовища може запускати лише власний SSM-документ `fantasm-deploy-api-<env>`, а не довільні команди (dev-роль не може виконати код на боксі, де живе prod). Тег перевіряє SSM (`^(sha|release)-[0-9a-f]{7,40}$`).
 
 ### Відкат
 
-`deploy-api` на боксі сам повертає попередній образ, якщо новий не став `healthy` за 30 с, і завершується кодом 1. Ручний відкат на відомий тег: запустити `deploy-backend-prod.yaml` зі старим `image_tag` (ECR зберігає останні 40 образів; `release-*` аліаси позначають промотовані).
+`deploy-api` на боксі сам повертає попередній образ, якщо новий не став `healthy` за 30 с, і завершується кодом 1. Ручний відкат: Re-run старого запуску `deploy-backend-prod.yaml`. Якщо `sha-<commit>` уже видалено з ECR (зберігаються останні 40 образів), workflow бере аліас `release-<commit>`, який ставиться кожному промотованому образу.
 
 ### Логи і доступ
 
