@@ -67,8 +67,13 @@ body {
   font-family: var(--font-sans);
 }
 
+/*
+ * Доріжка скролбару є завжди, тож ширина сторінки, а з нею шапка, не стрибає між
+ * довгими й короткими сторінками. scrollbar-gutter тут не допомагає: Chromium
+ * ігнорує його з кастомним ::-webkit-scrollbar. Доріжка кольору фону, її не видно.
+ */
 html {
-  scrollbar-gutter: stable;
+  overflow-y: scroll;
 }
 
 /*
@@ -1250,10 +1255,13 @@ html {
   }
 }
 
-html.ideas-curved,
+/* html лишає доріжку скролбару (ширина як на інших сторінках); прокрутку гасить body. */
+html.ideas-curved {
+  background: var(--color-bg);
+}
+
 html.ideas-curved body {
   overflow: hidden;
-  scrollbar-gutter: auto;
   background: var(--color-bg);
 }
 

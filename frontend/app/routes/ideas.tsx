@@ -385,11 +385,12 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
             />
           ) : (
             // 0–1 результат: зациклювати нічого, показуємо його на місці, а панель фільтрів лишається там само.
+            // Рейка зсунута ліворуч під вигнуті рядки; порожній стан стоїть по центру екрана.
             <div className="fixed inset-0 z-[1] flex items-center">
-              <div className="idea-rail">
-                {ideas.length === 0 ? (
-                  emptyState
-                ) : (
+              {ideas.length === 0 ? (
+                <div className="mx-auto w-full max-w-2xl px-5">{emptyState}</div>
+              ) : (
+                <div className="idea-rail">
                   <ul className="idea-rows idea-rows--flow">
                     {ideas.map((idea, index) => (
                       <li key={idea.slug}>
@@ -397,8 +398,8 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
                       </li>
                     ))}
                   </ul>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </>

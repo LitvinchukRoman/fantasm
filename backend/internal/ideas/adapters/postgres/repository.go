@@ -144,6 +144,12 @@ func (r *Repository) Insert(ctx context.Context, n ports.NewIdea) (string, strin
 	return "", "", errors.New("could not find a free slug")
 }
 
+func (r *Repository) SlugTaken(ctx context.Context, slug string) (bool, error) {
+	var taken bool
+	err := r.db.Querier(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM ideas WHERE slug = $1)`, slug).Scan(&taken)
+	return taken, err
+}
+
 func (r *Repository) replaceTags(ctx context.Context, ideaID string, tags []domain.Tag) error {
 	q := r.db.Querier(ctx)
 	if _, err := q.Exec(ctx, `DELETE FROM idea_tags WHERE idea_id = $1`, ideaID); err != nil {

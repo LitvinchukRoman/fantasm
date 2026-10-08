@@ -61,6 +61,8 @@ type Repository interface {
 
 	// BySlug returns the idea if the viewer may read it; lock takes a row lock for update.
 	BySlug(ctx context.Context, ac Access, slug string, lock bool) (domain.Idea, error)
+	// SlugTaken reports whether any idea, deleted ones included, holds the slug.
+	SlugTaken(ctx context.Context, slug string) (bool, error)
 	UpdateContent(ctx context.Context, ideaID string, c domain.Content, r domain.Rendered, now time.Time) error
 	SetStatus(ctx context.Context, ideaID string, status domain.Status, moderation domain.Moderation, now time.Time) error
 	SoftDelete(ctx context.Context, ideaID string, now time.Time) error

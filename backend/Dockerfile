@@ -19,6 +19,7 @@ WORKDIR /app
 COPY --from=build /api /app/api
 COPY migrations ./migrations
 COPY config ./config
+COPY seed ./seed
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/app/api"]
