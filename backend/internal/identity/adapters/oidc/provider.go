@@ -5,8 +5,10 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,7 +76,7 @@ func (p *Provider) Authenticate(ctx context.Context, code, nonce, verifier strin
 	ctx = coreoidc.ClientContext(ctx, p.client)
 	token, err := p.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 	if err != nil {
-		return domain.Identity{}, apperr.Unauthorized("provider authentication failed")
+		return domain.Identity{}, apperr.Unauthorized("provider authentication failed" + exchangeFailure(err))
 	}
 	raw, ok := token.Extra("id_token").(string)
 	if !ok {
@@ -89,7 +91,7 @@ func (p *Provider) Authenticate(ctx context.Context, code, nonce, verifier strin
 	}
 	verified, err := verifierForToken.Verify(ctx, raw)
 	if err != nil {
-		return domain.Identity{}, apperr.Unauthorized("invalid provider ID token")
+		return domain.Identity{}, apperr.Unauthorized("invalid provider ID token: " + err.Error())
 	}
 	if nonce == "" || subtle.ConstantTimeCompare([]byte(verified.Nonce), []byte(nonce)) != 1 {
 		return domain.Identity{}, apperr.Unauthorized("invalid provider nonce")
@@ -140,6 +142,25 @@ func (p *Provider) identity(issuer, subject string, claims tokenClaims) (domain.
 		return domain.Identity{}, apperr.Unauthorized("invalid provider identity")
 	}
 	return result, nil
+}
+
+// aadstsCode keeps only Microsoft's error number: the rest of
+// error_description can contain the user's account name.
+var aadstsCode = regexp.MustCompile(`\bAADSTS[0-9]{4,8}\b`)
+
+var oauthCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
+
+// exchangeFailure names why the token endpoint refused the code, for the log.
+func exchangeFailure(err error) string {
+	var re *oauth2.RetrieveError
+	if !errors.As(err, &re) {
+		return ""
+	}
+	code := ""
+	if oauthCode.MatchString(re.ErrorCode) {
+		code = re.ErrorCode
+	}
+	return strings.TrimRight(fmt.Sprintf(": %s %s", code, aadstsCode.FindString(re.ErrorDescription)), " ")
 }
 
 func validTenantID(value string) bool {
