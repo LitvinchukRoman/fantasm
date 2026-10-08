@@ -19,6 +19,10 @@ const host = process.env.HOST || "127.0.0.1";
 
 const app = express();
 app.disable("x-powered-by");
+// За Caddy запит приходить по http з loopback. Без довіри до X-Forwarded-Proto/Host
+// request.url у React Router — http://…, і перевірка Origin в action відповідає 400
+// на кожну форму, а API отримує неправильний Origin.
+app.set("trust proxy", "loopback");
 app.use(compression());
 
 // Stable container health endpoint; never enters React Router or the API client.

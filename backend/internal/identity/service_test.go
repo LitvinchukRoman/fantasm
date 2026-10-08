@@ -41,13 +41,23 @@ func (r *memoryRepository) ConsumeLogin(_ context.Context, state, browser string
 	return a, nil
 }
 
-func (r *memoryRepository) UpsertUser(_ context.Context, external domain.Identity, candidate domain.User) (domain.User, error) {
+func (r *memoryRepository) UpsertUser(_ context.Context, external domain.Identity, candidate domain.User, handles []string) (domain.User, error) {
 	key := external.Issuer + "|" + external.Subject
 	r.identities[key] = external
 	if existing, ok := r.users[key]; ok {
 		existing.Email = candidate.Email
 		r.users[key] = existing
 		return existing, nil
+	}
+	taken := map[string]bool{}
+	for _, u := range r.users {
+		taken[u.Handle] = true
+	}
+	for _, h := range handles {
+		if !taken[h] {
+			candidate.Handle = h
+			break
+		}
 	}
 	r.users[key] = candidate
 	return candidate, nil

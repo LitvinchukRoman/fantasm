@@ -11,6 +11,7 @@ import type {
   Thread,
   User,
 } from "./api-types";
+import type { ProfileUpdate } from "./profile";
 
 export class ApiError extends Error {
   constructor(
@@ -107,6 +108,9 @@ export async function getCurrentUser(request: Request): Promise<User | null> {
     throw error;
   }
 }
+
+export const updateProfile = (request: Request, body: ProfileUpdate) =>
+  api<User>(request, "/api/me", { method: "PATCH", body: JSON.stringify(body) });
 
 export const getProviders = (request: Request) =>
   api<{ providers: Provider[] }>(request, "/api/auth/providers");

@@ -36,7 +36,7 @@ func (r *Repository) ConsumeLogin(ctx context.Context, stateHash, browserHash st
 	return attempt, notFound(err)
 }
 
-func (r *Repository) UpsertUser(ctx context.Context, external domain.Identity, candidate domain.User) (domain.User, error) {
+func (r *Repository) UpsertUser(ctx context.Context, external domain.Identity, candidate domain.User, handles []string) (domain.User, error) {
 	var user domain.User
 	err := r.db.WithinTx(ctx, func(ctx context.Context) error {
 		q := r.db.Querier(ctx)
@@ -48,11 +48,22 @@ func (r *Repository) UpsertUser(ctx context.Context, external domain.Identity, c
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			userID = candidate.ID
-			_, err = q.Exec(ctx, `
-				INSERT INTO users (id, handle, name, email, avatar_url, role, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, candidate.ID, candidate.Handle, candidate.Name, candidate.Email, candidate.AvatarURL, candidate.Role, candidate.CreatedAt, candidate.UpdatedAt)
-			if err != nil {
-				return err
+			inserted := false
+			// ON CONFLICT DO NOTHING skips a taken handle without aborting the transaction.
+			for _, handle := range append(handles[:len(handles):len(handles)], candidate.Handle) {
+				tag, err := q.Exec(ctx, `
+					INSERT INTO users (id, handle, name, email, avatar_url, role, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+					ON CONFLICT DO NOTHING`, candidate.ID, handle, candidate.Name, candidate.Email, candidate.AvatarURL, candidate.Role, candidate.CreatedAt, candidate.UpdatedAt)
+				if err != nil {
+					return err
+				}
+				if inserted = tag.RowsAffected() == 1; inserted {
+					break
+				}
+			}
+			if !inserted {
+				return fmt.Errorf("insert user %s: every handle candidate is taken", candidate.ID)
 			}
 			_, err = q.Exec(ctx, `
 				INSERT INTO external_identities (provider, issuer, subject, user_id, tenant_id, email_verified, email)

@@ -63,9 +63,14 @@ __ACME_EMAIL__
 		handle {
 			reverse_proxy 127.0.0.1:{args[1]} {
 				# CloudFront connects with the private origin Host. Restore the
-				# browser-facing host so React Router constructs public URLs and
-				# unsafe SSR API calls send the backend's expected Origin.
+				# browser-facing origin so React Router constructs public URLs, its
+				# action CSRF check matches the browser Origin, and unsafe SSR API
+				# calls send the backend's expected Origin. Node trusts the
+				# forwarded headers only from loopback. Viewers always use HTTPS
+				# (CloudFront redirects plain HTTP before it reaches here).
 				header_up Host {args[6]}
+				header_up X-Forwarded-Host {args[6]}
+				header_up X-Forwarded-Proto https
 				header_up X-Forwarded-For {client_ip}
 				header_up X-Real-IP {client_ip}
 				transport http {

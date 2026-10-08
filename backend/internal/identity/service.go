@@ -30,7 +30,9 @@ const (
 type Repository interface {
 	CreateLogin(context.Context, domain.LoginAttempt) error
 	ConsumeLogin(context.Context, string, string, domain.Provider, time.Time) (domain.LoginAttempt, error)
-	UpsertUser(context.Context, domain.Identity, domain.User) (domain.User, error)
+	// UpsertUser creates the user on first login with the first free handle
+	// from handles, falling back to candidate.Handle, which is always unique.
+	UpsertUser(ctx context.Context, external domain.Identity, candidate domain.User, handles []string) (domain.User, error)
 	CreateSession(context.Context, domain.Session) error
 	// UserBySession finds the owner of a live session: not past its absolute
 	// expiry (now) and seen since idleCutoff.
@@ -175,7 +177,7 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 	auth := Authentication{Token: randomToken(), ExpiresAt: now.Add(s.sessionTTL)}
 	err = s.transactions.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
-		auth.User, err = s.repository.UpsertUser(ctx, external, candidate)
+		auth.User, err = s.repository.UpsertUser(ctx, external, candidate, domain.HandleCandidates(external.Name))
 		if err != nil {
 			return fmt.Errorf("save user: %w", err)
 		}

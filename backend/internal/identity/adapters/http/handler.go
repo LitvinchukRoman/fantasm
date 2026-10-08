@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -129,7 +130,8 @@ func (h *Handler) completeLogin(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	auth, err := h.service.CompleteLogin(ctx, provider, query.Get("state"), cookieValue(r, h.loginCookie), query.Get("code"), cookieValue(r, h.sessionCookie))
 	if err != nil {
-		h.log(r).WarnContext(ctx, "login failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err))
+		h.log(r).WarnContext(ctx, "login failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err),
+			"provider_error", oauthErrorCode(query.Get("error")), "provider_detail", aadstsCode.FindString(query.Get("error_description")))
 		h.loginError(w, r, err)
 		return
 	}
@@ -318,6 +320,19 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, struct {
 		Providers []domain.Provider `json:"providers"`
 	}{Providers: list})
+}
+
+// aadstsCode extracts only Microsoft's error number: the rest of
+// error_description can contain the user's account name.
+var aadstsCode = regexp.MustCompile(`\bAADSTS[0-9]{4,8}\b`)
+
+// oauthErrorCode keeps a provider-supplied OAuth error code loggable: RFC 6749
+// codes are short lowercase words, anything else is attacker-controlled noise.
+func oauthErrorCode(s string) string {
+	if len(s) > 64 || strings.Trim(s, "abcdefghijklmnopqrstuvwxyz_") != "" {
+		return ""
+	}
+	return s
 }
 
 func (h *Handler) loginError(w http.ResponseWriter, r *http.Request, err error) {
