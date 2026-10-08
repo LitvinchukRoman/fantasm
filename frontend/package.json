@@ -22,7 +22,7 @@
     "gray-matter": "^4.0.3",
     "isbot": "^5",
     "morgan": "^1.12.1",
-    "motion": "^13.4.4",
+    "motion": "^13.4.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
