@@ -12,12 +12,19 @@ locals {
   # names (empty suffix) so the move from single-env to for_each is in-place.
   envs = {
     for env, hostname in var.hostnames : env => {
-      hostname = hostname
-      suffix   = env == "prod" ? "" : "-${env}"
-      bucket   = "${var.project_name}-frontend${env == "prod" ? "" : "-${env}"}-${data.aws_caller_identity.current.account_id}"
-      site_url = "https://${hostname}"
+      hostname  = hostname
+      redirects = var.redirect_hostnames[env]
+      suffix    = env == "prod" ? "" : "-${env}"
+      bucket    = "${var.project_name}-frontend${env == "prod" ? "" : "-${env}"}-${data.aws_caller_identity.current.account_id}"
+      site_url  = "https://${hostname}"
     }
   }
+
+  # hostname => env whose distribution answers it (canonical and redirect)
+  site_hosts = merge(
+    { for env, hostname in var.hostnames : hostname => env },
+    [for env, hosts in var.redirect_hostnames : { for host in hosts : host => env }]...
+  )
 
   tags = {
     Project   = var.project_name

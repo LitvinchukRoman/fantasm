@@ -23,16 +23,30 @@ variable "domain_name" {
 }
 
 variable "hostnames" {
-  description = "Public hostname per environment. ideas.naukma.com stays on the MVP until the cutover; then change prod here."
+  description = "Canonical public hostname per environment. Must match public_hostnames in backend/variables.tf."
   type        = map(string)
   default = {
-    prod = "fantasm.naukma.com"
+    prod = "ideas.naukma.com"
     dev  = "fantasm-dev.naukma.com"
   }
 
   validation {
     condition     = toset(keys(var.hostnames)) == toset(["dev", "prod"])
     error_message = "hostnames must have exactly the keys dev and prod."
+  }
+}
+
+variable "redirect_hostnames" {
+  description = "Extra hostnames per environment served by the same distribution only to 301 every request to the canonical hostname."
+  type        = map(list(string))
+  default = {
+    prod = ["fantasm.naukma.com"]
+    dev  = []
+  }
+
+  validation {
+    condition     = toset(keys(var.redirect_hostnames)) == toset(["dev", "prod"])
+    error_message = "redirect_hostnames must have exactly the keys dev and prod."
   }
 }
 

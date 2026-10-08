@@ -23,10 +23,10 @@ variable "domain_name" {
 }
 
 variable "public_hostnames" {
-  description = "Public (browser-facing) hostname per environment. Becomes PUBLIC_URL and the OIDC redirect origin. Change prod here at the ideas.naukma.com cutover (and in edge/variables.tf)."
+  description = "Public (browser-facing) hostname per environment. Becomes PUBLIC_URL and the OIDC redirect origin. Must match hostnames in edge/variables.tf."
   type        = map(string)
   default = {
-    prod = "fantasm.naukma.com"
+    prod = "ideas.naukma.com"
     dev  = "fantasm-dev.naukma.com"
   }
 }

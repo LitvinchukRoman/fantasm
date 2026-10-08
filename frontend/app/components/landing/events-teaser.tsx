@@ -6,7 +6,7 @@ import { IconArrowRight, IconCalendar, IconUsers } from "./icons";
 
 /**
  * "Найближчі події" на лендингу. Є події: до трьох найближчих карток.
- * Немає: порожній стан із закликом створити першу. Текст порожнього стану з legacy/app/page.tsx,
+ * Немає: порожній стан із закликом створити першу. Текст порожнього стану з MVP,
  * em-dash замінено на двокрапку/кому.
  */
 export function EventsTeaser({ events }: { events: IdeaCard[] }) {

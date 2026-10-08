@@ -33,7 +33,7 @@ jobs:
     permissions:
       contents: read
     env:
-      VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm.naukma.com' }}
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm-dev.naukma.com' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

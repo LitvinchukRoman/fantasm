@@ -117,7 +117,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 | --- | --- |
 | `DATABASE_URL` | RDS з `sslmode=verify-full&sslrootcert=/etc/ssl/rds-ca.pem`, роль лише своєї бази |
 | `DB_MAX_CONNS` | 8 для prod, 4 для dev (RDS `db.t4g.micro` дає ~85 з'єднань на обидва середовища) |
-| `PUBLIC_URL` | `https://fantasm.naukma.com` або `https://fantasm-dev.naukma.com`: той самий хост, що в браузера, бо cookie `__Host-` і OIDC callback same-origin |
+| `PUBLIC_URL` | `https://ideas.naukma.com` або `https://fantasm-dev.naukma.com`: той самий хост, що в браузера, бо cookie `__Host-` і OIDC callback same-origin |
 | `APP_SECRET` | ≥ 32 символи (обовʼязково при HTTPS), окремий для кожного середовища |
 | `TRUSTED_PROXY_CIDRS` | мережа Docker-моста: Caddy перезаписує `X-Forwarded-For` перевіреною адресою клієнта, і API довіряє заголовку лише від цієї мережі |
 | `LOG_LEVEL` | `info` |

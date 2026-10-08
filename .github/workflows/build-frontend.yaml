@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://fantasm.naukma.com' }}
+  VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://ideas.naukma.com' }}
 
 jobs:
   build-frontend:

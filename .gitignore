@@ -26,10 +26,6 @@ infra/terraform/**/tfplan
 infra/terraform/**/*.tfplan
 infra/terraform/**/crash.log
 infra/terraform/**/terraform.tfvars
-legacy/node_modules/
-legacy/.next/
-legacy/out/
-legacy/*.tsbuildinfo
 *.log
 
 CLAUDE.md

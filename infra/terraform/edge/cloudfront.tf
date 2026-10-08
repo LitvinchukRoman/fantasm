@@ -82,12 +82,23 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
   }
 }
 
+# Only distributions with redirect hostnames get it; every behavior runs it.
+resource "aws_cloudfront_function" "canonical_host" {
+  for_each = { for env, c in local.envs : env => c if length(c.redirects) > 0 }
+
+  name    = "${var.project_name}-canonical-host${each.value.suffix}"
+  comment = "301 ${join(", ", each.value.redirects)} to ${each.value.hostname}"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = templatefile("${path.module}/functions/canonical-host.js", { canonical = each.value.hostname })
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   for_each = local.envs
 
   enabled             = true
   comment             = "${var.project_name} frontend${each.value.suffix}"
-  aliases             = [each.value.hostname]
+  aliases             = concat([each.value.hostname], each.value.redirects)
   is_ipv6_enabled     = true
   http_version        = "http2and3"
   price_class         = "PriceClass_100"
@@ -133,6 +144,13 @@ resource "aws_cloudfront_distribution" "frontend" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
+    dynamic "function_association" {
+      for_each = contains(keys(aws_cloudfront_function.canonical_host), each.key) ? [aws_cloudfront_function.canonical_host[each.key].arn] : []
+      content {
+        event_type   = "viewer-request"
+        function_arn = function_association.value
+      }
+    }
   }
 
   # Hashed browser assets stay private in S3; Node never spends memory or
@@ -146,6 +164,13 @@ resource "aws_cloudfront_distribution" "frontend" {
     viewer_protocol_policy     = "redirect-to-https"
     cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
+    dynamic "function_association" {
+      for_each = contains(keys(aws_cloudfront_function.canonical_host), each.key) ? [aws_cloudfront_function.canonical_host[each.key].arn] : []
+      content {
+        event_type   = "viewer-request"
+        function_arn = function_association.value
+      }
+    }
   }
 
   # Same-origin API: the browser talks to one host, so __Host- session cookies
@@ -161,6 +186,13 @@ resource "aws_cloudfront_distribution" "frontend" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend[each.key].id
+    dynamic "function_association" {
+      for_each = contains(keys(aws_cloudfront_function.canonical_host), each.key) ? [aws_cloudfront_function.canonical_host[each.key].arn] : []
+      content {
+        event_type   = "viewer-request"
+        function_arn = function_association.value
+      }
+    }
   }
 
   # No custom error responses: they are distribution-wide and would replace the
