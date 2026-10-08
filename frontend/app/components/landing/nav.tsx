@@ -106,8 +106,12 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
               >
                 Сповіщення{root.unread > 0 ? ` · ${root.unread}` : ""}
               </Link>
-              <Link to={`/u/${root.currentUser.handle}`} className="hidden text-sm text-[var(--color-text)] md:inline">
-                @{root.currentUser.handle}
+              <Link
+                to={`/u/${root.currentUser.handle}`}
+                className="hidden max-w-40 truncate text-sm text-[var(--color-text)] md:inline"
+                title={`@${root.currentUser.handle}`}
+              >
+                {root.currentUser.name}
               </Link>
               <logout.Form method="post" action="/logout">
                 <button className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm text-[var(--color-text)]">
