@@ -39,9 +39,12 @@ export async function routeApi<T>(task: Promise<T>): Promise<T> {
   }
 }
 
+function internalBase(): string | undefined {
+  return typeof window === "undefined" ? process.env.API_INTERNAL_URL : undefined;
+}
+
 function endpoint(request: Request, path: string): URL {
-  const base = typeof window === "undefined" ? process.env.API_INTERNAL_URL : undefined;
-  return new URL(path, base || new URL(request.url).origin);
+  return new URL(path, internalBase() || new URL(request.url).origin);
 }
 
 async function parseError(response: Response): Promise<ApiErrorBody> {
@@ -67,6 +70,11 @@ export async function apiResponse(
   if (init.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
     headers.set("origin", new URL(request.url).origin);
   }
+  // Without it Go sees every render as the Docker bridge address and all
+  // visitors share one rate-limit bucket. Caddy overwrites the header with the
+  // verified client address, and Go believes it only from the trusted bridge.
+  const clientIp = request.headers.get("x-forwarded-for");
+  if (internalBase() && clientIp) headers.set("x-forwarded-for", clientIp);
 
   let response: Response;
   try {
