@@ -1,11 +1,17 @@
 name: Deploy backend prod
 
-# By hand only, with an image tag that already runs on dev. Never rebuilds: the
-# same image is scanned again and deployed. A release-<sha> tag is an image prod
-# already ran (a rollback) and skips the scan, so a scanner can never block a
-# rollback. The prod environment requires a reviewer.
+# A successful main-branch dev deployment automatically promotes the exact same
+# image to prod. The prod environment scopes credentials and only allows main.
+# Manual dispatch is retained only for an explicit deploy/rollback.
+#
+# Prod never rebuilds. A release-<sha> tag is an image prod already ran (a
+# rollback) and skips the scan, so a newly published scanner rule can never
+# block a rollback.
 
 on:
+  workflow_run:
+    workflows: ["Deploy backend dev"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -22,6 +28,10 @@ concurrency:
 jobs:
   deploy:
     name: Deploy backend prod
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     environment: prod
@@ -29,7 +39,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      IMAGE_TAG: ${{ inputs.image_tag }}
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && format('sha-{0}', github.event.workflow_run.head_sha) || inputs.image_tag }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       SSM_DEPLOY_DOCUMENT: ${{ vars.SSM_DEPLOY_DOCUMENT }}
@@ -48,14 +58,14 @@ jobs:
           aws-region: eu-central-1
           role-session-name: fantasm-backend-prod
       - name: Pull the image from ECR
-        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        if: ${{ !startsWith(env.IMAGE_TAG, 'release-') }}
         run: |
           set -euo pipefail
           aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
           docker pull "${ECR_REPOSITORY}:${IMAGE_TAG}"
       # New CVEs appear after an image was built: scan the exact image again.
       - name: Scan the image again (grype, fail on CRITICAL)
-        if: ${{ !startsWith(inputs.image_tag, 'release-') }}
+        if: ${{ !startsWith(env.IMAGE_TAG, 'release-') }}
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
