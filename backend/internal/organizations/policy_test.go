@@ -1,6 +1,7 @@
 package organizations
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -120,5 +121,54 @@ func TestShippedConfigurations(t *testing.T) {
 		if _, err := Load(path); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
+	}
+}
+
+func TestShippedNaUKMAPolicy(t *testing.T) {
+	const naukmaTenant = "b8cbfe43-c90c-4bea-84ae-be5d6d8a5f52"
+	p, err := Load("../../config/organizations.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := domain.Identity{
+		Provider:      domain.Entra,
+		Issuer:        "https://login.microsoftonline.com/" + naukmaTenant + "/v2.0",
+		Subject:       "naukma-user",
+		TenantID:      naukmaTenant,
+		Email:         "student@ukma.edu.ua",
+		EmailVerified: true,
+	}
+	memberships := p.Evaluate([]domain.Identity{valid})
+	if len(memberships) != 1 {
+		t.Fatalf("valid NaUKMA identity memberships = %+v", memberships)
+	}
+	m := memberships[0]
+	if m.OrganizationID != "naukma" || m.Badge != "Могилянець" ||
+		!slices.Contains(m.Capabilities, "ideas.read_internal") ||
+		!slices.Contains(m.Capabilities, "ideas.create_internal") ||
+		m.Benefits.VoteWeight != 2 || m.Benefits.RankingMultiplier != 1.5 ||
+		m.Benefits.KarmaMultiplier != 1.5 || !m.Benefits.SkipPremoderation {
+		t.Fatalf("unexpected NaUKMA policy: %+v", m)
+	}
+
+	for name, edit := range map[string]func(*domain.Identity){
+		"unverified email": func(i *domain.Identity) { i.EmailVerified = false },
+		"wrong domain":     func(i *domain.Identity) { i.Email = "student@example.com" },
+		"wrong tenant": func(i *domain.Identity) {
+			i.TenantID = tenant
+			i.Issuer = "https://login.microsoftonline.com/" + tenant + "/v2.0"
+		},
+		"google": func(i *domain.Identity) {
+			i.Provider = domain.Google
+			i.Issuer = "https://accounts.google.com"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			identity := valid
+			edit(&identity)
+			if got := p.Evaluate([]domain.Identity{identity}); len(got) != 0 {
+				t.Fatalf("untrusted identity granted membership: %+v", got)
+			}
+		})
 	}
 }
