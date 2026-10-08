@@ -2,10 +2,12 @@
  * Прод-сервер замість react-router-serve. Той роздає build/client через
  * express.static з redirect: true, тож /ideas відповідає 301 на /ideas/ —
  * а canonical, sitemap і всі посилання сайту без кінцевого слеша.
- * Тут навпаки: /ideas віддає пререндерений ideas/index.html з 200,
- * а /ideas/ редіректить на /ideas. Одна адреса на сторінку.
+ * Тут /ideas/ редіректить на /ideas: одна адреса на сторінку.
+ *
+ * Кожну сторінку рендерить SSR. Пререндерені HTML і .data з build/client
+ * не віддаються: вони зібрані без сесії, і шапка на них показувала б «Увійти».
+ * Пререндер лишається лише для перевірки SEO в CI (scripts/check-seo.mjs).
  */
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequestHandler } from "@react-router/express";
 import compression from "compression";
@@ -46,18 +48,12 @@ app.use(
   express.static(path.join(CLIENT_DIR, "assets"), { immutable: true, maxAge: "1y", index: false, redirect: false }),
 );
 
-// Пререндерені сторінки: /ideas → build/client/ideas/index.html, / → index.html.
-// Query (?tag=…) не впливає на файл: фільтри застосовує клієнт.
+const clientStatic = express.static(CLIENT_DIR, { maxAge: "1h", index: false, redirect: false });
 app.use((req, res, next) => {
-  if (req.method !== "GET" && req.method !== "HEAD") return next();
-  if (path.extname(req.path)) return next();
-  const file = path.join(CLIENT_DIR, req.path, "index.html");
-  if (!file.startsWith(CLIENT_DIR + path.sep) || !existsSync(file)) return next();
-  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  res.sendFile(file);
+  const ext = path.extname(req.path);
+  if (ext === ".html" || ext === ".data") return next();
+  clientStatic(req, res, next);
 });
-
-app.use(express.static(CLIENT_DIR, { maxAge: "1h", index: false, redirect: false }));
 app.use(express.static("public", { maxAge: "1h", index: false, redirect: false }));
 app.use(morgan("tiny"));
 app.all("*", createRequestHandler({ build, mode: process.env.NODE_ENV }));

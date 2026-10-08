@@ -104,7 +104,7 @@ aws ssm put-parameter --overwrite --type SecureString \
 | merge у `main` (`frontend/` або frontend deploy files) | `deploy-frontend-dev.yaml`: typecheck/tests/build/SEO, нативна arm64 image `dev-sha-<commit>`, ECR registry cache, immutable `/assets` у S3, SSM deploy з rollback, public smoke |
 | успішний dev frontend на `main` | `deploy-frontend-prod.yaml` (`workflow_run`): той самий коміт, окрема image `prod-sha-<commit>` (prod URL baked in), assets, SSM deploy з rollback, smoke. Вручну — `workflow_dispatch` |
 | merge у `main` (`backend/`) | `deploy-backend-dev.yaml`: збірка arm64, grype, пуш `fantasm-api:sha-<commit>` (immutable), деплой у dev через SSM, smoke через CloudFront |
-| успішний dev backend на `main` | `deploy-backend-prod.yaml` (`workflow_run`): та сама image без перезбірки, повторний grype, `release-<sha>`, SSM deploy, smoke. Вручну — rollback на `release-<sha>` |
+| успішний dev backend на `main` | `deploy-backend-prod.yaml` (`workflow_run`): та сама image без перезбірки, повторний grype, `release-<sha>`, SSM deploy, smoke. Вручну з порожнім тегом — викотити те, що зараз на dev; `release-<sha>` — rollback |
 
 Smoke фронтенду падає, якщо `/` віддає S3 замість Node, тож розходження архітектури середовищ ламає CI.
 

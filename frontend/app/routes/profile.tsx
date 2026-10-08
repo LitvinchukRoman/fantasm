@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { data } from "react-router";
+import { data, useRouteLoaderData } from "react-router";
 import { IdeaRow } from "~/components/ideas/idea-row";
 import { CurvedRows } from "~/components/ideas/curved-rows";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
@@ -14,6 +14,7 @@ import { getCurrentUser, getProfile, routeApi } from "~/lib/api.server";
 import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { useCurvedMode } from "~/lib/use-curved-mode";
+import type { RootData } from "~/root";
 import type { Route } from "./+types/profile";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -44,6 +45,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 export default function ProfilePage({ loaderData }: Route.ComponentProps) {
   const { profile, ideas, isOwner } = loaderData;
+  const unread = useRouteLoaderData<RootData>("root")?.unread ?? 0;
   const curved = useCurvedMode() && ideas.length >= 2;
 
   useEffect(() => {
@@ -91,9 +93,14 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
             />
 
             {isOwner && (
-              <Button to="/settings" variant="secondary" size="sm">
-                Редагувати профіль
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button to="/settings" variant="secondary" size="sm">
+                  Редагувати профіль
+                </Button>
+                <Button to="/notifications" variant="secondary" size="sm">
+                  Сповіщення{unread > 0 ? ` · ${unread}` : ""}
+                </Button>
+              </div>
             )}
           </aside>
 
