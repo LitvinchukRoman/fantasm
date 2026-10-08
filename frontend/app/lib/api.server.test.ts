@@ -22,6 +22,23 @@ describe("server API client", () => {
     expect(new Headers(init.headers).get("cookie")).toBe("session=abc");
   });
 
+  it("forwards the visitor address to the internal API only", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = () => new Request("https://fantasm.test/ideas", { headers: { "x-forwarded-for": "203.0.113.7" } });
+
+    process.env.API_INTERNAL_URL = "http://backend:8080";
+    await api(page(), "/api/ideas");
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get("x-forwarded-for")).toBe("203.0.113.7");
+
+    delete process.env.API_INTERNAL_URL;
+    await api(page(), "/api/ideas");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("x-forwarded-for")).toBeNull();
+  });
+
   it("treats a missing cookie and API 401 as signed out", async () => {
     expect(await getCurrentUser(new Request("https://fantasm.test/"))).toBeNull();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
