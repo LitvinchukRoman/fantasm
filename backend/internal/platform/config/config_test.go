@@ -10,7 +10,7 @@ var keys = []string{
 	"ORGANIZATION_RULES_FILE", "ADDR", "DATABASE_URL", "MIGRATIONS_DIR", "MIGRATE_ON_START", "PUBLIC_URL",
 	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET", "LOG_LEVEL", "APP_SECRET", "TRUSTED_PROXY_CIDRS",
 	"RATE_LIMIT_ANON_RPS", "RATE_LIMIT_ANON_BURST", "RATE_LIMIT_USER_RPS", "RATE_LIMIT_USER_BURST", "RATE_LIMIT_LOGIN_PER_MIN", "RATE_LIMIT_POSTS_PER_MIN",
-	"SESSION_ABSOLUTE_TTL", "SESSION_IDLE_TTL", "DB_MAX_CONNS", "DB_STATEMENT_TIMEOUT", "SHUTDOWN_TIMEOUT", "REQUEST_TIMEOUT",
+	"SESSION_ABSOLUTE_TTL", "SESSION_IDLE_TTL", "DB_MAX_CONNS", "DB_STATEMENT_TIMEOUT", "SHUTDOWN_TIMEOUT", "REQUEST_TIMEOUT", "METRICS_ADDR",
 }
 
 // env starts from an empty environment and applies overrides.
@@ -38,6 +38,9 @@ func TestDefaultsAreSafeAndValid(t *testing.T) {
 	}
 	if cfg.MigrateOnStart {
 		t.Error("migrations must not run on start by default")
+	}
+	if cfg.MetricsAddr != "" {
+		t.Fatal("metrics must be disabled by default")
 	}
 	if cfg.RequestTimeout <= 0 || cfg.ShutdownTimeout <= 0 || cfg.DBStatementTimeout <= 0 || cfg.DBMaxConns <= 0 {
 		t.Errorf("unbounded defaults: %+v", cfg)
@@ -87,11 +90,23 @@ func TestMisconfigurationStopsStartup(t *testing.T) {
 		"zero timeout":              {"REQUEST_TIMEOUT": "0s"},
 		"year-long timeout":         {"REQUEST_TIMEOUT": "8760h"},
 		"sub-hour absolute session": {"SESSION_ABSOLUTE_TTL": "1m"},
+		"metrics missing port":      {"METRICS_ADDR": "localhost"},
+		"metrics invalid port":      {"METRICS_ADDR": "localhost:70000"},
 	}
 	for name, overrides := range cases {
 		env(t, overrides)
 		if _, err := Load(); err == nil {
 			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestMetricsAddress(t *testing.T) {
+	for _, addr := range []string{"127.0.0.1:9091", ":9091", "[::1]:9091"} {
+		env(t, map[string]string{"METRICS_ADDR": addr})
+		cfg, err := Load()
+		if err != nil || cfg.MetricsAddr != addr {
+			t.Fatalf("%s: %v", addr, err)
 		}
 	}
 }

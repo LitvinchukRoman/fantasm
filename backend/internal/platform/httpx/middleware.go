@@ -48,15 +48,48 @@ func RequestID(proxies Proxies) Middleware {
 }
 
 // AccessLog writes one structured line per request, after it finished.
-func AccessLog(logger *slog.Logger, proxies Proxies) Middleware {
+type RequestObserver interface {
+	ObserveHTTP(method, route string, status, bytes int, duration time.Duration)
+}
+
+type AccessOptions struct {
+	Secret   string
+	Router   *http.ServeMux
+	Observer RequestObserver
+}
+
+func RequestMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions, http.MethodConnect, http.MethodTrace:
+		return method
+	default:
+		return "OTHER"
+	}
+}
+
+func AccessLog(logger *slog.Logger, proxies Proxies, options ...AccessOptions) Middleware {
+	var opts AccessOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := record(w)
-			meta := &info{}
+			meta := &info{route: "unmatched"}
+			if opts.Router != nil {
+				if _, pattern := opts.Router.Handler(r); pattern != "" {
+					meta.route = pattern
+				}
+			}
 			ctx := context.WithValue(r.Context(), infoKey, meta)
-			ctx = logging.With(ctx, logger.With("request_id", RequestIDFrom(ctx)))
+			ctx = logging.With(ctx, logger.With("request_id", RequestIDFrom(ctx), "route", meta.route))
 			defer func() {
+				duration := time.Since(start)
+				method := RequestMethod(r.Method)
+				if opts.Observer != nil {
+					opts.Observer.ObserveHTTP(method, meta.route, rec.status, rec.bytes, duration)
+				}
 				level := slog.LevelInfo
 				switch {
 				case rec.status >= 500:
@@ -65,15 +98,16 @@ func AccessLog(logger *slog.Logger, proxies Proxies) Middleware {
 					level = slog.LevelWarn
 				}
 				logger.Log(ctx, level, "request",
+					"event", "http.request",
 					"request_id", RequestIDFrom(ctx),
-					"method", r.Method,
-					// Only the path: queries can carry OAuth codes and tokens.
-					"path", r.URL.Path,
+					"method", method,
+					"route", meta.route,
 					"status", rec.status,
 					"bytes", rec.bytes,
-					"duration_ms", time.Since(start).Milliseconds(),
-					"ip", proxies.ClientIP(r),
+					"duration_ms", float64(duration)/float64(time.Millisecond),
+					"client_hash", logging.AddressHash(opts.Secret, proxies.ClientIP(r)),
 					"user_id", meta.userID,
+					"error_kind", meta.errorCode,
 				)
 			}()
 			next.ServeHTTP(rec, r.WithContext(ctx))
@@ -95,7 +129,10 @@ func Recover() Middleware {
 					panic(v)
 				}
 				logging.From(r.Context()).ErrorContext(r.Context(), "panic recovered",
-					"method", r.Method, "path", r.URL.Path, "panic", v, "stack", string(debug.Stack()))
+					"event", "http.panic", "method", RequestMethod(r.Method), "panic", v, "stack", string(debug.Stack()))
+				if meta, ok := r.Context().Value(infoKey).(*info); ok {
+					meta.errorCode = "panic"
+				}
 				if !rec.wrote {
 					rec.Header().Set("Cache-Control", "no-store")
 					WriteJSON(rec, http.StatusInternalServerError, errorBody{

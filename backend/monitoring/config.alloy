@@ -1,0 +1,47 @@
+discovery.docker "api" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "1s"
+  filter {
+    name = "label"
+    values = [
+      "com.docker.compose.project=" + sys.env("COMPOSE_PROJECT_NAME"),
+      "com.docker.compose.service=fantasm-api",
+    ]
+  }
+}
+
+discovery.relabel "api" {
+  targets = []
+  rule {
+    target_label = "service"
+    replacement = "fantasm-api"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label = "project"
+  }
+}
+
+loki.source.docker "api" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.docker.api.targets
+  relabel_rules = discovery.relabel.api.rules
+  forward_to = [loki.process.api.receiver]
+  refresh_interval = "1s"
+}
+
+loki.process "api" {
+  stage.json {
+    expressions = { level = "level", event = "event" }
+  }
+  stage.labels {
+    values = { level = "", event = "" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

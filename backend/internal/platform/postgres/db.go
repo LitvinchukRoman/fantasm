@@ -67,6 +67,8 @@ func ConnectWith(ctx context.Context, url string, opts Options) (*DB, error) {
 
 func (db *DB) Close() { db.pool.Close() }
 
+func (db *DB) Stat() *pgxpool.Stat { return db.pool.Stat() }
+
 func (db *DB) Ping(ctx context.Context) error { return db.pool.Ping(ctx) }
 
 func (db *DB) Querier(ctx context.Context) Querier {

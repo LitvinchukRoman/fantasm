@@ -20,7 +20,11 @@ const (
 
 // info is filled while a request travels down the chain so the access log can
 // report who made it.
-type info struct{ userID string }
+type info struct {
+	userID    string
+	route     string
+	errorCode string
+}
 
 func RequestIDFrom(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey).(string)
@@ -111,9 +115,12 @@ func statusOf(kind apperr.Kind) (int, string) {
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	kind := apperr.KindOf(err)
 	status, code := statusOf(kind)
+	if meta, ok := r.Context().Value(infoKey).(*info); ok {
+		meta.errorCode = code
+	}
 	body := errorBody{Error: "internal server error", Code: code, RequestID: RequestIDFrom(r.Context())}
 	if status == http.StatusInternalServerError {
-		logging.From(r.Context()).ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		logging.From(r.Context()).ErrorContext(r.Context(), "request failed", "event", "http.error", "method", RequestMethod(r.Method), "error", err)
 	} else {
 		body.Error = apperr.MessageOf(err)
 		body.Fields = apperr.FieldsOf(err)

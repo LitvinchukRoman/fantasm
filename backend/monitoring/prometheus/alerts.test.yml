@@ -1,0 +1,42 @@
+rule_files:
+  - /etc/prometheus/alerts.yml
+evaluation_interval: 15s
+tests:
+  - name: First startup job failure alerts without an earlier counter sample
+    interval: 1m
+    input_series:
+      - series: 'fantasm_job_last_failure_timestamp_seconds{name="purge-expired"}'
+        values: '_ 60+0x20'
+      - series: 'up{job="fantasm-api"}'
+        values: '1+0x21'
+      - series: fantasm_ready
+        values: '1+0x21'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FantasmJobFailures
+        exp_alerts:
+          - exp_labels:
+              name: purge-expired
+              severity: warning
+            exp_annotations:
+              summary: A background job failed
+      - eval_time: 17m
+        alertname: FantasmJobFailures
+        exp_alerts: []
+  - name: Idle healthy service does not report request errors or latency
+    interval: 1m
+    input_series:
+      - series: 'up{job="fantasm-api"}'
+        values: '1+0x10'
+      - series: fantasm_ready
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FantasmServerErrors
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FantasmSlowRequests
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FantasmUnavailable
+        exp_alerts: []

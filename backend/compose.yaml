@@ -2,7 +2,7 @@ services:
   fantasm-api:
     build: .
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     environment:
       ADDR: :8080
       DATABASE_URL: postgres://fantasm:fantasm@fantasm-postgres:5432/fantasm?sslmode=disable
@@ -50,7 +50,7 @@ services:
       POSTGRES_PASSWORD: fantasm
       POSTGRES_DB: fantasm
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

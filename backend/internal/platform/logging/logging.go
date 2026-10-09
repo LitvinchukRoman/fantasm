@@ -4,6 +4,9 @@ package logging
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"log/slog"
 	"strings"
@@ -20,7 +23,16 @@ func New(w io.Writer, level string) *slog.Logger {
 	if err := l.UnmarshalText([]byte(strings.ToLower(level))); err != nil {
 		l = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l, ReplaceAttr: redact}))
+	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l, ReplaceAttr: redact})).With("service", "fantasm-api")
+}
+
+func AddressHash(secret, address string) string {
+	if secret == "" || address == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(address))
+	return hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
 func redact(groups []string, a slog.Attr) slog.Attr {
