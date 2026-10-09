@@ -1,6 +1,6 @@
 module github.com/LitvinchukRoman/fantasm/backend
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/coreos/go-oidc/v3 v3.14.1

@@ -191,13 +191,37 @@ func (s *Service) Decide(ctx context.Context, v viewer.Viewer, ideaID string, de
 				}
 			}
 		}
-		s.log.WarnContext(ctx, "moderation decision", "event", "moderation.decision", "request_id", httpx.RequestIDFrom(ctx), "idea_id", idea.ID, "case_id", caseID, "decision", decision, "from", idea.State, "moderator_id", v.ID())
+		s.log.WarnContext(ctx, "moderation decision", "event", "moderation.decision", "request_id", httpx.RequestIDFrom(ctx), "decision", decisionLabel(decision), "from", stateLabel(domain.State(idea.State)))
 		n := notify.Notification{UserID: idea.AuthorID, Type: notify.Approved, Payload: map[string]any{"ideaSlug": idea.Slug, "ideaTitle": idea.Title}}
 		if decision != domain.Approved {
 			n.Type, n.Payload["decision"] = notify.Hidden, string(decision)
 		}
 		return s.notify.Publish(ctx, n)
 	})
+}
+
+func decisionLabel(decision domain.Decision) string {
+	switch decision {
+	case domain.Approved:
+		return "approved"
+	case domain.Hidden:
+		return "hidden"
+	case domain.Rejected:
+		return "rejected"
+	default:
+		return "unknown"
+	}
+}
+
+func stateLabel(state domain.State) string {
+	switch state {
+	case domain.Pending:
+		return "pending"
+	case domain.HiddenState:
+		return "hidden"
+	default:
+		return "unknown"
+	}
 }
 
 // Reports lists what people said about one idea, newest first.
