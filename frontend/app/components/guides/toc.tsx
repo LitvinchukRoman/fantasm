@@ -50,12 +50,15 @@ export function Toc({ items }: { items: TocItem[] }) {
     if (!list || !link) return;
 
     const measure = () => {
-      const listBox = list.getBoundingClientRect();
-      const linkBox = link.getBoundingClientRect();
-      setBar({
-        top: linkBox.top - listBox.top,
-        height: linkBox.height,
-      });
+      // offsetTop рахується від початку вмісту списку, тож риска не з'їжджає, коли список прокручений.
+      setBar({ top: link.offsetTop, height: link.offsetHeight });
+      // Довгий зміст прокручується всередині себе: активний пункт тримаємо в полі зору,
+      // не зачіпаючи прокрутку сторінки (scrollIntoView її б посунув).
+      const visibleTop = list.scrollTop;
+      const visibleBottom = visibleTop + list.clientHeight;
+      if (link.offsetTop < visibleTop || link.offsetTop + link.offsetHeight > visibleBottom) {
+        list.scrollTo({ top: link.offsetTop - list.clientHeight / 2 + link.offsetHeight / 2, behavior: "smooth" });
+      }
     };
 
     measure();
@@ -69,10 +72,13 @@ export function Toc({ items }: { items: TocItem[] }) {
   return (
     <nav aria-label="Зміст" className="text-sm">
       <p className="hud-label mb-3">[ Зміст ]</p>
-      <ul ref={listRef} className="relative border-l border-[var(--color-border)]">
+      <ul
+        ref={listRef}
+        className="relative max-h-[calc(100vh-11rem)] overflow-y-auto overscroll-contain shadow-[inset_1px_0_0_var(--color-border)]"
+      >
         <span
           aria-hidden="true"
-          className="absolute -left-px w-0.5 bg-[var(--color-accent)] transition-[top,height] duration-300 ease-out"
+          className="absolute left-0 w-0.5 bg-[var(--color-accent)] transition-[top,height] duration-300 ease-out"
           style={{ top: bar.top, height: bar.height }}
         />
         {items.map((item) => {
@@ -86,7 +92,7 @@ export function Toc({ items }: { items: TocItem[] }) {
                 href={`#${item.id}`}
                 aria-current={current ? "location" : undefined}
                 className={
-                  "block py-1.5 pr-2 transition-colors " +
+                  "block py-1 pr-2 text-[13px] leading-snug transition-colors " +
                   (item.depth === 3 ? "pl-12 " : "pl-7 ") +
                   (current
                     ? "font-medium text-[var(--color-accent)]"

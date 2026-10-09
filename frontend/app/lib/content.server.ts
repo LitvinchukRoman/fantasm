@@ -27,8 +27,8 @@ function docPath(hub: HubSlug, slug: string) {
   return slug ? `/${hub}/${slug}` : `/${hub}`;
 }
 
-/** Службові заголовки-заклики в кінці статті: у тексті лишаються, у змісті лише дрібнять навігацію. */
-const TOC_SKIP = new Set(["наступний крок"]);
+/** Службові заголовки в кінці статті (заклик, підсумок, джерела): у тексті лишаються, у змісті лише подовжують навігацію. */
+const TOC_SKIP = new Set(["наступний крок", "підсумок", "джерела"]);
 
 export function buildToc(body: string): TocItem[] {
   const slugger = new GithubSlugger();

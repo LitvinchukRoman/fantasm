@@ -2,7 +2,7 @@ import { Button } from "~/components/ui/button";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { formatDate } from "~/components/articles/shared";
-import type { DocLink, DocView, Faq, TocItem } from "~/lib/content-meta";
+import { compactToc, type DocLink, type DocView, type Faq, type TocItem } from "~/lib/content-meta";
 import { docCrumbs } from "~/lib/structured-data";
 import { GuideMarkdown } from "./markdown";
 import { GuideTimeline } from "./guide-timeline";
@@ -48,7 +48,7 @@ export function ArticleView({
   const fm = doc.frontmatter;
   const crumbs = docCrumbs(doc);
   const hasFaq = (fm.faq?.length ?? 0) > 0;
-  const tocItems = useMemo(() => (hasFaq ? [...doc.toc, FAQ_TOC_ITEM] : doc.toc), [doc.toc, hasFaq]);
+  const tocItems = useMemo(() => compactToc(hasFaq ? [...doc.toc, FAQ_TOC_ITEM] : doc.toc), [doc.toc, hasFaq]);
 
   return (
     <article>
