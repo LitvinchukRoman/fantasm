@@ -44,6 +44,20 @@ export interface TocItem {
   text: string;
   id: string;
 }
+
+/** Скільки пунктів показуємо в бічному змісті: більше не читається, а довгий список виходить за екран. */
+export const TOC_MAX_ITEMS = 8;
+
+/**
+ * Стискає зміст до читабельного розміру: ховає заголовки третього рівня, а якщо розділів усе одно
+ * більше за ліміт, лишає перші й останній (зазвичай «Часті запитання»), щоб до кінця статті
+ * можна було дійти одним кліком. У тексті статті всі заголовки лишаються.
+ */
+export function compactToc(items: TocItem[], max: number = TOC_MAX_ITEMS): TocItem[] {
+  const top = items.filter((item) => item.depth === 2);
+  if (top.length <= max) return top;
+  return [...top.slice(0, max - 1), top[top.length - 1]];
+}
 export interface DocLink {
   title: string;
   description: string;
