@@ -92,7 +92,7 @@ func (s *Service) Report(ctx context.Context, v viewer.Viewer, slug, reason stri
 		if err := s.repo.OpenCase(ctx, idea.ID, domain.Reports, now); err != nil {
 			return fmt.Errorf("open case: %w", err)
 		}
-		s.log.WarnContext(ctx, "idea hidden by reports", "idea_id", idea.ID, "reports", open)
+		s.log.WarnContext(ctx, "idea hidden by reports", "event", "moderation.auto_hidden", "request_id", httpx.RequestIDFrom(ctx), "idea_id", idea.ID, "reports", open)
 		return s.notify.Publish(ctx, notify.Notification{UserID: idea.AuthorID, Type: notify.Hidden, Payload: map[string]any{
 			"ideaSlug": idea.Slug, "ideaTitle": idea.Title, "decision": "HIDDEN", "automatic": true,
 		}})
@@ -191,7 +191,7 @@ func (s *Service) Decide(ctx context.Context, v viewer.Viewer, ideaID string, de
 				}
 			}
 		}
-		s.log.WarnContext(ctx, "moderation decision", "idea_id", idea.ID, "case_id", caseID, "decision", decision, "from", idea.State, "moderator_id", v.ID())
+		s.log.WarnContext(ctx, "moderation decision", "event", "moderation.decision", "request_id", httpx.RequestIDFrom(ctx), "idea_id", idea.ID, "case_id", caseID, "decision", decision, "from", idea.State, "moderator_id", v.ID())
 		n := notify.Notification{UserID: idea.AuthorID, Type: notify.Approved, Payload: map[string]any{"ideaSlug": idea.Slug, "ideaTitle": idea.Title}}
 		if decision != domain.Approved {
 			n.Type, n.Payload["decision"] = notify.Hidden, string(decision)

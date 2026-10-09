@@ -19,11 +19,17 @@ type Job struct {
 }
 
 type Runner struct {
-	logger *slog.Logger
-	jobs   []Job
+	logger  *slog.Logger
+	jobs    []Job
+	observe func(string, time.Duration, error)
 }
 
 func NewRunner(logger *slog.Logger, jobs ...Job) *Runner { return &Runner{logger: logger, jobs: jobs} }
+
+func (r *Runner) WithObserver(observe func(string, time.Duration, error)) *Runner {
+	r.observe = observe
+	return r
+}
 
 // Run starts every job and blocks until ctx is cancelled and all of them returned.
 // A failing or panicking run is logged and does not stop later ticks.
@@ -56,11 +62,15 @@ func (r *Runner) once(ctx context.Context, job Job) {
 	defer cancel()
 	start := time.Now()
 	err := safely(runCtx, job.Run)
+	duration := time.Since(start)
+	if r.observe != nil {
+		r.observe(job.Name, duration, err)
+	}
 	if err != nil {
-		r.logger.Error("job failed", "job", job.Name, "error", err, "duration_ms", time.Since(start).Milliseconds())
+		r.logger.ErrorContext(ctx, "job failed", "event", "job.finished", "outcome", "error", "job", job.Name, "error", err, "duration_ms", float64(duration)/float64(time.Millisecond))
 		return
 	}
-	r.logger.Debug("job finished", "job", job.Name, "duration_ms", time.Since(start).Milliseconds())
+	r.logger.InfoContext(ctx, "job finished", "event", "job.finished", "outcome", "success", "job", job.Name, "duration_ms", float64(duration)/float64(time.Millisecond))
 }
 
 func safely(ctx context.Context, fn func(context.Context) error) (err error) {

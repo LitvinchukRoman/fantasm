@@ -132,10 +132,11 @@ func (h *Handler) completeLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log(r).WarnContext(ctx, "login failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err), "reason", apperr.MessageOf(err),
 			"provider_error", oauthErrorCode(query.Get("error")), "provider_detail", aadstsCode.FindString(query.Get("error_description")))
+		h.log(r).WarnContext(ctx, "login failed", "event", "auth.login_failed", "provider", provider, "outcome", "failure", "kind", apperr.KindOf(err))
 		h.loginError(w, r, err)
 		return
 	}
-	h.log(r).InfoContext(ctx, "login succeeded", "provider", provider, "outcome", "success", "user_id", auth.User.ID)
+	h.log(r).InfoContext(ctx, "login succeeded", "event", "auth.login_succeeded", "provider", provider, "outcome", "success", "user_id", auth.User.ID)
 	h.setCookie(w, h.sessionCookie, auth.Token, auth.ExpiresAt, maxAge(auth.ExpiresAt))
 	http.Redirect(w, r, h.origin+"/", http.StatusSeeOther)
 }
@@ -243,7 +244,7 @@ func (h *Handler) setRole(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	h.log(r).WarnContext(r.Context(), "role changed", "actor_id", actor.ID(), "target_id", user.ID, "role", user.Role)
+	h.log(r).WarnContext(r.Context(), "role changed", "event", "auth.role_changed", "actor_id", actor.ID(), "target_id", user.ID, "role", user.Role)
 	httpx.WriteJSON(w, http.StatusOK, struct {
 		Handle string      `json:"handle"`
 		Role   domain.Role `json:"role"`

@@ -5,9 +5,6 @@ package app
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"time"
@@ -35,6 +32,7 @@ import (
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/config"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/httpx"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/jobs"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/logging"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/postgres"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/viewer"
 )
@@ -47,7 +45,7 @@ type App struct {
 }
 
 // Build wires the application. providers may be empty: nobody can sign in then, which is a valid (if useless) state.
-func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *organizations.Policy, providers map[domain.Provider]identity.Provider) (*App, error) {
+func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *organizations.Policy, providers map[domain.Provider]identity.Provider, observers ...httpx.RequestObserver) (*App, error) {
 	proxies, err := httpx.ParseProxies(cfg.TrustedProxyCIDRs)
 	if err != nil {
 		return nil, err
@@ -97,10 +95,14 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 	discussionHandler.Register(mux)
 	moderationHandler.Register(mux)
 	notificationsHandler.Register(mux)
+	access := httpx.AccessOptions{Secret: cfg.AppSecret, Router: mux}
+	if len(observers) > 0 {
+		access.Observer = observers[0]
+	}
 
 	api := httpx.Chain(httpx.JSONFallbacks(mux),
 		httpx.RequestID(proxies),
-		httpx.AccessLog(logger, proxies),
+		httpx.AccessLog(logger, proxies, access),
 		httpx.Recover(),
 		httpx.SecurityHeaders(identityHandler.Secure()),
 		httpx.Limits(httpx.MaxBody, cfg.RequestTimeout),
@@ -154,8 +156,6 @@ func rateLimit(anon, user *httpx.Limiter, proxies httpx.Proxies) httpx.Middlewar
 // the session list can tell devices apart without becoming a location log.
 func clientInfo(secret string, proxies httpx.Proxies) func(*http.Request) identity.ClientInfo {
 	return func(r *http.Request) identity.ClientInfo {
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write([]byte(proxies.ClientIP(r)))
-		return identity.ClientInfo{IPHash: hex.EncodeToString(mac.Sum(nil))[:32], UserAgent: r.UserAgent()}
+		return identity.ClientInfo{IPHash: logging.AddressHash(secret, proxies.ClientIP(r)), UserAgent: r.UserAgent()}
 	}
 }

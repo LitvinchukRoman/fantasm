@@ -74,3 +74,13 @@ func TestRequestScopedLogger(t *testing.T) {
 		t.Fatal("no fallback logger")
 	}
 }
+
+func TestAddressHash(t *testing.T) {
+	a := AddressHash("one", "203.0.113.7")
+	if len(a) != 32 || a != AddressHash("one", "203.0.113.7") || a == AddressHash("two", "203.0.113.7") || a == AddressHash("one", "203.0.113.8") {
+		t.Fatal("hash must be stable, keyed, and address-specific")
+	}
+	if AddressHash("", "203.0.113.7") != "" || AddressHash("one", "") != "" {
+		t.Fatal("missing key or address must not produce an unkeyed identifier")
+	}
+}
