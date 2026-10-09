@@ -29,3 +29,6 @@ infra/terraform/**/terraform.tfvars
 *.log
 
 CLAUDE.md
+agents/
+
+.gitignore

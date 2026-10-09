@@ -9,7 +9,7 @@ tasks:
 
   db-up:
     cmds:
-      - docker compose up -d --wait postgres
+      - docker compose up -d --wait fantasm-postgres
 
   db-down:
     cmds:

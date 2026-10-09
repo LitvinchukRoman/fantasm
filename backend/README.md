@@ -125,3 +125,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 | `MIGRATE_ON_START` | `true`: міграції застосовуються при старті; перед деплоєм `deploy-api` чекає `/healthz` і відкочується, якщо старт не вдався |
 
 Після Caddy і CloudFront API бачить правильну адресу клієнта лише через `TRUSTED_PROXY_CIDRS`. Без нього всі запити виглядатимуть як одна адреса проксі, і ліміти по IP спрацьовуватимуть на всіх одразу.
+
+## Optional monitoring
+
+Structured JSON logging is enabled from startup. Run `bash scripts/monitoring.sh up` for Prometheus, Loki, Alloy, and a provisioned Grafana dashboard; use `bash scripts/monitoring.sh off` to return to the lightweight default. Metrics are disabled by default. Setup, log fields, retention, and verification: [monitoring/README.md](monitoring/README.md).
