@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -25,6 +26,7 @@ type Config struct {
 	EntraClientSecret     string
 
 	LogLevel          string
+	MetricsAddr       string
 	TrustedProxyCIDRs []string
 	// AppSecret keys cursor signatures and address hashes. Required over HTTPS;
 	// on loopback a random per-process value is used when it is unset.
@@ -105,6 +107,7 @@ func Load() (Config, error) {
 		EntraClientID:         os.Getenv("ENTRA_CLIENT_ID"),
 		EntraClientSecret:     os.Getenv("ENTRA_CLIENT_SECRET"),
 		LogLevel:              str("LOG_LEVEL", "info"),
+		MetricsAddr:           os.Getenv("METRICS_ADDR"),
 		AppSecret:             os.Getenv("APP_SECRET"),
 
 		RateLimitAnonRPS:     float("RATE_LIMIT_ANON_RPS", 10, 0.1, 10_000),
@@ -125,6 +128,13 @@ func Load() (Config, error) {
 	for _, cidr := range strings.Split(os.Getenv("TRUSTED_PROXY_CIDRS"), ",") {
 		if cidr = strings.TrimSpace(cidr); cidr != "" {
 			cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, cidr)
+		}
+	}
+	if cfg.MetricsAddr != "" {
+		_, port, err := net.SplitHostPort(cfg.MetricsAddr)
+		n, portErr := strconv.Atoi(port)
+		if err != nil || portErr != nil || n < 1 || n > 65535 {
+			errs = append(errs, errors.New("METRICS_ADDR must be a host:port address with a port in [1, 65535]"))
 		}
 	}
 
