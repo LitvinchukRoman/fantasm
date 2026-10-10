@@ -36,6 +36,10 @@ type User struct {
 	Karma       int
 	// ApprovedIdeas counts ideas a moderator approved; it lifts premoderation.
 	ApprovedIdeas int
+	// Onboarded is set once the user has confirmed their own profile after the first login.
+	Onboarded bool
+	// AvatarVersion is the upload time of the photo in Unix milliseconds, 0 without one.
+	AvatarVersion int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }

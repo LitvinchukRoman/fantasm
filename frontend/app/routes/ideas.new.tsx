@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { data, Link, redirect, useFetcher, useRouteLoaderData } from "react-router";
-import { motion, AnimatePresence, type Variants } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion, type Variants } from "motion/react";
 import { seo } from "~/lib/seo";
 import type { Route } from "./+types/ideas.new";
 import { Nav } from "~/components/landing/nav";
@@ -20,6 +20,7 @@ import {
   IconPenLine,
   IconEyeOff,
   IconClose,
+  IconPlus,
 } from "~/components/landing/icons";
 
 const CATEGORY_ICONS: Record<IdeaCategory, any> = {
@@ -62,10 +63,24 @@ const stepVariants: Variants = {
   hidden: { opacity: 0, x: -10, filter: "blur(4px)" },
   visible: { 
     opacity: 1, x: 0, filter: "blur(0px)",
-    transition: { duration: 0.4, ease: EASE_OUT, staggerChildren: 0.05 } 
+    // Залишений blur(0px) створює контекст накладання, і список ролей ховається під липкою мобільною панеллю дій.
+    transitionEnd: { filter: "none" },
+    transition: { duration: 0.28, ease: EASE_OUT, staggerChildren: 0.04 } 
   },
-  exit: { opacity: 0, x: 10, filter: "blur(4px)", transition: { duration: 0.4, ease: EASE_OUT } }
+  exit: { opacity: 0, x: 10, filter: "blur(4px)", transition: { duration: 0.18, ease: EASE_OUT } }
 };
+
+/** Ліміти з backend/internal/ideas/domain/idea.go: поле показує їх одразу, а не після 422. */
+const MAX_TAGS = 5;
+const MAX_ROLES = 10;
+const LABEL_MAX = 40;
+
+const AVAILABLE_ROLES = ["Дизайнер", "Frontend-розробник", "Backend-розробник", "Fullstack-розробник", "Маркетолог", "Менеджер", "Ментор", "Тестувальник", "Копірайтер"];
+
+const FIELD_SHELL =
+  "flex flex-wrap items-center gap-1.5 rounded-xl border bg-[var(--color-bg)] p-1.5 transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_12px_rgb(255_99_99/0.3)]";
+
+const sameLabel = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function meta(_args: Route.MetaArgs) {
   return seo({
@@ -92,29 +107,6 @@ export default function IdeaNewPage() {
     needsRoles: [] as string[],
     visibility: "PUBLIC" as "PUBLIC" | "MEMBERS_ONLY",
   });
-
-  const [tagInput, setTagInput] = useState("");
-  const [roleInput, setRoleInput] = useState("");
-  const [isRolePaletteOpen, setRolePaletteOpen] = useState(false);
-  const [isFormatExpanded, setFormatExpanded] = useState(!formData.category);
-
-  const AVAILABLE_ROLES = ["Дизайнер", "Frontend-розробник", "Backend-розробник", "Fullstack-розробник", "Маркетолог", "Менеджер", "Ментор", "Тестувальник", "Копірайтер"];
-  const filteredRoles = AVAILABLE_ROLES.filter(r => r.toLowerCase().includes(roleInput.toLowerCase()) && !formData.needsRoles.includes(r));
-
-  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === "," || e.key === " ") {
-      e.preventDefault();
-      const newTag = tagInput.trim().replace(/^#/, "");
-      if (newTag && !formData.tags.includes(newTag)) {
-        update({ tags: [...formData.tags, newTag] });
-      }
-      setTagInput("");
-    } else if (e.key === "Backspace" && !tagInput && formData.tags.length > 0) {
-      update({ tags: formData.tags.slice(0, -1) });
-    }
-  };
-  const removeTag = (tag: string) => update({ tags: formData.tags.filter(t => t !== tag) });
-  const removeRole = (role: string) => update({ needsRoles: formData.needsRoles.filter(r => r !== role) });
 
   const update = (patch: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...patch }));
@@ -222,7 +214,7 @@ export default function IdeaNewPage() {
                 Запропонувати ідею
               </motion.h1>
 
-              <motion.div variants={itemVariants} layout transition={{ type: "spring", duration: 0.5, bounce: 0 }} className="relative">
+              <motion.div variants={itemVariants} className="relative">
                 <AnimatePresence mode="popLayout" initial={false}>
                   {step === 1 && (
                     <motion.div
@@ -247,7 +239,7 @@ export default function IdeaNewPage() {
                           placeholder="Наприклад: Хакатон з ШІ для студентів"
                           value={formData.title}
                           onChange={(e) => update({ title: e.target.value })}
-                          className={`block w-full rounded-xl border ${shakeStep === 1 && !formData.title.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                          className={`block w-full rounded-xl border ${shakeStep === 1 && !formData.title.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                         />
                       </motion.div>
 
@@ -262,90 +254,28 @@ export default function IdeaNewPage() {
                           placeholder="Це побачать у стрічці. Зачепіть увагу."
                           value={formData.summary}
                           onChange={(e) => update({ summary: e.target.value })}
-                          className={`block w-full resize-none rounded-xl border ${shakeStep === 1 && !formData.summary.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                          className={`block w-full resize-none rounded-xl border ${shakeStep === 1 && !formData.summary.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                         />
                       </motion.div>
 
                       <motion.div variants={itemVariants} className="flex flex-col gap-2.5">
-                        <span className="text-sm font-medium text-[var(--color-text-muted)] select-none">
+                        <span id="format-label" className="text-sm font-medium text-[var(--color-text-muted)] select-none">
                           Формат ідеї
                         </span>
-                        <motion.div layout transition={{ type: "spring", bounce: 0, duration: 0.6 }} className="relative flex items-center min-h-[52px]">
-                          <AnimatePresence mode="popLayout">
-                            {!isFormatExpanded ? (
-                              <motion.button
-                                key="collapsed"
-                                layoutId="format-island"
-                                style={{ borderRadius: 12 }}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={{ layout: { type: "spring", bounce: 0, duration: 0.6 }, opacity: { duration: 0.3 } }}
-                                onClick={() => setFormatExpanded(true)}
-                                className={`inline-flex items-center gap-2 border px-5 py-3 text-sm font-medium transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)] ${
-                                  formData.category 
-                                    ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]" 
-                                    : "border-[var(--color-border)] text-[var(--color-text-muted)] bg-[var(--color-surface)] shadow-[0_0_12px_rgb(255_255_255/0.05)]"
-                                } ${shakeStep === 1 && !formData.category ? "border-red-500" : ""}`}
-                              >
-                                {formData.category ? (
-                                  <>
-                                    {(() => {
-                                      const Icon = CATEGORY_ICONS[formData.category as IdeaCategory];
-                                      return <Icon className="size-4" />;
-                                    })()}
-                                    {CATEGORY_LABELS[formData.category as IdeaCategory]}
-                                  </>
-                                ) : (
-                                  <>✨ Вибрати формат</>
-                                )}
-                              </motion.button>
-                            ) : (
-                              <motion.div
-                                key="expanded"
-                                layoutId="format-island"
-                                style={{ borderRadius: 16 }}
-                                initial={{ opacity: 0, scale: 0.98 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.98 }}
-                                transition={{ layout: { type: "spring", bounce: 0, duration: 0.6 }, opacity: { duration: 0.3 } }}
-                                className="flex flex-wrap gap-2 border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-1.5 shadow-xl w-full"
-                              >
-                                {CATEGORIES.map((cat) => {
-                                  const Icon = CATEGORY_ICONS[cat];
-                                  const selected = formData.category === cat;
-                                  return (
-                                    <button
-                                      key={cat}
-                                      type="button"
-                                      onClick={() => {
-                                        update({ category: cat });
-                                        setFormatExpanded(false);
-                                      }}
-                                      className={`group relative flex-1 min-w-[100px] select-none inline-flex flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-sm font-medium transition-colors duration-300 ${
-                                        selected
-                                          ? "text-[var(--color-accent)] bg-[var(--color-accent)]/10"
-                                          : "text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)]"
-                                      }`}
-                                    >
-                                      <Icon className={`size-5 transition-colors ${selected ? "text-[var(--color-accent)]" : "text-[var(--color-text-faint)] group-hover:text-[var(--color-text)]"}`} />
-                                      {CATEGORY_LABELS[cat]}
-                                    </button>
-                                  );
-                                })}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </motion.div>
+                        <FormatPicker
+                          value={formData.category}
+                          invalid={shakeStep === 1 && !formData.category}
+                          onChange={(category) => update({ category })}
+                        />
                       </motion.div>
 
                       <AnimatePresence>
                         {formData.category === "EVENT" && (
                           <motion.div
-                            initial={{ height: 0, opacity: 0, filter: "blur(4px)" }}
-                            animate={{ height: "auto", opacity: 1, filter: "blur(0px)" }}
-                            exit={{ height: 0, opacity: 0, filter: "blur(4px)" }}
-                            transition={{ duration: 0.4, ease: EASE_OUT }}
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25, ease: EASE_OUT }}
                             className="flex flex-col gap-4 overflow-hidden pt-2"
                           >
                             <div className="flex flex-col gap-2.5">
@@ -357,7 +287,7 @@ export default function IdeaNewPage() {
                                 required
                                 value={formData.eventAt}
                                 onChange={(e) => update({ eventAt: e.target.value })}
-                                className={`block w-full [color-scheme:dark] rounded-xl border ${shakeStep === 1 && !formData.eventAt ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                                className={`block w-full [color-scheme:dark] rounded-xl border ${shakeStep === 1 && !formData.eventAt ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                               />
                             </div>
                             <div className="flex flex-col gap-2.5">
@@ -370,7 +300,7 @@ export default function IdeaNewPage() {
                                 placeholder="Аудиторія, локація або посилання на зустріч"
                                 value={formData.eventLocation}
                                 onChange={(e) => update({ eventLocation: e.target.value })}
-                                className={`block w-full rounded-xl border ${shakeStep === 1 && !formData.eventLocation.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                                className={`block w-full rounded-xl border ${shakeStep === 1 && !formData.eventLocation.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                               />
                             </div>
                           </motion.div>
@@ -401,163 +331,27 @@ export default function IdeaNewPage() {
                             placeholder="Розкажіть деталі: що це, для кого, і хто вам потрібен..."
                             value={formData.body}
                             onChange={(e) => update({ body: e.target.value })}
-                            className={`block w-full resize-y min-h-[120px] max-h-[60vh] rounded-xl border ${shakeStep === 2 && formData.body.trim().length <= 5 ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                            className={`block w-full resize-y min-h-[120px] max-h-[60vh] rounded-xl border ${shakeStep === 2 && formData.body.trim().length <= 5 ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                           />
                       </motion.div>
 
                       {formData.category !== "EVENT" && formData.category !== null && (
-                        <motion.div variants={itemVariants} className="flex flex-col gap-2.5 relative">
-                          <label className="text-sm font-medium text-[var(--color-text-muted)] select-none">
+                        <motion.div variants={itemVariants} className="flex flex-col gap-2.5">
+                          <label htmlFor="roles" className="text-sm font-medium text-[var(--color-text-muted)] select-none">
                             Кого шукаєте в команду?
                           </label>
-                          <div className="flex flex-wrap gap-2 mb-1">
-                            <AnimatePresence>
-                              {formData.needsRoles.map((role) => (
-                                <motion.div
-                                  key={role}
-                                  layout
-                                  initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.9, filter: "blur(4px)" }}
-                                  className="flex items-center gap-1.5 rounded-[var(--radius-chip)] border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] shadow-sm"
-                                >
-                                  <IconUsers className="size-3.5" />
-                                  {role}
-                                  <button type="button" onClick={() => removeRole(role)} className="ml-1 p-2 -my-2 -mr-2 hover:text-[var(--color-accent-strong)] transition-colors">
-                                    <IconClose className="size-3.5" />
-                                  </button>
-                                </motion.div>
-                              ))}
-                            </AnimatePresence>
-                          </div>
-                          
-                          <motion.div layout transition={{ type: "spring", bounce: 0, duration: 0.6 }} className="relative flex items-center min-h-[42px] w-full max-w-sm">
-                            <AnimatePresence mode="popLayout">
-                              {!isRolePaletteOpen ? (
-                                <motion.button
-                                  key="add-role-btn"
-                                  layoutId="role-island"
-                                  initial={{ opacity: 0, scale: 0.95 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.95 }}
-                                  transition={{ layout: { type: "spring", bounce: 0, duration: 0.6 }, opacity: { duration: 0.3 } }}
-                                  type="button"
-                                  onClick={() => setRolePaletteOpen(true)}
-                                  className="inline-flex items-center gap-2 rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-subtle)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-                                >
-                                  + Додати роль
-                                </motion.button>
-                              ) : (
-                                <motion.div
-                                  key="role-input-panel"
-                                  layoutId="role-island"
-                                  initial={{ opacity: 0, scale: 0.98 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.98 }}
-                                  transition={{ layout: { type: "spring", bounce: 0, duration: 0.6 }, opacity: { duration: 0.3 } }}
-                                  className="flex flex-col w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] shadow-xl overflow-hidden"
-                                >
-                                  <div className="flex items-center gap-2 border-b border-[var(--color-border)] p-2">
-                                    <IconUsers className="size-4 text-[var(--color-text-muted)] ml-1" />
-                                    <input
-                                      autoFocus
-                                      type="text"
-                                      value={roleInput}
-                                      onChange={(e) => setRoleInput(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          const newRole = roleInput.trim();
-                                          if (newRole && !formData.needsRoles.includes(newRole)) {
-                                            update({ needsRoles: [...formData.needsRoles, newRole] });
-                                            setRoleInput("");
-                                            setRolePaletteOpen(false);
-                                          }
-                                        }
-                                      }}
-                                      placeholder="Пошук або нова роль..."
-                                      className="flex-1 bg-transparent text-[16px] sm:text-sm text-[var(--color-text)] outline-none placeholder-[var(--color-text-faint)] py-1"
-                                    />
-                                    <button type="button" onClick={() => { setRolePaletteOpen(false); setRoleInput(""); }} className="p-3 -m-2 hover:text-[var(--color-text)] text-[var(--color-text-muted)]">
-                                      <IconClose className="size-4" />
-                                    </button>
-                                  </div>
-                                  <div className="max-h-[200px] overflow-y-auto no-scrollbar flex flex-col p-1">
-                                    {filteredRoles.map((role) => (
-                                      <button
-                                        key={role}
-                                        type="button"
-                                        onClick={() => {
-                                          update({ needsRoles: [...formData.needsRoles, role] });
-                                          setRoleInput("");
-                                          setRolePaletteOpen(false);
-                                        }}
-                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-bg-subtle)]"
-                                      >
-                                        {role}
-                                      </button>
-                                    ))}
-                                    
-                                    {roleInput.trim() && !filteredRoles.some(r => r.toLowerCase() === roleInput.trim().toLowerCase()) && !formData.needsRoles.some(r => r.toLowerCase() === roleInput.trim().toLowerCase()) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          update({ needsRoles: [...formData.needsRoles, roleInput.trim()] });
-                                          setRoleInput("");
-                                          setRolePaletteOpen(false);
-                                        }}
-                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10"
-                                      >
-                                        Створити "{roleInput.trim()}"
-                                      </button>
-                                    )}
-
-                                    {filteredRoles.length === 0 && !roleInput.trim() && (
-                                      <p className="py-3 text-center text-sm text-[var(--color-text-muted)]">Почніть вводити назву ролі</p>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </motion.div>
+                          <RolePicker
+                            roles={formData.needsRoles}
+                            onChange={(needsRoles) => update({ needsRoles })}
+                          />
                         </motion.div>
                       )}
 
                       <motion.div variants={itemVariants} className="flex flex-col gap-2.5">
-                        <label className="text-sm font-medium text-[var(--color-text-muted)] select-none">
+                        <label htmlFor="tags" className="text-sm font-medium text-[var(--color-text-muted)] select-none">
                           Теги (не обов'язково)
                         </label>
-                        <div
-                          className={`flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-2 transition-all duration-500 focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse`}
-                        >
-                          <AnimatePresence mode="popLayout">
-                            {formData.tags.map((tag) => (
-                              <motion.span
-                                key={tag}
-                                layout
-                                initial={{ opacity: 0, scale: 0.6, filter: "blur(4px)" }}
-                                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                                exit={{ opacity: 0, scale: 0.8, filter: "blur(4px)" }}
-                                transition={{ type: "spring", stiffness: 400, damping: 25, bounce: 0.4 }}
-                                className="inline-flex items-center gap-1 rounded-[var(--radius-chip)] border border-[var(--color-border-strong)] bg-[var(--color-bg-subtle)] px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]"
-                              >
-                                #{tag}
-                                <button type="button" onClick={() => removeTag(tag)} className="ml-1 p-2 -my-2 -mr-2 hover:text-[var(--color-text)] transition-colors">
-                                  <IconClose className="size-3" />
-                                </button>
-                              </motion.span>
-                            ))}
-                          </AnimatePresence>
-                          <motion.input
-                            layout
-                            type="text"
-                            value={tagInput}
-                            onChange={(e) => setTagInput(e.target.value)}
-                            onKeyDown={handleTagKeyDown}
-                            placeholder="Додати тег..."
-                            className="flex-1 bg-transparent min-w-[100px] px-1 text-[16px] sm:text-sm text-[var(--color-text)] outline-none placeholder-[var(--color-text-faint)]"
-                          />
-                        </div>
+                        <TagInput tags={formData.tags} onChange={(tags) => update({ tags })} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -628,7 +422,7 @@ export default function IdeaNewPage() {
                 </AnimatePresence>
               </motion.div>
 
-              <motion.div variants={itemVariants} layout transition={{ duration: 0.4, ease: EASE_OUT }} className="sticky bottom-0 z-30 mt-12 flex items-center justify-between border-t border-[var(--color-border-strong)] bg-[var(--color-bg)]/90 backdrop-blur-md pt-4 pb-8 px-1 -mx-1 sm:static sm:bg-transparent sm:backdrop-blur-none sm:pb-0 sm:px-0 sm:mx-0 sm:pt-6">
+              <motion.div variants={itemVariants} className="sticky bottom-0 z-30 mt-12 flex items-center justify-between border-t border-[var(--color-border-strong)] bg-[var(--color-bg)]/90 backdrop-blur-md pt-4 pb-8 px-1 -mx-1 sm:static sm:bg-transparent sm:backdrop-blur-none sm:pb-0 sm:px-0 sm:mx-0 sm:pt-6">
                 {step > 1 ? (
                   <Button variant="secondary" onClick={prevStep} className="active:scale-[0.97] transition-transform">
                     Назад
@@ -680,6 +474,377 @@ export default function IdeaNewPage() {
       <div className="relative z-10">
         <SiteFooter />
       </div>
+    </div>
+  );
+}
+
+/** Усі формати видно завжди, тож вибір не змінює висоту форми: рухається лише підсвітка. */
+function FormatPicker({
+  value,
+  invalid,
+  onChange,
+}: {
+  value: IdeaCategory | null;
+  invalid: boolean;
+  onChange: (category: IdeaCategory) => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <div
+      role="radiogroup"
+      aria-labelledby="format-label"
+      className={`grid grid-cols-2 gap-1 rounded-2xl border bg-[var(--color-surface)] p-1 transition-[border-color] duration-200 sm:grid-cols-3 ${
+        invalid ? "border-red-500" : "border-[var(--color-border)]"
+      }`}
+    >
+      {CATEGORIES.map((cat) => {
+        const Icon = CATEGORY_ICONS[cat];
+        const selected = value === cat;
+        return (
+          <button
+            key={cat}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(cat)}
+            className={`group relative flex select-none items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${
+              selected
+                ? "text-[var(--color-accent)]"
+                : "text-[var(--color-text-muted)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text)]"
+            }`}
+          >
+            {selected && (
+              <motion.span
+                layoutId="format-highlight"
+                aria-hidden="true"
+                style={{ borderRadius: 12 }}
+                transition={reduceMotion ? { duration: 0 } : { type: "spring", duration: 0.3, bounce: 0 }}
+                className="absolute inset-0 border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10"
+              />
+            )}
+            <Icon
+              className={`relative size-4 shrink-0 transition-colors duration-200 ${
+                selected ? "" : "text-[var(--color-text-faint)] group-hover:text-[var(--color-text)]"
+              }`}
+            />
+            <span className="relative">{CATEGORY_LABELS[cat]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function chipMotion(reduceMotion: boolean | null) {
+  return reduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.15 } }
+    : {
+        initial: { opacity: 0, transform: "scale(0.95)" },
+        animate: { opacity: 1, transform: "scale(1)" },
+        exit: { opacity: 0, transform: "scale(0.95)" },
+        transition: { duration: 0.15, ease: EASE_OUT },
+      };
+}
+
+function RemoveChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Прибрати ${label}`}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className="grid size-5 place-items-center rounded-full transition-colors duration-150 hover:bg-[var(--color-border-strong)]"
+    >
+      <IconClose className="size-3" />
+    </button>
+  );
+}
+
+/**
+ * Комбобокс ролей: вибрані ролі чипами в полі, підказки у випадаючому списку поверх
+ * сусідніх полів, тож відкриття не зсуває форму.
+ */
+function RolePicker({ roles, onChange }: { roles: string[]; onChange: (roles: string[]) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const reduceMotion = useReducedMotion();
+
+  const q = query.trim();
+  const full = roles.length >= MAX_ROLES;
+  const taken = q !== "" && roles.some((role) => sameLabel(role, q));
+  const suggestions = full
+    ? []
+    : AVAILABLE_ROLES.filter((role) => !roles.includes(role) && role.toLowerCase().includes(q.toLowerCase()));
+  const canCreate = !full && q !== "" && !taken && !AVAILABLE_ROLES.some((role) => sameLabel(role, q));
+  const options = canCreate ? [...suggestions, q] : suggestions;
+  const current = Math.min(active, Math.max(options.length - 1, 0));
+
+  useEffect(() => {
+    if (open) document.getElementById(`role-option-${current}`)?.scrollIntoView({ block: "nearest" });
+  }, [current, open]);
+
+  function add(role: string) {
+    const label = role.trim().slice(0, LABEL_MAX);
+    if (!label || full || roles.some((r) => sameLabel(r, label))) return;
+    onChange([...roles, label]);
+    setQuery("");
+    setActive(0);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      if (options.length) setActive((current + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (open && options.length) add(options[current]);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    } else if (e.key === "Backspace" && !query && roles.length) {
+      onChange(roles.slice(0, -1));
+    }
+  }
+
+  const popover = reduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, transform: "translateY(-4px) scale(0.98)" },
+        animate: { opacity: 1, transform: "translateY(0px) scale(1)" },
+        exit: { opacity: 0, transform: "translateY(-4px) scale(0.98)" },
+      };
+
+  return (
+    <div className={open ? "relative z-40" : "relative"}>
+      <div
+        onClick={() => {
+          inputRef.current?.focus();
+          setOpen(true);
+        }}
+        className={`${FIELD_SHELL} relative cursor-text border-[var(--color-border)]`}
+      >
+        <IconUsers className="ml-1.5 size-4 shrink-0 text-[var(--color-text-faint)]" />
+        <AnimatePresence mode="popLayout" initial={false}>
+          {roles.map((role) => (
+            <motion.span
+              key={role}
+              {...chipMotion(reduceMotion)}
+              className="inline-flex items-center gap-1 rounded-[var(--radius-chip)] border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 py-1 pr-1 pl-2.5 text-sm text-[var(--color-accent)]"
+            >
+              {role}
+              <RemoveChip label={role} onClick={() => onChange(roles.filter((r) => r !== role))} />
+            </motion.span>
+          ))}
+        </AnimatePresence>
+        <input
+          ref={inputRef}
+          id="roles"
+          type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="role-options"
+          aria-autocomplete="list"
+          aria-activedescendant={open && options.length ? `role-option-${current}` : undefined}
+          autoComplete="off"
+          maxLength={LABEL_MAX}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onKeyDown={onKeyDown}
+          placeholder={roles.length ? "Ще роль…" : "Оберіть зі списку або впишіть свою"}
+          className="min-w-[8rem] flex-1 bg-transparent px-1.5 py-1 text-[16px] text-[var(--color-text)] placeholder-[var(--color-text-faint)] outline-none sm:text-sm"
+        />
+      </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="role-options"
+            {...popover}
+            transition={{ duration: 0.16, ease: EASE_OUT }}
+            style={{ transformOrigin: "top center" }}
+            onMouseDown={(e) => e.preventDefault()}
+            className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] shadow-xl"
+          >
+            <ul id="role-options" role="listbox" aria-label="Ролі" className="no-scrollbar max-h-60 overflow-y-auto p-1">
+              {options.map((option, index) => {
+                const isCreate = canCreate && index === options.length - 1;
+                return (
+                  <li
+                    key={isCreate ? "__create" : option}
+                    id={`role-option-${index}`}
+                    role="option"
+                    aria-selected={index === current}
+                    onMouseEnter={() => setActive(index)}
+                    onClick={() => add(option)}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-100 ${
+                      index === current ? "bg-[var(--color-bg-subtle)]" : ""
+                    } ${isCreate ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"}`}
+                  >
+                    {isCreate ? (
+                      <>
+                        <IconPlus className="size-4" /> Додати «{option}»
+                      </>
+                    ) : (
+                      option
+                    )}
+                  </li>
+                );
+              })}
+              {options.length === 0 && (
+                <li className="px-3 py-2.5 text-sm text-[var(--color-text-muted)]">
+                  {full ? `Максимум ${MAX_ROLES} ролей` : taken ? "Цю роль уже додано" : "Усі ролі зі списку вже додано, впишіть свою"}
+                </li>
+              )}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Тег стає чипом після Enter, коми, пробілу або виходу з поля; поки він не доданий,
+ * чернетка підсвічена акцентним «#», а поруч є кнопка «Додати».
+ */
+function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const reduceMotion = useReducedMotion();
+  const full = tags.length >= MAX_TAGS;
+
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 700);
+    return () => clearTimeout(timer);
+  }, [flash]);
+
+  function commit(raw: string[]) {
+    let next = tags;
+    let message: string | null = null;
+    for (const part of raw) {
+      const label = part.trim().replace(/^#+/, "").trim();
+      if (!label) continue;
+      const existing = next.find((tag) => sameLabel(tag, label));
+      if (existing) {
+        setFlash(existing);
+        message = `Тег #${existing} уже додано`;
+      } else if (next.length >= MAX_TAGS) {
+        message = `Максимум ${MAX_TAGS} тегів`;
+      } else if (label.length > LABEL_MAX) {
+        message = `Тег до ${LABEL_MAX} символів`;
+      } else {
+        next = [...next, label];
+      }
+    }
+    if (next !== tags) onChange(next);
+    setNotice(message);
+  }
+
+  function onInput(value: string) {
+    if (/[,\s]/.test(value)) {
+      const parts = value.split(/[,\s]+/);
+      const rest = parts.pop() ?? "";
+      commit(parts);
+      setDraft(rest);
+    } else {
+      setDraft(value);
+      if (notice) setNotice(null);
+    }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit([draft]);
+      setDraft("");
+    } else if (e.key === "Backspace" && !draft && tags.length) {
+      onChange(tags.slice(0, -1));
+      setNotice(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div
+        onClick={() => inputRef.current?.focus()}
+        className={`${FIELD_SHELL} relative cursor-text ${notice ? "border-[var(--color-accent)]/60" : "border-[var(--color-border)]"}`}
+      >
+        <AnimatePresence mode="popLayout" initial={false}>
+          {tags.map((tag) => (
+            <motion.span
+              key={tag}
+              {...chipMotion(reduceMotion)}
+              className={`inline-flex items-center gap-0.5 rounded-[var(--radius-chip)] border py-1 pr-1 pl-2.5 text-sm transition-colors duration-200 ${
+                flash === tag
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                  : "border-[var(--color-border-strong)] bg-[var(--color-surface-strong)] text-[var(--color-text)]"
+              }`}
+            >
+              <span className="text-[var(--color-text-faint)]">#</span>
+              {tag}
+              <RemoveChip label={`#${tag}`} onClick={() => onChange(tags.filter((t) => t !== tag))} />
+            </motion.span>
+          ))}
+        </AnimatePresence>
+        <span className="flex min-w-[8rem] flex-1 items-center">
+          <span
+            aria-hidden="true"
+            className={`pl-1.5 text-sm transition-colors duration-150 ${draft ? "text-[var(--color-accent)]" : "text-[var(--color-text-faint)]"}`}
+          >
+            #
+          </span>
+          <input
+            ref={inputRef}
+            id="tags"
+            type="text"
+            autoComplete="off"
+            enterKeyHint="done"
+            aria-describedby="tags-hint"
+            maxLength={LABEL_MAX + 1}
+            value={draft}
+            onChange={(e) => onInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            onBlur={() => {
+              commit([draft]);
+              setDraft("");
+            }}
+            placeholder={full ? "Додано максимум тегів" : tags.length ? "Ще тег…" : "наприклад: хакатон"}
+            className="min-w-0 flex-1 bg-transparent py-1 pr-1 pl-0.5 text-[16px] text-[var(--color-text)] placeholder-[var(--color-text-faint)] outline-none sm:text-sm"
+          />
+          {draft.trim() && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                commit([draft]);
+                setDraft("");
+              }}
+              className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--color-border-strong)] px-2 py-1 text-xs font-medium text-[var(--color-text)] transition-colors duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              Додати <kbd className="font-mono text-[var(--color-text-faint)]">↵</kbd>
+            </button>
+          )}
+        </span>
+      </div>
+      <p id="tags-hint" aria-live="polite" className="flex justify-between gap-3 px-1 text-xs">
+        <span className={notice ? "text-[var(--color-accent)]" : "text-[var(--color-text-faint)]"}>
+          {notice ?? "Enter, кома або пробіл перетворюють текст на тег"}
+        </span>
+        <span className="shrink-0 tabular-nums text-[var(--color-text-faint)]">
+          {tags.length}/{MAX_TAGS}
+        </span>
+      </p>
     </div>
   );
 }

@@ -36,6 +36,9 @@ export interface User extends Person {
     badge?: string;
     capabilities?: string[];
   }>;
+  /** false, доки людина не підтвердила імʼя й нікнейм після першого входу. */
+  onboarded?: boolean;
+  suggestedHandle?: string;
   createdAt: string;
 }
 
@@ -112,6 +115,7 @@ export interface Thread {
 export interface PublicProfile extends Person {
   bio?: string;
   faculty?: string;
+  avatarUrl?: string;
   verified?: boolean;
   campus?: Campus | null;
   role?: UserRole;

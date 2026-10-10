@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
@@ -14,6 +15,9 @@ import (
 type AccountRepository interface {
 	UpdateProfile(ctx context.Context, userID string, update domain.ProfileUpdate, now time.Time) (domain.User, error)
 	UserByHandle(ctx context.Context, handle string) (domain.User, error)
+	SetAvatar(ctx context.Context, userID string, avatar domain.Avatar, now time.Time) (domain.User, error)
+	DeleteAvatar(ctx context.Context, userID string) (domain.User, error)
+	AvatarByHandle(ctx context.Context, handle string) (domain.Avatar, error)
 	SetRole(ctx context.Context, userID string, role domain.Role, now time.Time) (domain.User, error)
 	ListSessions(ctx context.Context, userID string, now, idleCutoff time.Time) ([]domain.SessionInfo, error)
 	DeleteSessionByID(ctx context.Context, userID, sessionID string) (bool, error)
@@ -40,6 +44,50 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, update domai
 		return domain.User{}, apperr.Unauthorized("account no longer exists")
 	case err != nil:
 		return domain.User{}, fmt.Errorf("update profile: %w", err)
+	}
+	if err := s.resolveMemberships(ctx, &user); err != nil {
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
+// SetAvatar stores the caller's photo. The format is sniffed from the bytes;
+// the declared Content-Type is not trusted.
+func (s *Service) SetAvatar(ctx context.Context, userID string, data []byte) (domain.User, error) {
+	if len(data) == 0 || len(data) > domain.AvatarMaxBytes {
+		return domain.User{}, apperr.Validation(map[string]string{"avatar": "must be an image of at most 256 KB"})
+	}
+	contentType := http.DetectContentType(data)
+	if !domain.AvatarTypes[contentType] {
+		return domain.User{}, apperr.Validation(map[string]string{"avatar": "must be a JPEG, PNG or WebP image"})
+	}
+	user, err := s.repository.SetAvatar(ctx, userID, domain.Avatar{ContentType: contentType, Data: data}, s.now().UTC())
+	return s.accountResult(ctx, user, err, "set avatar")
+}
+
+func (s *Service) DeleteAvatar(ctx context.Context, userID string) (domain.User, error) {
+	user, err := s.repository.DeleteAvatar(ctx, userID)
+	return s.accountResult(ctx, user, err, "delete avatar")
+}
+
+// Avatar is the public photo of a user; profiles are public, so is this.
+func (s *Service) Avatar(ctx context.Context, handle string) (domain.Avatar, error) {
+	avatar, err := s.repository.AvatarByHandle(ctx, handle)
+	if errors.Is(err, domain.ErrNoAvatar) {
+		return domain.Avatar{}, apperr.NotFound("avatar not found")
+	}
+	if err != nil {
+		return domain.Avatar{}, fmt.Errorf("find avatar: %w", err)
+	}
+	return avatar, nil
+}
+
+func (s *Service) accountResult(ctx context.Context, user domain.User, err error, op string) (domain.User, error) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		return domain.User{}, apperr.Unauthorized("account no longer exists")
+	case err != nil:
+		return domain.User{}, fmt.Errorf("%s: %w", op, err)
 	}
 	if err := s.resolveMemberships(ctx, &user); err != nil {
 		return domain.User{}, err

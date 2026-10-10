@@ -14,6 +14,7 @@ export default [
   layout("routes/auth-layout.tsx", [
     route("login", "routes/login.tsx"),
     route("register", "routes/register.tsx"),
+    route("welcome", "routes/welcome.tsx"),
   ]),
   route("sitemap.xml", "routes/sitemap.ts"),
   route("robots.txt", "routes/robots.ts"),

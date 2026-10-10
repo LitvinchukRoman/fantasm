@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { Button } from "~/components/ui/button";
 import { ActionDock } from "~/components/ui/action-dock";
-import { VoteControl } from "./vote-control";
 
 /** Id блоку дій у шапці: коли він пішов угору за екран, дії з'являються в доку. */
 export const IDEA_ACTIONS_ID = "idea-actions";
 
-export function IdeaDock({ votes, comments, isEvent }: { votes: number; comments: number; isEvent: boolean }) {
+/** Ті самі дії, що в шапці (їх передає сторінка: у власника вони інші), плюс перехід до обговорення. */
+export function IdeaDock({ comments, children }: { comments: number; children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -22,10 +21,7 @@ export function IdeaDock({ votes, comments, isEvent }: { votes: number; comments
 
   return (
     <ActionDock label="Дії з ідеєю" visible={visible}>
-      <VoteControl score={votes} size="sm" />
-      <Button to="/login" variant="secondary" size="sm">
-        {isEvent ? "Я піду" : "Долучитися"}
-      </Button>
+      {children}
       <a
         href="#discussion"
         aria-label={`Обговорення, дописів: ${comments}`}

@@ -8,8 +8,10 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { IconArrowRight } from "~/components/landing/icons";
+import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { formatShortDate } from "~/lib/ideas";
+import { isGeneratedHandle } from "~/lib/profile";
 import type { AuthorPreview } from "~/lib/users.server";
 
 type Anchor = { top: number; bottom: number; left: number };
@@ -65,6 +67,11 @@ export function AuthorPopoverProvider({
   );
 }
 
+/** Фото людини зі сторінки ідеї: профілі всіх, хто на ній згаданий, лоадер уже завантажив. */
+export function useAuthorAvatar(handle: string): string | undefined {
+  return useContext(Ctx)?.profiles[handle]?.avatarUrl;
+}
+
 /**
  * Ім'я автора. Для відомого профілю це кнопка, що відкриває попап; без даних профілю лишається звичайним посиланням.
  */
@@ -116,7 +123,7 @@ function Corner({ className }: { className: string }) {
 
 /**
  * Попап у мові сайту-референсу (saifullah.dev): гостра рамка з кутовими мітками, моно-підписи в дужках,
- * нумеровані розділи `01 // …`, рядки «ключ / значення» з тонкими лініями, службовий підпис ARCHIVE_REF унизу.
+ * нумеровані розділи `01 // …`, рядки «ключ / значення» з тонкими лініями.
  */
 function Popover({
   profile,
@@ -227,17 +234,12 @@ function Popover({
 
       <div className="px-5 pt-5">
         <div className="flex items-center gap-4">
-          <span
-            aria-hidden="true"
-            className="grid size-12 shrink-0 place-items-center rounded-full border border-[var(--color-border-strong)] text-lg text-[var(--color-text)]"
-          >
-            {profile.name.charAt(0).toUpperCase()}
-          </span>
+          <UserAvatar name={profile.name} src={profile.avatarUrl} className="size-12 text-lg" />
           <div className="min-w-0">
             <h2 className="display-entity text-xl [overflow-wrap:anywhere]">
               {profile.name}
             </h2>
-            <p className="hud-label mt-1">@{profile.handle}</p>
+            {!isGeneratedHandle(profile.handle) && <p className="hud-label mt-1">@{profile.handle}</p>}
           </div>
         </div>
         {profile.verified && (
@@ -301,9 +303,7 @@ function Popover({
         </section>
       )}
 
-      <p className="hud-label px-5 py-4 !text-[var(--color-text-faint)]/70">
-        ARCHIVE_REF: {profile.handle.toUpperCase()}
-      </p>
+      <div className="h-5" aria-hidden="true" />
     </div>
   );
 }

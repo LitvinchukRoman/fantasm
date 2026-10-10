@@ -454,3 +454,48 @@ func TestUpdateProfileHandleCollision(t *testing.T) {
 		t.Fatalf("partial update: %+v %v", updated, err)
 	}
 }
+
+func TestAvatarLifecycle(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	u, err := r.UpsertUser(t.Context(), profile("a"), candidate(1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.AvatarPath() != "" {
+		t.Fatalf("fresh account has an avatar: %q", u.AvatarPath())
+	}
+	at := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	saved, err := r.SetAvatar(t.Context(), u.ID, domain.Avatar{ContentType: "image/png", Data: []byte("png-bytes")}, at)
+	if err != nil || saved.AvatarVersion != at.UnixMilli() {
+		t.Fatalf("after upload: version=%d, %v", saved.AvatarVersion, err)
+	}
+	got, err := r.AvatarByHandle(t.Context(), u.Handle)
+	if err != nil || got.ContentType != "image/png" || string(got.Data) != "png-bytes" {
+		t.Fatalf("read back: %+v %v", got, err)
+	}
+	cleared, err := r.DeleteAvatar(t.Context(), u.ID)
+	if err != nil || cleared.AvatarVersion != 0 {
+		t.Fatalf("after delete: version=%d, %v", cleared.AvatarVersion, err)
+	}
+	if _, err := r.AvatarByHandle(t.Context(), u.Handle); !errors.Is(err, domain.ErrNoAvatar) {
+		t.Fatalf("deleted avatar still served: %v", err)
+	}
+}
+
+func TestUpdateProfileCompletesOnboarding(t *testing.T) {
+	db := database(t)
+	r := identitypostgres.NewRepository(db)
+	u, err := r.UpsertUser(t.Context(), profile("a"), candidate(1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Onboarded {
+		t.Fatal("a fresh account is onboarded before confirming its profile")
+	}
+	name := "Іван Франко"
+	updated, err := r.UpdateProfile(t.Context(), u.ID, domain.ProfileUpdate{Name: &name}, time.Now())
+	if err != nil || !updated.Onboarded {
+		t.Fatalf("after profile update: onboarded=%v, %v", updated.Onboarded, err)
+	}
+}

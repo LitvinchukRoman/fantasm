@@ -120,6 +120,12 @@ export async function getCurrentUser(request: Request): Promise<User | null> {
 export const updateProfile = (request: Request, body: ProfileUpdate) =>
   api<User>(request, "/api/me", { method: "PATCH", body: JSON.stringify(body) });
 
+/** Тіло — саме зображення: браузер уже обрізав і стиснув його до 256×256. */
+export const uploadAvatar = (request: Request, image: Blob) =>
+  api<User>(request, "/api/me/avatar", { method: "PUT", body: image, headers: { "content-type": image.type || "application/octet-stream" } });
+
+export const deleteAvatar = (request: Request) => api<User>(request, "/api/me/avatar", { method: "DELETE" });
+
 export const getProviders = (request: Request) =>
   api<{ providers: Provider[] }>(request, "/api/auth/providers");
 

@@ -49,6 +49,8 @@ export type Idea = {
   needsRoles?: string[];
   visibility: "PUBLIC" | "MEMBERS_ONLY" | "ORGANIZATION_ONLY" | "UKMA_ONLY";
   status?: string;
+  /** Приходить лише автору й модераторам. */
+  moderation?: ApiIdeaCard["moderation"];
   canEdit?: boolean;
   viewer?: ApiIdeaView["viewer"];
   /** Тестові картки для верстки: у прод-білд не потрапляють (див. IDEAS_SEED). */
@@ -88,6 +90,7 @@ export function toIdeaCard(value: ApiIdeaCard): IdeaCard {
     needsRoles: value.needsRoles,
     visibility: value.visibility,
     status: value.status,
+    moderation: value.moderation,
   };
 }
 

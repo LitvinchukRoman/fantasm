@@ -59,14 +59,15 @@ export function PageIndex({ items }: { items: IndexItem[] }) {
                   history.pushState(null, "", `#${item.id}`);
                   setActive(item.id);
                 }}
-                className={`flex gap-3 py-2 pr-2 transition-colors ${item.index ? "pl-4" : "pl-9 text-[13px]"} ${
+                className={`grid grid-cols-[1.5rem_minmax(0,1fr)] items-baseline gap-x-3 py-2 pr-2 pl-4 transition-colors ${item.index ? "" : "text-[13px]"} ${
                   current ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                 }`}
               >
-                {item.index && (
-                  <span className={`hud-label tabular-nums ${current ? "!text-[var(--color-accent)]" : ""}`}>{item.index}</span>
-                )}
-                <span className="min-w-0 [overflow-wrap:anywhere]">{item.label}</span>
+                {/* Колонка номера є й у підпунктів: так їхні назви стають рівно під назвами розділів. */}
+                <span aria-hidden={!item.index} className={`hud-label tabular-nums ${current ? "!text-[var(--color-accent)]" : ""}`}>
+                  {item.index}
+                </span>
+                <span className="[overflow-wrap:anywhere]">{item.label}</span>
               </a>
             </li>
           );

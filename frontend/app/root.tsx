@@ -1,4 +1,4 @@
-import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import { isRouteErrorResponse, Link, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { api, getCurrentUser, routeApi } from "~/lib/api.server";
 import type { User } from "~/lib/api-types";
@@ -41,9 +41,16 @@ export default function App() {
 
 export type RootData = { currentUser: User | null; unread: number };
 
+/** Сторінки, доступні до того, як людина підтвердила імʼя й нікнейм. */
+const BEFORE_ONBOARDING = new Set(["/welcome", "/logout"]);
+
 export async function loader({ request }: Route.LoaderArgs): Promise<RootData> {
   const currentUser = await routeApi(getCurrentUser(request));
   if (!currentUser) return { currentUser: null, unread: 0 };
+  const url = new URL(request.url);
+  if (currentUser.onboarded === false && !BEFORE_ONBOARDING.has(url.pathname)) {
+    throw redirect(`/welcome?next=${encodeURIComponent(url.pathname + url.search)}`);
+  }
   try {
     const notifications = await api<{ unread: number }>(request, "/api/me/notifications/unread-count");
     return { currentUser, unread: notifications.unread };

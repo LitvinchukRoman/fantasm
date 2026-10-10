@@ -43,6 +43,9 @@ var routes = []route{
 	{Method: "PATCH", Path: "/api/me", Access: authed, Fields: []string{"handle", "name", "bio", "faculty"}},
 	{Method: "GET", Path: "/api/me/sessions", Access: authed},
 	{Method: "DELETE", Path: "/api/me/sessions/{id}", Access: authed},
+	{Method: "PUT", Path: "/api/me/avatar", Access: authed},
+	{Method: "DELETE", Path: "/api/me/avatar", Access: authed},
+	{Method: "GET", Path: "/api/users/{handle}/avatar"},
 	{Method: "PATCH", Path: "/api/admin/users/{handle}/role", Access: admin, Fields: []string{"role"}},
 
 	{Method: "GET", Path: "/api/ideas", Query: []string{"sort", "category", "status", "tag", "campus", "cursor", "limit"}},
