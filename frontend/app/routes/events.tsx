@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import { EventsCalendar, formatDay, nextRange, type DayRange } from "~/components/events/calendar";
 import { GuideFrame } from "~/components/guides/frame";
 import { EmptyState } from "~/components/landing/empty-state";
@@ -16,14 +16,20 @@ import type { Route } from "./+types/events";
 const TITLE = "Найближчі події, Fantasm";
 const DESCRIPTION = "Події спільноти НаУКМА: ігри, лекції, зустрічі та воркшопи. Обери день у календарі й приходь.";
 
+// ?from=…&to=… у адресі це ключі днів для календаря (YYYY-MM-DD), а не RFC 3339 для API:
+// список вантажиться за типовим вікном бекенду, проміжок фільтрується на клієнті.
 export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const response = await routeApi(getEvents(request, url.searchParams.get("from") ?? undefined, url.searchParams.get("to") ?? undefined));
+  const response = await routeApi(getEvents(request));
   const events = response.items
     .map(toIdeaCard)
     .filter((idea) => idea.eventAt)
     .sort((a, b) => Date.parse(a.eventAt!) - Date.parse(b.eventAt!));
   return { events };
+}
+
+export function shouldRevalidate({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (!formMethod && currentUrl.pathname === nextUrl.pathname) return false;
+  return defaultShouldRevalidate;
 }
 
 export function meta({ data }: Route.MetaArgs) {

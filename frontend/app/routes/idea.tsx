@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { data, Link, useFetcher, useRouteLoaderData } from "react-router";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
-import { IconArrowRight } from "~/components/landing/icons";
+import { IconArrowRight, IconCheck, IconFlag, IconLink } from "~/components/landing/icons";
 import { Nav } from "~/components/landing/nav";
 import { AuthorLink, AuthorPopoverProvider } from "~/components/idea/author-popover";
 import { Forum } from "~/components/idea/forum";
@@ -18,9 +19,11 @@ import { MetaGrid } from "~/components/ui/meta-grid";
 import { RelativeTime } from "~/components/ui/relative-time";
 import { SectionLabel } from "~/components/ui/section-label";
 import { SiteFooter } from "~/components/ui/site-footer";
+import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
-import { CATEGORY_LABELS, eventWhen } from "~/lib/ideas";
+import { CATEGORY_LABELS, eventWhen, type IdeaView } from "~/lib/ideas";
 import { toIdeaView } from "~/lib/ideas";
+import { isGeneratedHandle } from "~/lib/profile";
 import {
   ApiError,
   createPost,
@@ -79,6 +82,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       name: profile.name,
       bio: profile.bio ?? "",
       faculty: profile.faculty,
+      avatarUrl: profile.avatarUrl,
       verified: profile.verified ?? false,
       karma: profile.karma ?? 0,
       joinedAt: profile.joinedAt,
@@ -205,36 +209,137 @@ function Stagger({
   );
 }
 
-function ParticipationControl({ joined, isEvent }: { joined: boolean; isEvent: boolean }) {
+function ParticipationControl({ joined, isEvent, size = "md" }: { joined: boolean; isEvent: boolean; size?: "md" | "sm" }) {
   const root = useRouteLoaderData<RootData>("root");
   const fetcher = useFetcher();
-  if (!root?.currentUser) return <Button to="/login" variant="secondary">{isEvent ? "Я піду" : "Долучитися"}</Button>;
+  if (!root?.currentUser) return <Button to="/login" variant="secondary" size={size}>{isEvent ? "Я піду" : "Долучитися"}</Button>;
   return (
     <fetcher.Form method="post">
       <input type="hidden" name="intent" value={joined ? "leave" : "participate"} />
       {!joined && <input type="hidden" name="state" value="JOINED" />}
-      <Button type="submit" variant="secondary" disabled={fetcher.state !== "idle"}>
+      <Button type="submit" variant="secondary" size={size} disabled={fetcher.state !== "idle"}>
         {joined ? "Не долучатися" : isEvent ? "Я піду" : "Долучитися"}
       </Button>
     </fetcher.Form>
   );
 }
 
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+/** Чому ідею бачить лише автор. Для схваленої ідеї пояснювати нічого. */
+const MODERATION_NOTES: Partial<Record<NonNullable<IdeaView["moderation"]>, { label: string; note: string }>> = {
+  PENDING: {
+    label: "на модерації",
+    note: "Поки ідею бачите лише ви. Підтримка, заявки в команду й обговорення відкриються, щойно модератор її схвалить.",
+  },
+  HIDDEN: { label: "прихована", note: "Модератор сховав ідею, тому інші її зараз не бачать." },
+  REJECTED: { label: "відхилена", note: "Модератор відхилив ідею, тому інші її не бачать." },
+};
+
+function ShareButton({ size = "md" }: { size?: "md" | "sm" }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href.split("#")[0]);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <Button variant="secondary" size={size} onClick={copy} aria-live="polite">
+      {copied ? <IconCheck className="size-4" /> : <IconLink className="size-4" />}
+      {copied ? "Посилання скопійовано" : "Поділитися"}
+    </Button>
+  );
+}
+
+/**
+ * Автор не голосує за свою ідею й не долучається до неї (бекенд відповість 422), тож замість
+ * цих кнопок у нього статус ідеї, посилання, щоб її поширити, і перехід до заявок у команду.
+ */
+function OwnerBar({ moderation, requests }: { moderation: IdeaView["moderation"]; requests: number }) {
+  const status = moderation ? MODERATION_NOTES[moderation] : undefined;
+  return (
+    <>
+      <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3.5 py-2 text-sm text-[var(--color-text)]">
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--color-accent)]" />
+        Ваша ідея
+        {status && <span className="text-[var(--color-text-muted)]">· {status.label}</span>}
+      </span>
+      {!status && <ShareButton />}
+      {requests > 0 && (
+        <Button to="#komanda" variant="secondary">
+          Заявки в команду <span className="tabular-nums opacity-70">{requests}</span>
+        </Button>
+      )}
+      {status && <p className="basis-full max-w-xl text-sm text-[var(--color-text-muted)]">{status.note}</p>}
+    </>
+  );
+}
+
+/** Тиха дія в ряду кнопок; панель з причиною розгортається на всю ширину під рядом. */
 function ReportControl() {
   const root = useRouteLoaderData<RootData>("root");
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const [open, setOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   if (!root?.currentUser) return null;
+  const sent = Boolean(fetcher.data?.ok);
+
   return (
-    <details className="mt-4 text-sm text-[var(--color-text-muted)]">
-      <summary className="cursor-pointer">Поскаржитися</summary>
-      <fetcher.Form method="post" className="mt-2 flex max-w-xl gap-2">
-        <input type="hidden" name="intent" value="report" />
-        <input name="reason" required maxLength={500} placeholder="Причина скарги" className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-transparent px-3 py-2" />
-        <Button type="submit" size="sm" variant="secondary" disabled={fetcher.state !== "idle"}>Надіслати</Button>
-      </fetcher.Form>
-      {fetcher.data?.ok && <p role="status" className="mt-2">Скаргу надіслано.</p>}
-      {fetcher.data?.error && <p role="alert" className="mt-2 text-red-300">{fetcher.data.error}</p>}
-    </details>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        disabled={sent}
+        aria-expanded={open && !sent}
+        aria-controls="idea-report"
+        className="ml-auto inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-2 text-sm text-[var(--color-text-faint)] transition-colors duration-200 hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:cursor-default disabled:hover:text-[var(--color-text-faint)]"
+      >
+        {sent ? <IconCheck className="size-4" /> : <IconFlag className="size-4" />}
+        {sent ? "Скаргу надіслано" : "Поскаржитися"}
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && !sent && (
+          <motion.div
+            id="idea-report"
+            key="report"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
+            className="-mt-3 basis-full overflow-hidden"
+          >
+            <fetcher.Form method="post" className="pt-4">
+              <input type="hidden" name="intent" value="report" />
+              <label htmlFor="report-reason" className="text-sm font-medium text-[var(--color-text-muted)]">
+                Що не так з ідеєю?
+              </label>
+              <textarea
+                id="report-reason"
+                name="reason"
+                required
+                autoFocus
+                rows={2}
+                maxLength={500}
+                placeholder="Спам, образи, чужа ідея…"
+                className="mt-2 block w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-[16px] text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color] duration-200 focus:border-[var(--color-accent)] focus:outline-none sm:text-sm"
+              />
+              {fetcher.data?.error && <p role="alert" className="mt-2 text-sm text-red-300">{fetcher.data.error}</p>}
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Скасувати</Button>
+                <Button type="submit" size="sm" variant="secondary" disabled={fetcher.state !== "idle"}>
+                  {fetcher.state === "idle" ? "Надіслати" : "Надсилаємо…"}
+                </Button>
+              </div>
+            </fetcher.Form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -253,6 +358,11 @@ function ParticipantActions({ handle }: { handle: string }) {
 export default function IdeaPage({ loaderData }: Route.ComponentProps) {
   const { idea, thread, next, participants, profiles } = loaderData;
   const isEvent = idea.category === "EVENT" && !!idea.eventAt;
+  const root = useRouteLoaderData<RootData>("root");
+  const isOwner = root?.currentUser?.handle === idea.author.handle;
+  // Поки ідею не схвалили, бекенд не приймає ні голосів, ні дописів: гілку бачить лише автор.
+  const live = !idea.moderation || idea.moderation === "APPROVED";
+  const requests = isOwner && !isEvent ? participants.filter((p) => p.state === "JOINED" || p.state === "INTERESTED").length : 0;
 
   const index = useMemo<IndexItem[]>(() => {
     const parts = idea.toc
@@ -296,12 +406,7 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                   </p>
 
                   <div className="mt-8 flex items-center gap-4">
-                    <span
-                      aria-hidden="true"
-                      className="grid size-14 shrink-0 place-items-center rounded-full border border-[var(--color-border-strong)] text-xl text-[var(--color-text)]"
-                    >
-                      {idea.author.name.charAt(0).toUpperCase()}
-                    </span>
+                    <UserAvatar name={idea.author.name} src={profiles[idea.author.handle]?.avatarUrl} className="size-14 text-xl" />
                     <div className="min-w-0">
                       <AuthorLink
                         handle={idea.author.handle}
@@ -309,7 +414,7 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                       >
                         {idea.author.name}
                       </AuthorLink>
-                      <span className="hud-label">@{idea.author.handle}</span>
+                      {!isGeneratedHandle(idea.author.handle) && <span className="hud-label">@{idea.author.handle}</span>}
                     </div>
                     {idea.author.verified && <VerifiedSeal />}
                   </div>
@@ -318,10 +423,16 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                     id={IDEA_ACTIONS_ID}
                     className="mt-8 flex flex-wrap items-center gap-3"
                   >
-                    <VoteControl score={idea.votes} voted={idea.viewer?.voted} />
-                    <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />
+                    {isOwner ? (
+                      <OwnerBar moderation={idea.moderation} requests={requests} />
+                    ) : (
+                      <>
+                        <VoteControl score={idea.votes} voted={idea.viewer?.voted} />
+                        <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />
+                        <ReportControl />
+                      </>
+                    )}
                   </div>
-                  <ReportControl />
                 </Stagger>
 
                 <Stagger step={3}>
@@ -431,7 +542,7 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                     {!isEvent && idea.needsRoles?.length ? (
                       <>
                         <p className="text-[var(--color-text-muted)]">
-                          Автор шукає людей на ролі:
+                          {isOwner ? "Ви шукаєте людей на ролі:" : "Автор шукає людей на ролі:"}
                         </p>
                         <p className="flex flex-wrap gap-2">
                           {idea.needsRoles.map((role) => (
@@ -450,24 +561,33 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                             {idea.participants}
                           </span>
                         </>
-                      ) : (
+                      ) : !isOwner ? (
                         "Ще нікого. Будь першим."
+                      ) : !live ? (
+                        "Заявки почнуть приходити після модерації."
+                      ) : isEvent ? (
+                        "Поки ніхто не зголосився. Поділіться посиланням на подію."
+                      ) : (
+                        "Поки ніхто не долучився. Коли хтось подасть заявку, вона зʼявиться тут, і ви вирішите, кого прийняти."
                       )}
                     </p>
                     {participants.length > 0 && (
                       <ul className="space-y-2">
                         {participants.map((participant) => (
                           <li key={participant.handle} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] p-3">
-                            <span>
-                              <AuthorLink handle={participant.handle} className="font-medium hover:underline">{participant.name}</AuthorLink>
-                              <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || participant.state}</span>
+                            <span className="flex min-w-0 items-center gap-3">
+                              <UserAvatar name={participant.name} src={profiles[participant.handle]?.avatarUrl} className="size-8 text-sm" />
+                              <span className="min-w-0">
+                                <AuthorLink handle={participant.handle} className="font-medium hover:underline">{participant.name}</AuthorLink>
+                                <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || participant.state}</span>
+                              </span>
                             </span>
                             {idea.canEdit && (participant.state === "JOINED" || participant.state === "INTERESTED") && <ParticipantActions handle={participant.handle} />}
                           </li>
                         ))}
                       </ul>
                     )}
-                    <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />
+                    {!isOwner && <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />}
                   </div>
                 </section>
 
@@ -477,7 +597,11 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                     <span className="tabular-nums">{thread.count}</span>
                   </SectionLabel>
                   <div className="mt-6">
-                    <Forum thread={thread} authorHandle={idea.author.handle} />
+                    <Forum
+                      thread={thread}
+                      authorHandle={idea.author.handle}
+                      closed={live ? undefined : "Обговорення відкриється, щойно модератор схвалить ідею."}
+                    />
                   </div>
                 </section>
               </div>
@@ -490,11 +614,25 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
         <div className="relative z-10">
           <SiteFooter />
         </div>
-        <IdeaDock
-          votes={idea.votes}
-          comments={thread.count}
-          isEvent={isEvent}
-        />
+        <IdeaDock comments={thread.count}>
+          {isOwner ? (
+            <>
+              <span className="px-3 text-sm whitespace-nowrap text-[var(--color-text-muted)]">Ваша ідея</span>
+              {requests > 0 ? (
+                <Button to="#komanda" variant="secondary" size="sm">
+                  Заявки <span className="tabular-nums opacity-70">{requests}</span>
+                </Button>
+              ) : (
+                live && <ShareButton size="sm" />
+              )}
+            </>
+          ) : (
+            <>
+              <VoteControl score={idea.votes} voted={idea.viewer?.voted} size="sm" />
+              <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} size="sm" />
+            </>
+          )}
+        </IdeaDock>
       </div>
     </AuthorPopoverProvider>
   );

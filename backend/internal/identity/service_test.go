@@ -98,6 +98,18 @@ func (r *memoryRepository) UserByHandle(context.Context, string) (domain.User, e
 	return domain.User{}, domain.ErrNotFound
 }
 
+func (r *memoryRepository) SetAvatar(context.Context, string, domain.Avatar, time.Time) (domain.User, error) {
+	return domain.User{}, errors.New("not implemented")
+}
+
+func (r *memoryRepository) DeleteAvatar(context.Context, string) (domain.User, error) {
+	return domain.User{}, errors.New("not implemented")
+}
+
+func (r *memoryRepository) AvatarByHandle(context.Context, string) (domain.Avatar, error) {
+	return domain.Avatar{}, domain.ErrNoAvatar
+}
+
 func (r *memoryRepository) SetRole(context.Context, string, domain.Role, time.Time) (domain.User, error) {
 	return domain.User{}, errors.New("not implemented")
 }

@@ -4,6 +4,11 @@ export const PROFILE_FIELDS = ["name", "handle", "bio", "faculty"] as const;
 export type ProfileField = (typeof PROFILE_FIELDS)[number];
 export type ProfileUpdate = Partial<Pick<User, ProfileField>>;
 
+/** Заглушка `u_<uuid>`, яку бекенд ставить при першому вході. Людям її не показуємо. */
+export function isGeneratedHandle(handle: string): boolean {
+  return /^u_[0-9a-f]{32}$/.test(handle);
+}
+
 /** Лише змінені поля: PATCH не перезаписує те, чого людина не торкалась. */
 export function profileChanges(form: FormData, current: User): ProfileUpdate {
   const update: ProfileUpdate = {};

@@ -188,3 +188,27 @@ export function IconClose({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconFlag({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M5 17.5V3.5M5 4h9l-2 3.5 2 3.5H5" />
+    </svg>
+  );
+}
+
+export function IconLink({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M8.5 11.5a3 3 0 0 0 4.24 0l2.5-2.5a3 3 0 0 0-4.24-4.24l-.75.75M11.5 8.5a3 3 0 0 0-4.24 0l-2.5 2.5a3 3 0 0 0 4.24 4.24l.75-.75" />
+    </svg>
+  );
+}
+
+export function IconPlus({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M10 4.5v11M4.5 10h11" />
+    </svg>
+  );
+}

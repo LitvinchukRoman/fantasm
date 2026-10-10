@@ -1,7 +1,8 @@
 import { data, Form, redirect, useNavigation } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
 import { Button } from "~/components/ui/button";
-import { ApiError, getCurrentUser, routeApi, updateProfile } from "~/lib/api.server";
+import { AvatarPicker } from "~/components/profile/avatar-picker";
+import { ApiError, deleteAvatar, getCurrentUser, routeApi, updateProfile, uploadAvatar } from "~/lib/api.server";
 import { profileChanges, profileFieldErrors, type ProfileField } from "~/lib/profile";
 import { noindexSeo } from "~/lib/seo";
 import type { Route } from "./+types/settings";
@@ -19,6 +20,24 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const current = await routeApi(getCurrentUser(request));
   if (!current) throw redirect("/login");
+  const intent = form.get("intent");
+  if (intent === "avatar" || intent === "avatar-delete") {
+    const image = form.get("avatar");
+    if (intent === "avatar" && !(image instanceof Blob && image.size > 0)) {
+      return data({ avatar: { error: "Оберіть фото." } }, { status: 400 });
+    }
+    try {
+      await (intent === "avatar" ? uploadAvatar(request, image as Blob) : deleteAvatar(request));
+      return data({ avatar: { error: undefined } });
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      const message =
+        error.status === 413 ? "Фото завелике навіть після стиснення. Спробуйте інше."
+        : error.status === 422 ? "Підійде фото у форматі JPEG, PNG або WebP."
+        : "Не вдалося зберегти фото. Спробуйте ще раз.";
+      return data({ avatar: { error: message } }, { status: error.status });
+    }
+  }
   const update = profileChanges(form, current);
   if (Object.keys(update).length === 0) return redirect(`/u/${current.handle}`);
   try {
@@ -40,7 +59,9 @@ const INPUT =
 export default function Settings({ loaderData, actionData }: Route.ComponentProps) {
   const { user } = loaderData;
   const saving = useNavigation().state === "submitting";
-  const fields: Record<string, string> = actionData?.fields ?? {};
+  // Відповіді про фото забирає fetcher в AvatarPicker; тут лише результат форми профілю.
+  const profileResult = actionData && "fields" in actionData ? actionData : undefined;
+  const fields: Record<string, string> = profileResult?.fields ?? {};
   const field = (name: ProfileField, extra = "mt-1.5") => ({
     id: name,
     name,
@@ -61,6 +82,10 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
       <div className="mx-auto max-w-xl">
         <h1 className="text-3xl font-semibold">Профіль</h1>
         <p className="mt-2 text-[var(--color-text-muted)]">Імʼя та нікнейм бачать усі, хто відкриває ваші ідеї.</p>
+
+        <div className="mt-8">
+          <AvatarPicker name={user.name} src={user.avatarUrl || undefined} />
+        </div>
 
         <Form method="post" className="mt-8 space-y-5">
           <div>
@@ -102,8 +127,8 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
             {error("bio")}
           </div>
 
-          {actionData?.error && !Object.keys(fields).length && (
-            <p role="alert" className="text-sm text-red-400">{actionData.error}</p>
+          {profileResult?.error && !Object.keys(fields).length && (
+            <p role="alert" className="text-sm text-red-400">{profileResult.error}</p>
           )}
 
           <div className="flex items-center gap-3 pt-2">

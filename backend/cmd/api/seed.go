@@ -94,7 +94,7 @@ func seedIdeas(ctx context.Context, db *postgres.DB, policy *organizations.Polic
 	}
 	var authorID string
 	err = db.Querier(ctx).QueryRow(ctx, `
-		INSERT INTO users (id, handle, name, email) VALUES (gen_random_uuid(), $1, $2, $3)
+		INSERT INTO users (id, handle, name, email, onboarded_at) VALUES (gen_random_uuid(), $1, $2, $3, now())
 		ON CONFLICT (handle) DO UPDATE SET handle = EXCLUDED.handle WHERE users.email = EXCLUDED.email
 		RETURNING id`, file.Author.Handle, file.Author.Name, file.Author.Email).Scan(&authorID)
 	if postgres.IsNoRows(err) {

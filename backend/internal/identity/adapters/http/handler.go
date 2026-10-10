@@ -2,11 +2,14 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +96,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/logout-all", httpx.Authed(h.logoutAll))
 	mux.HandleFunc("GET /api/me", h.me)
 	mux.HandleFunc("PATCH /api/me", httpx.Authed(h.updateMe))
+	mux.HandleFunc("PUT /api/me/avatar", httpx.Authed(h.putAvatar))
+	mux.HandleFunc("DELETE /api/me/avatar", httpx.Authed(h.deleteAvatar))
+	mux.HandleFunc("GET /api/users/{handle}/avatar", h.avatar)
 	mux.HandleFunc("GET /api/me/sessions", httpx.Authed(h.sessions))
 	mux.HandleFunc("DELETE /api/me/sessions/{id}", httpx.Authed(h.revokeSession))
 	mux.HandleFunc("PATCH /api/admin/users/{handle}/role", httpx.Admin(h.setRole))
@@ -171,6 +177,71 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// putAvatar takes the image itself as the body, not multipart: the browser has
+// already cropped and encoded it.
+func (h *Handler) putAvatar(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, domain.AvatarMaxBytes))
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.writeError(w, r, apperr.TooLarge("avatar must be at most 256 KB"))
+			return
+		}
+		h.writeError(w, r, apperr.Invalid("could not read the image"))
+		return
+	}
+	user, err := h.service.SetAvatar(r.Context(), viewer.From(r.Context()).ID(), data)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+func (h *Handler) deleteAvatar(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	user, err := h.service.DeleteAvatar(r.Context(), viewer.From(r.Context()).ID())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// pathHandle admits chosen handles and the generated u_<uuid> placeholder, and
+// keeps bytes Postgres rejects as text out of the query.
+var pathHandle = regexp.MustCompile(`^[a-z0-9_][a-z0-9_-]{2,39}$`)
+
+func (h *Handler) avatar(w http.ResponseWriter, r *http.Request) {
+	handle := r.PathValue("handle")
+	if !pathHandle.MatchString(handle) {
+		httpx.WriteError(w, r, apperr.NotFound("avatar not found"))
+		return
+	}
+	avatar, err := h.service.Avatar(r.Context(), handle)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	etag := `"` + strconv.FormatInt(avatar.UpdatedAt.UnixMilli(), 10) + `"`
+	header := w.Header()
+	header.Set("Content-Type", avatar.ContentType)
+	header.Set("ETag", etag)
+	// AvatarPath puts the upload time in ?v=, so a versioned URL never changes content.
+	if r.URL.Query().Has("v") {
+		header.Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		header.Set("Cache-Control", "public, no-cache")
+	}
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	header.Set("Content-Length", strconv.Itoa(len(avatar.Data)))
+	_, _ = w.Write(avatar.Data)
 }
 
 func (h *Handler) sessions(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +334,10 @@ type userResponse struct {
 	Role        domain.Role         `json:"role"`
 	Karma       int                 `json:"karma"`
 	Verified    bool                `json:"verified"`
-	CreatedAt   time.Time           `json:"createdAt"`
+	Onboarded   bool                `json:"onboarded"`
+	// SuggestedHandle replaces the generated placeholder in the onboarding form.
+	SuggestedHandle string    `json:"suggestedHandle,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 func toUserResponse(u domain.User) userResponse {
@@ -271,12 +345,18 @@ func toUserResponse(u domain.User) userResponse {
 	if memberships == nil {
 		memberships = []domain.Membership{}
 	}
-	return userResponse{
+	resp := userResponse{
 		ID: u.ID, Handle: u.Handle, Name: u.Name, Email: u.Email,
-		AvatarURL: u.AvatarURL, Bio: u.Bio, Faculty: u.Faculty,
-		Role: u.Role, Karma: u.Karma, Verified: len(memberships) > 0,
+		AvatarURL: u.AvatarPath(), Bio: u.Bio, Faculty: u.Faculty,
+		Role: u.Role, Karma: u.Karma, Verified: len(memberships) > 0, Onboarded: u.Onboarded,
 		CreatedAt: u.CreatedAt, Memberships: memberships,
 	}
+	if !u.Onboarded && domain.IsGeneratedHandle(u.Handle) {
+		if candidates := domain.HandleCandidates(u.Name); len(candidates) > 0 {
+			resp.SuggestedHandle = candidates[0]
+		}
+	}
+	return resp
 }
 
 func (h *Handler) private(w http.ResponseWriter) {

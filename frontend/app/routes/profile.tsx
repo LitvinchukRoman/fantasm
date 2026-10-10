@@ -8,9 +8,11 @@ import { Button } from "~/components/ui/button";
 import { HudLabel } from "~/components/ui/hud-label";
 import { MetaGrid } from "~/components/ui/meta-grid";
 import { SiteFooter } from "~/components/ui/site-footer";
+import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { formatShortDate } from "~/lib/ideas";
 import { getCurrentUser, getProfile, routeApi } from "~/lib/api.server";
+import { isGeneratedHandle } from "~/lib/profile";
 import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { useCurvedMode } from "~/lib/use-curved-mode";
@@ -37,7 +39,7 @@ export function meta({ data }: Route.MetaArgs) {
   if (!data) return [];
   const { profile } = data;
   return seo({
-    title: `${profile.name} (@${profile.handle}) — Fantasm`,
+    title: isGeneratedHandle(profile.handle) ? `${profile.name} — Fantasm` : `${profile.name} (@${profile.handle}) — Fantasm`,
     description: profile.bio || `Профіль користувача ${profile.name}`,
     path: `/u/${profile.handle}`,
   });
@@ -64,16 +66,13 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
           {/* Ліва колонка: людина. Печатка, ім'я й дані тією ж мовою, що на сторінці ідеї. */}
           <aside className="z-20 mt-8 space-y-8 lg:sticky lg:top-36 lg:self-start lg:pr-4">
             <div>
-              <span
-                aria-hidden="true"
-                className="mb-6 grid size-24 place-items-center rounded-full border border-[var(--color-border-strong)] text-4xl text-[var(--color-text)]"
-              >
-                {profile.name.charAt(0).toUpperCase()}
-              </span>
+              <UserAvatar name={profile.name} src={profile.avatarUrl} className="mb-6 size-24 text-4xl" />
               <h1 className="display-entity text-3xl">{profile.name}</h1>
-              <HudLabel as="p" className="mt-2">
-                @{profile.handle}
-              </HudLabel>
+              {!isGeneratedHandle(profile.handle) && (
+                <HudLabel as="p" className="mt-2">
+                  @{profile.handle}
+                </HudLabel>
+              )}
               {profile.verified && (
                 <div className="mt-4">
                   <VerifiedSeal />
