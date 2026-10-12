@@ -107,8 +107,11 @@ export const query = (path: string, values: Record<string, string | number | boo
   return encoded ? `${path}?${encoded}` : path;
 };
 
+/** Без cookie сесії /api/me завжди 401; згода й _ga є майже в кожного анонімного відвідувача. */
+const SESSION_COOKIE = /(?:^|;\s*)(?:__Host-)?fantasm_session=[^;]/;
+
 export async function getCurrentUser(request: Request): Promise<User | null> {
-  if (!request.headers.get("cookie")) return null;
+  if (!SESSION_COOKIE.test(request.headers.get("cookie") ?? "")) return null;
   try {
     return await api<User>(request, "/api/me");
   } catch (error) {

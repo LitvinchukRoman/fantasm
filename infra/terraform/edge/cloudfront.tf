@@ -36,7 +36,7 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
   for_each = local.envs
 
   name    = "${var.project_name}-frontend${each.value.suffix}-security"
-  comment = "Baseline browser protections for the static frontend"
+  comment = "Baseline browser protections for SSR pages, assets and the API"
 
   security_headers_config {
     strict_transport_security {
@@ -55,6 +55,15 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
     referrer_policy {
       referrer_policy = "strict-origin-when-cross-origin"
       override        = true
+    }
+    # Fallback only. HTML pages carry a per-request nonce policy from Node SSR
+    # (frontend/app/lib/csp.ts) and the Go API sends its own; a static policy
+    # here cannot allow SSR's inline hydration scripts, so it must never
+    # override theirs. It covers whatever arrives without one: S3 assets,
+    # files from public/, sitemap.xml, robots.txt.
+    content_security_policy {
+      content_security_policy = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+      override                = false
     }
   }
 

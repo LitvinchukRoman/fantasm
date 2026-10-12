@@ -3,6 +3,7 @@ import { ArticlesBento } from "~/components/articles/bento";
 import { HubIndex } from "~/components/articles/hub-index";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Nav } from "~/components/landing/nav";
+import { SiteFooter } from "~/components/ui/site-footer";
 import { getArticleItems } from "~/lib/articles.server";
 import { HUB_SLUGS, HUBS, getArticles, getHub } from "~/lib/content.server";
 import { seo } from "~/lib/seo";
@@ -68,6 +69,9 @@ export default function GuidesIndex({ loaderData }: Route.ComponentProps) {
           </motion.div>
         </LayoutGroup>
       </main>
+      <div className="relative z-10">
+        <SiteFooter />
+      </div>
     </div>
   );
 }

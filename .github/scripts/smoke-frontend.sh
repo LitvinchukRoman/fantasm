@@ -24,12 +24,26 @@ for path in / /api/auth/providers; do
   fi
 done
 
-server=$(curl -sS -o /tmp/fantasm-smoke.html -D - --max-time 10 "${base}/" | tr -d '\r' | awk -F': ' 'tolower($1) == "server" { print $2 }')
-if [[ "$server" == "AmazonS3" ]]; then
+curl -sS -o /tmp/fantasm-smoke.html -D /tmp/fantasm-smoke.headers --max-time 10 "${base}/"
+header() { tr -d '\r' < /tmp/fantasm-smoke.headers | awk -F': ' -v name="$1" 'tolower($1) == name { print $2 }'; }
+if [[ "$(header server)" == "AmazonS3" ]]; then
   echo "::error::${base}/ is served by S3, not by Node SSR"
   exit 1
 fi
 echo "ok: ${base}/ is server-rendered"
+
+# CloudFront adds a fallback CSP that blocks every script, so a page without
+# Node's nonce policy renders but never hydrates.
+nonce=$(header content-security-policy | grep -oE "'nonce-[A-Za-z0-9+/=]+'" | head -n 1 | sed -E "s/^'nonce-(.*)'$/\1/" || true)
+if [[ -z "$nonce" ]]; then
+  echo "::error::${base}/ has no nonce in Content-Security-Policy: $(header content-security-policy)"
+  exit 1
+fi
+if ! grep -qF "nonce=\"${nonce}\"" /tmp/fantasm-smoke.html; then
+  echo "::error::${base}/ scripts do not carry the CSP nonce"
+  exit 1
+fi
+echo "ok: ${base}/ sends a nonce CSP and its scripts use it"
 
 asset=$(grep -oE '/assets/[A-Za-z0-9._-]+\.js' /tmp/fantasm-smoke.html | head -n 1 || true)
 if [[ -z "$asset" ]]; then
