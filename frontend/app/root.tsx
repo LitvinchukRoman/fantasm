@@ -1,7 +1,10 @@
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
+import { ConsentBanner } from "~/components/ui/consent-banner";
 import { api, getCurrentUser, routeApi } from "~/lib/api.server";
 import type { User } from "~/lib/api-types";
+import { CONSENT_PATTERN } from "~/lib/consent";
+import { useNonce } from "~/lib/csp";
 import { SITE_URL } from "~/lib/site";
 import type { Route } from "./+types/root";
 
@@ -10,30 +13,39 @@ import "./app.css";
 const GA_ID = "G-SBRF7E3C29";
 
 /**
- * Google tag. Вмикається лише на тому origin, під який зібрано сайт: локальний
- * `npm start` і чужі дзеркала не пишуть у статистику. Перегляди при клієнтських
- * переходах GA4 рахує сам (enhanced measurement, history events), тому окремий
- * page_view на зміну маршруту дав би подвійний підрахунок.
+ * Google tag з режимом згоди (Consent Mode v2, advanced). Вмикається лише на тому origin,
+ * під який зібрано сайт: локальний `npm start` і чужі дзеркала не пишуть у статистику.
+ * `consent default` мусить іти до `config`: без згоди gtag шле лише знеособлені пінги без
+ * cookies, а збережений вибір застосовується одразу, ще до банера. Перегляди при клієнтських
+ * переходах GA4 рахує сам (enhanced measurement), тому окремий page_view дав би подвійний підрахунок.
  */
 const GA_SNIPPET = `if (location.origin === ${JSON.stringify(SITE_URL)}) {
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () { dataLayer.push(arguments); };
+  var choice = document.cookie.match(${CONSENT_PATTERN});
+  gtag("consent", "default", {
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+    analytics_storage: choice ? choice[1] : "denied"
+  });
   var s = document.createElement("script");
   s.async = true;
   s.src = "https://www.googletagmanager.com/gtag/js?id=${GA_ID}";
   document.head.appendChild(s);
-  window.dataLayer = window.dataLayer || [];
-  window.gtag = function () { dataLayer.push(arguments); };
   gtag("js", new Date());
   gtag("config", "${GA_ID}");
 }`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const nonce = useNonce();
   return (
     <html lang="uk">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#08090a" />
-        {import.meta.env.PROD && <script dangerouslySetInnerHTML={{ __html: GA_SNIPPET }} />}
+        {import.meta.env.PROD && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: GA_SNIPPET }} />}
         <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -49,8 +61,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ConsentBanner />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
       </body>
     </html>
   );

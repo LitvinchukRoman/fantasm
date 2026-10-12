@@ -41,11 +41,21 @@ describe("server API client", () => {
 
   it("treats a missing cookie and API 401 as signed out", async () => {
     expect(await getCurrentUser(new Request("https://fantasm.test/"))).toBeNull();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ error: "signed out", code: "unauthorized" }),
       { status: 401, headers: { "content-type": "application/json" } },
-    )));
-    expect(await getCurrentUser(new Request("https://fantasm.test/", { headers: { cookie: "session=expired" } }))).toBeNull();
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await getCurrentUser(new Request("https://fantasm.test/", { headers: { cookie: "__Host-fantasm_session=expired" } }))).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask the API about visitors without a session cookie", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const cookie = "fantasm_consent=granted; _ga=GA1.1.123.456; _ga_SBRF7E3C29=GS1.1.789";
+    expect(await getCurrentUser(new Request("https://fantasm.test/", { headers: { cookie } }))).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("maps feed filters and preserves structured errors", async () => {

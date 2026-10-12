@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { openConsentSettings } from "~/lib/consent";
 
 /**
  * Єдиний футер сайту: бренд-блок і кластер «Продукт». Лендінг, стрічка, ідея, профіль, події, гайди.
@@ -42,9 +43,17 @@ export function SiteFooter() {
 
       <div className="mx-auto mt-8 flex max-w-6xl flex-col items-center justify-between gap-2 border-t border-[var(--color-border)] pt-6 text-xs text-[var(--color-text-faint)] sm:flex-row">
         <span>© 2026 Fantasm</span>
-        <a href="https://www.ukma.edu.ua" className="transition-colors hover:text-[var(--color-text-muted)]">
-          НаУКМА
-        </a>
+        <div className="flex items-center gap-5">
+          <Link to="/cookies" className="transition-colors hover:text-[var(--color-text-muted)]">
+            Cookies
+          </Link>
+          <button type="button" onClick={openConsentSettings} className="transition-colors hover:text-[var(--color-text-muted)]">
+            Налаштування cookies
+          </button>
+          <a href="https://www.ukma.edu.ua" className="transition-colors hover:text-[var(--color-text-muted)]">
+            НаУКМА
+          </a>
+        </div>
       </div>
     </footer>
   );
