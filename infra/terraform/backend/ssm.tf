@@ -120,3 +120,18 @@ resource "aws_ssm_parameter" "oauth" {
     ignore_changes = [value]
   }
 }
+
+# Verified emails that become ADMIN on login. "unset" means nobody is
+# bootstrapped. The real list is put with aws ssm put-parameter --overwrite
+# and must not be committed.
+resource "aws_ssm_parameter" "admin_emails" {
+  for_each = local.envs
+
+  name  = "/${var.project_name}/${each.key}/app/admin-emails"
+  type  = "SecureString"
+  value = "unset"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

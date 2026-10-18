@@ -47,6 +47,12 @@ var routes = []route{
 	{Method: "DELETE", Path: "/api/me/avatar", Access: authed},
 	{Method: "GET", Path: "/api/users/{handle}/avatar"},
 	{Method: "PATCH", Path: "/api/admin/users/{handle}/role", Access: admin, Fields: []string{"role"}},
+	{Method: "GET", Path: "/api/admin/overview", Access: admin, Query: []string{"range"}},
+	{Method: "GET", Path: "/api/admin/users", Access: admin, Query: []string{"q", "role", "cursor"}},
+	{Method: "GET", Path: "/api/admin/settings", Access: admin},
+	{Method: "PUT", Path: "/api/admin/settings", Access: admin, Fields: []string{"premoderation"}},
+	{Method: "GET", Path: "/api/admin/health", Access: admin},
+	{Method: "POST", Path: "/api/analytics/events"},
 
 	{Method: "GET", Path: "/api/ideas", Query: []string{"sort", "category", "status", "tag", "campus", "cursor", "limit"}},
 	{Method: "POST", Path: "/api/ideas", Access: authed, Fields: []string{"title", "summary", "body", "coverUrl", "category", "visibility", "organizationId", "status", "eventLocation"}, Lists: []string{"tags", "needsRoles"}},
@@ -76,6 +82,7 @@ var routes = []route{
 	{Method: "GET", Path: "/api/moderation/queue", Access: staff, Query: []string{"state", "cursor", "limit"}},
 	{Method: "POST", Path: "/api/moderation/ideas/{id}/decision", Access: staff, Fields: []string{"decision", "note"}},
 	{Method: "GET", Path: "/api/moderation/reports", Access: staff, Query: []string{"ideaId"}},
+	{Method: "GET", Path: "/api/moderation/history", Access: staff, Query: []string{"cursor", "limit"}},
 
 	{Method: "GET", Path: "/api/me/notifications", Access: authed, Query: []string{"unread", "cursor", "limit"}},
 	{Method: "POST", Path: "/api/me/notifications/read", Access: authed, Lists: []string{"ids"}},

@@ -172,8 +172,18 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	root.Handle("/", application.API)
 
 	runner := jobs.NewRunner(logger, application.Jobs...)
+	observe := application.ObserveJob
 	if metrics != nil {
-		runner.WithObserver(metrics.ObserveJob)
+		healthObserve := observe
+		observe = func(name string, duration time.Duration, err error) {
+			metrics.ObserveJob(name, duration, err)
+			if healthObserve != nil {
+				healthObserve(name, duration, err)
+			}
+		}
+	}
+	if observe != nil {
+		runner.WithObserver(observe)
 	}
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	jobsDone := make(chan struct{})

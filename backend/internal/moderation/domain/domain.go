@@ -88,6 +88,19 @@ type QueueItem struct {
 	AuthorApproved int
 }
 
+// HistoryItem is a closed case: who decided, and what they wrote.
+type HistoryItem struct {
+	CaseID    string
+	IdeaID    string
+	Slug      string
+	Title     string
+	Decision  string
+	Note      string
+	Source    string
+	DecidedAt time.Time
+	Moderator Author
+}
+
 type Report struct {
 	Reporter  Author
 	Reason    string

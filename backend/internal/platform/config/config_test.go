@@ -11,6 +11,7 @@ var keys = []string{
 	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET", "LOG_LEVEL", "APP_SECRET", "TRUSTED_PROXY_CIDRS",
 	"RATE_LIMIT_ANON_RPS", "RATE_LIMIT_ANON_BURST", "RATE_LIMIT_USER_RPS", "RATE_LIMIT_USER_BURST", "RATE_LIMIT_LOGIN_PER_MIN", "RATE_LIMIT_POSTS_PER_MIN",
 	"SESSION_ABSOLUTE_TTL", "SESSION_IDLE_TTL", "DB_MAX_CONNS", "DB_STATEMENT_TIMEOUT", "SHUTDOWN_TIMEOUT", "REQUEST_TIMEOUT", "METRICS_ADDR",
+	"ADMIN_EMAILS", "ANALYTICS_RETENTION_DAYS", "ANALYTICS_RATE_LIMIT_PER_MIN",
 }
 
 // env starts from an empty environment and applies overrides.
@@ -56,6 +57,8 @@ func TestEveryOverrideIsRead(t *testing.T) {
 		"REQUEST_TIMEOUT": "4s", "SHUTDOWN_TIMEOUT": "5s", "MIGRATE_ON_START": "true",
 		"TRUSTED_PROXY_CIDRS": " 10.0.0.0/8 , 172.16.0.0/12 ,, ",
 		"GOOGLE_CLIENT_ID":    "id", "GOOGLE_CLIENT_SECRET": "secret",
+		"ADMIN_EMAILS":             " Admin@Example.com , second@example.com ",
+		"ANALYTICS_RETENTION_DAYS": "90", "ANALYTICS_RATE_LIMIT_PER_MIN": "30",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -71,6 +74,9 @@ func TestEveryOverrideIsRead(t *testing.T) {
 	}
 	if got := strings.Join(cfg.TrustedProxyCIDRs, "|"); got != "10.0.0.0/8|172.16.0.0/12" {
 		t.Errorf("cidrs = %q", got)
+	}
+	if strings.Join(cfg.AdminEmails, "|") != "admin@example.com|second@example.com" || cfg.AnalyticsRetentionDays != 90 || cfg.AnalyticsRatePerMin != 30 {
+		t.Errorf("analytics/admin not applied: %+v", cfg)
 	}
 }
 
@@ -92,6 +98,8 @@ func TestMisconfigurationStopsStartup(t *testing.T) {
 		"sub-hour absolute session": {"SESSION_ABSOLUTE_TTL": "1m"},
 		"metrics missing port":      {"METRICS_ADDR": "localhost"},
 		"metrics invalid port":      {"METRICS_ADDR": "localhost:70000"},
+		"admin email with a name":   {"ADMIN_EMAILS": "Admin <a@example.com>"},
+		"analytics retention":       {"ANALYTICS_RETENTION_DAYS": "1"},
 	}
 	for name, overrides := range cases {
 		env(t, overrides)

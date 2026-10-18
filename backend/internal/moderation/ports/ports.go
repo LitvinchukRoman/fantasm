@@ -14,6 +14,8 @@ import (
 type IdeaRef struct {
 	ID, Slug, Title, AuthorID string
 	State                     string // moderation_state
+	Category                  string
+	Campus                    bool
 }
 
 type Repository interface {
@@ -32,13 +34,16 @@ type Repository interface {
 	SetModeration(ctx context.Context, ideaID string, state domain.Decision, now time.Time) error
 	RefreshHot(ctx context.Context, ideaID string, now time.Time) error
 
-	OpenCase(ctx context.Context, ideaID string, source domain.Source, now time.Time) error
+	// OpenCase inserts a case unless one is already open, and reports whether a row was inserted.
+	OpenCase(ctx context.Context, ideaID string, source domain.Source, now time.Time) (inserted bool, err error)
 	// OpenCaseOf returns the open case of an idea, if any.
 	OpenCaseOf(ctx context.Context, ideaID string) (caseID string, found bool, err error)
-	CloseCase(ctx context.Context, caseID string, decision domain.Decision, by, note string, now time.Time) error
+	// CloseCase closes the case and returns when it was opened, so the wait can be measured.
+	CloseCase(ctx context.Context, caseID string, decision domain.Decision, by, note string, now time.Time) (opened time.Time, err error)
 	IncrementApproved(ctx context.Context, userID string) error
 
 	Queue(ctx context.Context, state domain.State, after *cursor.Position, limit int) ([]domain.QueueItem, error)
+	History(ctx context.Context, after *cursor.Position, limit int) ([]domain.HistoryItem, error)
 }
 
 type Transactor interface {

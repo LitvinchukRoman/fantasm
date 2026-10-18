@@ -1,4 +1,5 @@
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
+import { usePageViews } from "~/lib/analytics";
 import { GuideFrame } from "~/components/guides/frame";
 import { ConsentBanner } from "~/components/ui/consent-banner";
 import { api, getCurrentUser, routeApi } from "~/lib/api.server";
@@ -70,6 +71,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  usePageViews();
   return <Outlet />;
 }
 

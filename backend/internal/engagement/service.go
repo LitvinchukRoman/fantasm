@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/engagement/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/engagement/ports"
 	ideadomain "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/domain"
@@ -25,12 +26,16 @@ type Service struct {
 	tx     ports.Transactor
 	badges viewer.BadgeLookup
 	notify notifyports.Publisher
+	events anports.Recorder
 	now    func() time.Time
 }
 
 func NewService(repo ports.Repository, tx ports.Transactor, badges viewer.BadgeLookup, publisher notifyports.Publisher) *Service {
 	return &Service{repo: repo, tx: tx, badges: badges, notify: publisher, now: time.Now}
 }
+
+// WithEvents records votes and participation in the same transaction as the change.
+func (s *Service) WithEvents(r anports.Recorder) *Service { s.events = r; return s }
 
 func notFound() error { return apperr.NotFound("idea not found") }
 
@@ -97,6 +102,9 @@ func (s *Service) Vote(ctx context.Context, v viewer.Viewer, slug string) (VoteR
 			}); err != nil {
 				return fmt.Errorf("notify: %w", err)
 			}
+			if err := anports.Record(ctx, s.events, anports.Event{Name: "vote.cast", ActorID: v.ID(), SubjectType: "idea", SubjectID: ref.Slug}); err != nil {
+				return err
+			}
 		} else if counters, err = s.repo.Counters(ctx, ref.ID); err != nil {
 			return fmt.Errorf("counters: %w", err)
 		}
@@ -132,6 +140,9 @@ func (s *Service) Unvote(ctx context.Context, v viewer.Viewer, slug string) (Vot
 			}
 			if err := s.repo.AdjustKarma(ctx, ref.AuthorID, -domain.VoteKarma(weight, ref.KarmaMultiplier)); err != nil {
 				return fmt.Errorf("adjust karma: %w", err)
+			}
+			if err := anports.Record(ctx, s.events, anports.Event{Name: "vote.removed", ActorID: v.ID(), SubjectType: "idea", SubjectID: ref.Slug}); err != nil {
+				return err
 			}
 		} else if counters, err = s.repo.Counters(ctx, ref.ID); err != nil {
 			return fmt.Errorf("counters: %w", err)
@@ -213,7 +224,10 @@ func (s *Service) Join(ctx context.Context, v viewer.Viewer, slug string, state 
 			}
 		}
 		res = ParticipationResult{Participation: &next, Participants: counters.Joins}
-		return nil
+		return anports.Record(ctx, s.events, anports.Event{
+			Name: "participation.set", ActorID: v.ID(), SubjectType: "idea", SubjectID: ref.Slug,
+			Props: map[string]any{"state": string(state)},
+		})
 	})
 	return res, err
 }
@@ -306,7 +320,10 @@ func (s *Service) Decide(ctx context.Context, v viewer.Viewer, slug, handle stri
 			}
 		}
 		result = next
-		return nil
+		return anports.Record(ctx, s.events, anports.Event{
+			Name: "participation.decided", ActorID: v.ID(), SubjectType: "idea", SubjectID: ref.Slug,
+			Props: map[string]any{"accept": accept},
+		})
 	})
 	return result, err
 }

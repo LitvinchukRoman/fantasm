@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/apperr"
 )
@@ -84,6 +85,8 @@ type Service struct {
 	now              func() time.Time
 	sessionTTL       time.Duration
 	sessionIdleTTL   time.Duration
+	bootstrap        map[string]bool
+	events           anports.Recorder
 }
 
 func NewService(repository Repository, transactions Transactor, providers map[domain.Provider]Provider, options ...func(*Service)) *Service {
@@ -109,6 +112,29 @@ func WithSessionPolicy(absolute, idle time.Duration) func(*Service) {
 
 func WithMembershipPolicy(policy MembershipPolicy) func(*Service) {
 	return func(s *Service) { s.membershipPolicy = policy }
+}
+
+// WithBootstrapAdmins promotes these verified addresses to ADMIN on login and
+// refuses to let another admin demote them. Comparison is case-insensitive.
+func WithBootstrapAdmins(emails []string) func(*Service) {
+	return func(s *Service) {
+		s.bootstrap = map[string]bool{}
+		for _, email := range emails {
+			email = strings.ToLower(strings.TrimSpace(email))
+			if email != "" {
+				s.bootstrap[email] = true
+			}
+		}
+	}
+}
+
+// WithEvents records sign-in and role changes in the same transaction as the account change.
+func WithEvents(r anports.Recorder) func(*Service) {
+	return func(s *Service) { s.events = r }
+}
+
+func (s *Service) bootstrapAdmin(email string) bool {
+	return s.bootstrap[strings.ToLower(strings.TrimSpace(email))]
 }
 
 type Login struct {
@@ -195,7 +221,26 @@ func (s *Service) CompleteLogin(ctx context.Context, providerName domain.Provide
 		}); err != nil {
 			return fmt.Errorf("create session: %w", err)
 		}
-		return nil
+		if external.EmailVerified && s.bootstrapAdmin(external.Email) && auth.User.Role != domain.AdminRole {
+			updated, err := s.repository.SetRole(ctx, auth.User.ID, domain.AdminRole, now)
+			if err != nil {
+				return fmt.Errorf("bootstrap admin: %w", err)
+			}
+			auth.User.Role = updated.Role
+			if err := anports.Record(ctx, s.events, anports.Event{
+				Name: "admin.role_changed", ActorID: auth.User.ID, SubjectType: "user", SubjectID: auth.User.Handle,
+				Props: map[string]any{"role": string(domain.AdminRole), "reason": "bootstrap"}, OccurredAt: now,
+			}); err != nil {
+				return err
+			}
+		}
+		name := "user.signed_in"
+		if !auth.User.CreatedAt.Before(now.Truncate(time.Microsecond)) {
+			name = "user.signed_up"
+		}
+		return anports.Record(ctx, s.events, anports.Event{
+			Name: name, ActorID: auth.User.ID, SubjectType: "user", SubjectID: auth.User.Handle, OccurredAt: now,
+		})
 	})
 	if err != nil {
 		return Authentication{}, err

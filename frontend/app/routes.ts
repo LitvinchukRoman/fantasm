@@ -10,6 +10,13 @@ export default [
   route("notifications", "routes/notifications.tsx"),
   route("settings", "routes/settings.tsx"),
   route("moderation", "routes/moderation.tsx"),
+  layout("routes/admin.tsx", [
+    route("admin", "routes/admin._index.tsx"),
+    route("admin/analytics", "routes/admin.analytics.tsx"),
+    route("admin/moderation", "routes/admin.moderation.tsx"),
+    route("admin/users", "routes/admin.users.tsx"),
+    route("admin/settings", "routes/admin.settings.tsx"),
+  ]),
   route("logout", "routes/logout.ts"),
   layout("routes/auth-layout.tsx", [
     route("login", "routes/login.tsx"),

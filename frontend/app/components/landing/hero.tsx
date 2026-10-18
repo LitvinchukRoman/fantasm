@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import { IconSpark } from "./icons";
 
 /**
@@ -46,7 +47,7 @@ export function HeroIntro() {
         ідея стала командою.
       </p>
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Button to="/ideas/new" arrow>
+        <Button to="/ideas/new" arrow onClick={() => track("ui.click", { target: "publish" })}>
           Запропонувати ідею
         </Button>
         <Button to="/ideas" variant="secondary">

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	ideadomain "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/domain"
 	ideaports "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/moderation/domain"
@@ -24,6 +25,7 @@ type Service struct {
 	repo   ports.Repository
 	tx     ports.Transactor
 	notify notifyports.Publisher
+	events anports.Recorder
 	cursor cursor.Codec
 	log    *slog.Logger
 	now    func() time.Time
@@ -32,6 +34,9 @@ type Service struct {
 func NewService(repo ports.Repository, tx ports.Transactor, publisher notifyports.Publisher, secret []byte, log *slog.Logger) *Service {
 	return &Service{repo: repo, tx: tx, notify: publisher, cursor: cursor.New(secret), log: log, now: time.Now}
 }
+
+// WithEvents records reports and decisions in the same transaction as the case.
+func (s *Service) WithEvents(r anports.Recorder) *Service { s.events = r; return s }
 
 func ideaNotFound() error { return apperr.NotFound("idea not found") }
 
@@ -75,6 +80,9 @@ func (s *Service) Report(ctx context.Context, v viewer.Viewer, slug, reason stri
 		if !inserted {
 			return apperr.Conflict("you have already reported this idea")
 		}
+		if err := anports.Record(ctx, s.events, anports.Event{Name: "report.created", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug, OccurredAt: now}); err != nil {
+			return err
+		}
 		open, err := s.repo.OpenReports(ctx, idea.ID)
 		if err != nil {
 			return fmt.Errorf("count reports: %w", err)
@@ -89,8 +97,17 @@ func (s *Service) Report(ctx context.Context, v viewer.Viewer, slug, reason stri
 		if !hidden {
 			return nil
 		}
-		if err := s.repo.OpenCase(ctx, idea.ID, domain.Reports, now); err != nil {
+		opened, err := s.repo.OpenCase(ctx, idea.ID, domain.Reports, now)
+		if err != nil {
 			return fmt.Errorf("open case: %w", err)
+		}
+		if opened {
+			if err := anports.Record(ctx, s.events, anports.Event{
+				Name: "case.opened", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug,
+				Props: map[string]any{"source": string(domain.Reports)}, OccurredAt: now,
+			}); err != nil {
+				return err
+			}
 		}
 		s.log.WarnContext(ctx, "idea hidden by reports", "event", "moderation.auto_hidden", "request_id", httpx.RequestIDFrom(ctx), "idea_id", idea.ID, "reports", open)
 		return s.notify.Publish(ctx, notify.Notification{UserID: idea.AuthorID, Type: notify.Hidden, Payload: map[string]any{
@@ -174,8 +191,27 @@ func (s *Service) Decide(ctx context.Context, v viewer.Viewer, ideaID string, de
 		if err := s.repo.SetModeration(ctx, idea.ID, decision, now); err != nil {
 			return fmt.Errorf("set moderation: %w", err)
 		}
-		if err := s.repo.CloseCase(ctx, caseID, decision, v.ID(), note, now); err != nil {
+		openedAt, err := s.repo.CloseCase(ctx, caseID, decision, v.ID(), note, now)
+		if err != nil {
 			return fmt.Errorf("close case: %w", err)
+		}
+		seconds := int(now.Sub(openedAt).Seconds())
+		if seconds < 0 {
+			seconds = 0
+		}
+		if err := anports.Record(ctx, s.events, anports.Event{
+			Name: "case.decided", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug,
+			Props: map[string]any{"decision": string(decision), "seconds": seconds}, OccurredAt: now,
+		}); err != nil {
+			return err
+		}
+		if decision == domain.Approved && domain.State(idea.State) == domain.Pending {
+			if err := anports.Record(ctx, s.events, anports.Event{
+				Name: "idea.published", ActorID: idea.AuthorID, SubjectType: "idea", SubjectID: idea.Slug,
+				Props: map[string]any{"category": idea.Category, "premoderated": true, "campus": idea.Campus}, OccurredAt: now,
+			}); err != nil {
+				return err
+			}
 		}
 		// Reports against this idea were answered by the decision; a restored idea starts clean.
 		if err := s.repo.ResolveReports(ctx, idea.ID, now); err != nil {
@@ -222,6 +258,37 @@ func stateLabel(state domain.State) string {
 	default:
 		return "unknown"
 	}
+}
+
+type HistoryPage struct {
+	Items      []domain.HistoryItem
+	NextCursor string
+}
+
+// History lists closed cases, newest decision first.
+func (s *Service) History(ctx context.Context, v viewer.Viewer, rawCursor string, limit int) (HistoryPage, error) {
+	if err := requireStaff(v); err != nil {
+		return HistoryPage{}, err
+	}
+	after, err := s.cursor.Decode(rawCursor, "history")
+	if err != nil {
+		return HistoryPage{}, apperr.Validation(map[string]string{"cursor": "invalid cursor"})
+	}
+	limit = min(max(limit, 1), domain.MaxQueueLimit)
+	items, err := s.repo.History(ctx, after, limit+1)
+	if err != nil {
+		return HistoryPage{}, fmt.Errorf("list moderation history: %w", err)
+	}
+	page := HistoryPage{Items: items}
+	if len(items) > limit {
+		page.Items = items[:limit]
+		last := page.Items[limit-1]
+		page.NextCursor = s.cursor.Encode("history", cursor.Position{Key: cursor.FormatTime(last.DecidedAt), ID: last.CaseID})
+	}
+	if page.Items == nil {
+		page.Items = []domain.HistoryItem{}
+	}
+	return page, nil
 }
 
 // Reports lists what people said about one idea, newest first.

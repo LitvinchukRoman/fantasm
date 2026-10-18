@@ -90,12 +90,58 @@ func (r *memoryRepository) TouchSession(_ context.Context, hash string, now, sta
 	return nil
 }
 
-func (r *memoryRepository) UpdateProfile(context.Context, string, domain.ProfileUpdate, time.Time) (domain.User, error) {
-	return domain.User{}, errors.New("not implemented")
+func (r *memoryRepository) userBy(match func(domain.User) bool) (domain.User, error) {
+	for _, user := range r.users {
+		if match(user) {
+			return user, nil
+		}
+	}
+	return domain.User{}, domain.ErrNotFound
 }
 
-func (r *memoryRepository) UserByHandle(context.Context, string) (domain.User, error) {
-	return domain.User{}, domain.ErrNotFound
+func (r *memoryRepository) save(user domain.User) {
+	for key, existing := range r.users {
+		if existing.ID == user.ID {
+			r.users[key] = user
+			return
+		}
+	}
+}
+
+func (r *memoryRepository) UpdateProfile(_ context.Context, userID string, update domain.ProfileUpdate, now time.Time) (domain.User, error) {
+	user, err := r.userBy(func(u domain.User) bool { return u.ID == userID })
+	if err != nil {
+		return domain.User{}, err
+	}
+	if update.Handle != nil {
+		for _, other := range r.users {
+			if other.ID != user.ID && other.Handle == *update.Handle {
+				return domain.User{}, domain.ErrHandleTaken
+			}
+		}
+		user.Handle = *update.Handle
+	}
+	if update.Name != nil {
+		user.Name = *update.Name
+	}
+	if update.Bio != nil {
+		user.Bio = *update.Bio
+	}
+	if update.Faculty != nil {
+		user.Faculty = *update.Faculty
+	}
+	user.Onboarded = true
+	user.UpdatedAt = now
+	r.save(user)
+	return user, nil
+}
+
+func (r *memoryRepository) UserByID(_ context.Context, userID string) (domain.User, error) {
+	return r.userBy(func(u domain.User) bool { return u.ID == userID })
+}
+
+func (r *memoryRepository) UserByHandle(_ context.Context, handle string) (domain.User, error) {
+	return r.userBy(func(u domain.User) bool { return u.Handle == handle })
 }
 
 func (r *memoryRepository) SetAvatar(context.Context, string, domain.Avatar, time.Time) (domain.User, error) {
@@ -110,8 +156,15 @@ func (r *memoryRepository) AvatarByHandle(context.Context, string) (domain.Avata
 	return domain.Avatar{}, domain.ErrNoAvatar
 }
 
-func (r *memoryRepository) SetRole(context.Context, string, domain.Role, time.Time) (domain.User, error) {
-	return domain.User{}, errors.New("not implemented")
+func (r *memoryRepository) SetRole(_ context.Context, userID string, role domain.Role, now time.Time) (domain.User, error) {
+	user, err := r.userBy(func(u domain.User) bool { return u.ID == userID })
+	if err != nil {
+		return domain.User{}, err
+	}
+	user.Role = role
+	user.UpdatedAt = now
+	r.save(user)
+	return user, nil
 }
 
 func (r *memoryRepository) ListSessions(context.Context, string, time.Time, time.Time) ([]domain.SessionInfo, error) {
@@ -349,6 +402,29 @@ func TestMembershipRefreshAndPolicyRevocation(t *testing.T) {
 	user, err = s.CurrentUser(t.Context(), auth.Token)
 	if err != nil || len(user.Memberships) != 0 {
 		t.Fatalf("old session retained revoked membership: %+v, %v", user, err)
+	}
+}
+
+func TestBootstrapAdminIsPromotedAndProtected(t *testing.T) {
+	s, r, p := testService()
+	WithBootstrapAdmins([]string{" Admin@Example.com "})(s)
+	p.profile.Email = "admin@example.com"
+	p.profile.EmailVerified = false
+	if auth := signIn(t, s, ""); auth.User.Role != domain.UserRole {
+		t.Fatalf("unverified address promoted: %s", auth.User.Role)
+	}
+	p.profile.EmailVerified = true
+	auth := signIn(t, s, "")
+	if auth.User.Role != domain.AdminRole {
+		t.Fatalf("verified bootstrap address stayed %s", auth.User.Role)
+	}
+	actor := domain.User{ID: "11111111-1111-1111-1111-111111111111", Handle: "boss", Email: "boss@example.com", Role: domain.AdminRole}
+	r.users["local|boss"] = actor
+	if _, err := s.SetRole(t.Context(), actor.ID, auth.User.Handle, domain.UserRole); apperr.KindOf(err) != apperr.KindForbidden {
+		t.Fatalf("demotion: %v", err)
+	}
+	if got, _ := r.UserByHandle(t.Context(), auth.User.Handle); got.Role != domain.AdminRole {
+		t.Fatalf("role changed to %s", got.Role)
 	}
 }
 

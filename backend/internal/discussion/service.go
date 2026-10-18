@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/discussion/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/discussion/ports"
 	ideadomain "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/domain"
@@ -26,12 +27,16 @@ type Service struct {
 	tx     ports.Transactor
 	badges viewer.BadgeLookup
 	notify notifyports.Publisher
+	events anports.Recorder
 	now    func() time.Time
 }
 
 func NewService(repo ports.Repository, tx ports.Transactor, badges viewer.BadgeLookup, publisher notifyports.Publisher) *Service {
 	return &Service{repo: repo, tx: tx, badges: badges, notify: publisher, now: time.Now}
 }
+
+// WithEvents records posts in the same transaction as the write.
+func (s *Service) WithEvents(r anports.Recorder) *Service { s.events = r; return s }
 
 func ideaNotFound() error { return apperr.NotFound("idea not found") }
 func postNotFound() error { return apperr.NotFound("post not found") }
@@ -179,7 +184,9 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, slug, body, paren
 				return fmt.Errorf("notify: %w", err)
 			}
 		}
-		return nil
+		return anports.Record(ctx, s.events, anports.Event{
+			Name: "post.created", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug,
+		})
 	})
 	if err != nil {
 		return Created{}, err
@@ -275,6 +282,9 @@ func (s *Service) Delete(ctx context.Context, v viewer.Viewer, postID string) er
 			if err := s.repo.AdjustComments(ctx, ref.Idea.ID, -1, now); err != nil {
 				return fmt.Errorf("adjust comments: %w", err)
 			}
+			return anports.Record(ctx, s.events, anports.Event{
+				Name: "post.deleted", ActorID: v.ID(), SubjectType: "idea", SubjectID: ref.Idea.Slug,
+			})
 		}
 		return nil
 	})
