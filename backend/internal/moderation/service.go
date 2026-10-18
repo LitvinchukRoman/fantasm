@@ -232,6 +232,9 @@ func (s *Service) Decide(ctx context.Context, v viewer.Viewer, ideaID string, de
 		if decision != domain.Approved {
 			n.Type, n.Payload["decision"] = notify.Hidden, string(decision)
 		}
+		if note != "" {
+			n.Payload["note"] = note
+		}
 		return s.notify.Publish(ctx, n)
 	})
 }

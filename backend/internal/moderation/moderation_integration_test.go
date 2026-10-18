@@ -143,7 +143,7 @@ func TestPremoderationDecision(t *testing.T) {
 	if status(env.Anon(), slug2) != http.StatusNotFound {
 		t.Error("rejected idea is public")
 	}
-	if n := apptest.Scalar[int](env, `SELECT count(*) FROM notifications WHERE type = 'HIDDEN' AND payload->>'decision' = 'REJECTED'`); n != 1 {
+	if n := apptest.Scalar[int](env, `SELECT count(*) FROM notifications WHERE type = 'HIDDEN' AND payload->>'decision' = 'REJECTED' AND payload->>'note' = 'off topic'`); n != 1 {
 		t.Errorf("rejection notifications = %d", n)
 	}
 	if got := apptest.Scalar[int](env, `SELECT approved_ideas FROM users WHERE email = $1`, author); got != 1 {

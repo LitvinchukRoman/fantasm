@@ -1,8 +1,10 @@
-import { Link, useFetcher, useLocation } from "react-router";
+import { useRef, useState, type MouseEvent } from "react";
+import { Link, useFetcher, useLocation, useRouteLoaderData } from "react-router";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { PageHeading } from "~/components/admin/widgets";
 import { Button } from "~/components/ui/button";
-import type { ModerationHistoryItem, ModerationReport, QueueItem } from "~/lib/api-types";
+import type { ApiErrorBody, ModerationHistoryItem, ModerationReport, QueueItem } from "~/lib/api-types";
+import type { RootData } from "~/root";
 
 type ModerationData = {
   tab: "history" | "queue";
@@ -41,8 +43,32 @@ export function ModerationQueue({ loaderData }: { loaderData: ModerationData }) 
   );
 }
 
+const NOTE_REQUIRED = "Напишіть примітку: автор побачить, чому ідею сховано чи відхилено.";
+const OWN_IDEA = "Це ваша ідея. Рішення щодо неї ухвалює інший модератор чи адмін.";
+
+function decisionError(body: Partial<ApiErrorBody> | undefined): string {
+  if (!body?.error) return "";
+  if (body.fields?.note) return body.fields.note.startsWith("a note is required") ? NOTE_REQUIRED : "Примітка задовга: до 1000 символів звичайного тексту.";
+  if (body.code === "forbidden") return OWN_IDEA;
+  if (body.code === "conflict") return "Цю ідею вже розглянули. Оновіть сторінку.";
+  return "Не вдалося зберегти рішення. Спробуйте ще раз.";
+}
+
 function Item({ item, reports, base }: { item: QueueItem; reports: ModerationReport[]; base: string }) {
-  const fetcher = useFetcher<{ error?: string }>();
+  const own = useRouteLoaderData<RootData>("root")?.currentUser?.handle === item.author.handle;
+  const fetcher = useFetcher<Partial<ApiErrorBody>>();
+  const note = useRef<HTMLInputElement>(null);
+  const [missing, setMissing] = useState(false);
+  const error = missing ? NOTE_REQUIRED : decisionError(fetcher.data);
+  const errorId = `decision-error-${item.caseId}`;
+
+  function requireNote(event: MouseEvent<HTMLButtonElement>) {
+    if (note.current?.value.trim()) return;
+    event.preventDefault();
+    setMissing(true);
+    note.current?.focus();
+  }
+
   return (
     <li className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
       <Link to={`/ideas/${item.slug}`} className="text-xl font-medium tracking-tight hover:text-[var(--color-accent)]">{item.title}</Link>
@@ -56,18 +82,34 @@ function Item({ item, reports, base }: { item: QueueItem; reports: ModerationRep
           {reports.map((report) => <li key={report.createdAt + report.reporter.handle}>{report.reporter.name}: {report.reason}</li>)}
         </ul>
       )}
-      <fetcher.Form method="post" className="mt-4 flex flex-wrap gap-2">
-        <input type="hidden" name="id" value={item.ideaId} />
-        <input name="note" maxLength={1000} placeholder="Примітка для автора" className="min-w-0 flex-1 rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 py-2 text-sm outline-none placeholder:text-[var(--color-text-faint)] focus:border-[var(--color-accent)]" />
-        {([
-          ["APPROVED", "Схвалити", "primary"],
-          ["HIDDEN", "Сховати", "secondary"],
-          ["REJECTED", "Відхилити", "secondary"],
-        ] as const).map(([decision, label, variant]) => (
-          <Button key={decision} type="submit" name="decision" value={decision} size="sm" variant={variant}>{label}</Button>
-        ))}
-      </fetcher.Form>
-      {fetcher.data?.error && <p role="alert" className="mt-2 text-sm text-red-300">{fetcher.data.error}</p>}
+      {own ? (
+        <p className="mt-4 rounded-full border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text-muted)]">{OWN_IDEA}</p>
+      ) : (
+        <fetcher.Form method="post" className="mt-4 flex flex-wrap gap-2">
+          <input type="hidden" name="id" value={item.ideaId} />
+          <input
+            ref={note}
+            name="note"
+            maxLength={1000}
+            placeholder="Примітка для автора, потрібна, щоб сховати чи відхилити"
+            aria-invalid={error === NOTE_REQUIRED || undefined}
+            aria-describedby={error ? errorId : undefined}
+            onChange={() => setMissing(false)}
+            className="min-w-0 flex-1 rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 py-2 text-sm outline-none placeholder:text-[var(--color-text-faint)] focus:border-[var(--color-accent)] aria-invalid:border-[var(--color-negative)]"
+          />
+          {([
+            ["APPROVED", "Схвалити", "primary"],
+            ["HIDDEN", "Сховати", "secondary"],
+            ["REJECTED", "Відхилити", "secondary"],
+          ] as const).map(([decision, label, variant]) => (
+            <Button key={decision} type="submit" name="decision" value={decision} size="sm" variant={variant}
+              disabled={fetcher.state !== "idle"} onClick={decision === "APPROVED" ? () => setMissing(false) : requireNote}>
+              {label}
+            </Button>
+          ))}
+        </fetcher.Form>
+      )}
+      {error && <p id={errorId} role="alert" className="mt-2 text-sm text-[var(--color-negative)]">{error}</p>}
     </li>
   );
 }
