@@ -80,7 +80,7 @@ func TestAuthenticateValidatesToken(t *testing.T) {
 				if providerName == domain.Entra {
 					claims["iss"] = entraIssuer(tenant)
 					claims["tid"] = tenant
-					claims["verified_primary_email"] = claims["email"]
+					claims["verified_primary_email"] = []string{"person@example.com"}
 				}
 				tt.change(claims)
 				if providerName == domain.Entra && tt.name == "invalid email" {
@@ -135,6 +135,25 @@ func TestAuthenticateValidatesToken(t *testing.T) {
 		}
 	}
 
+}
+
+func TestClaimStringAcceptsStringOrArray(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"verified_primary_email":"person@example.com"}`:                       "person@example.com",
+		`{"verified_primary_email":["person@example.com","other@example.com"]}`: "person@example.com",
+		`{"verified_primary_email":[]}`:                                         "",
+		`{"verified_primary_email":null}`:                                       "",
+		`{}`:                                                                    "",
+	} {
+		var claims tokenClaims
+		if err := json.Unmarshal([]byte(raw), &claims); err != nil || string(claims.VerifiedPrimaryEmail) != want {
+			t.Errorf("%s: got %q, error %v", raw, claims.VerifiedPrimaryEmail, err)
+		}
+	}
+	var claims tokenClaims
+	if err := json.Unmarshal([]byte(`{"verified_primary_email":42}`), &claims); err == nil {
+		t.Error("a number must not pass as an email")
+	}
 }
 
 func TestEntraIdentity(t *testing.T) {
