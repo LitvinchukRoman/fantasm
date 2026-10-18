@@ -43,6 +43,11 @@ output "frontend_deploy_documents" {
   value       = { for env, d in aws_ssm_document.deploy_frontend : env => d.name }
 }
 
+output "admin_email_parameters" {
+  description = "SSM parameters for ADMIN_EMAILS. Value 'unset' bootstraps nobody; set with put-parameter --overwrite."
+  value       = [for p in aws_ssm_parameter.admin_emails : p.name]
+}
+
 output "oauth_parameters" {
   description = "SSM parameters that hold OAuth credentials; set them with put-parameter --overwrite (value 'unset' = provider disabled)."
   value       = [for p in aws_ssm_parameter.oauth : p.name]

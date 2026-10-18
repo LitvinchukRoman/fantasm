@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/ideas/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/ideas/ports"
 	identity "github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
@@ -23,11 +24,19 @@ type Organizations interface {
 	Badge(id string) (identity.Badge, bool)
 }
 
+// Gate decides whether every new idea waits for a moderator. Nil keeps the
+// historical rule (only people outside an organization are reviewed).
+type Gate interface {
+	RequireReview(ctx context.Context) (bool, error)
+}
+
 type Service struct {
 	repo   ports.Repository
 	tx     ports.Transactor
 	badges viewer.BadgeLookup
 	orgs   Organizations
+	gate   Gate
+	events anports.Recorder
 	cursor cursorCodec
 	now    func() time.Time
 }
@@ -35,6 +44,12 @@ type Service struct {
 func NewService(repo ports.Repository, tx ports.Transactor, badges viewer.BadgeLookup, orgs Organizations, secret []byte) *Service {
 	return &Service{repo: repo, tx: tx, badges: badges, orgs: orgs, cursor: cursorCodec{key: secret}, now: time.Now}
 }
+
+// WithGate attaches the premoderation switch.
+func (s *Service) WithGate(g Gate) *Service { s.gate = g; return s }
+
+// WithEvents records product events in the same transaction as the change.
+func (s *Service) WithEvents(r anports.Recorder) *Service { s.events = r; return s }
 
 // Campus is an organization mark shown on an idea or next to a person.
 type Campus struct {
@@ -137,6 +152,10 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, in CreateInput) (
 
 	var slug string
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		reviewAll, err := s.reviewAll(ctx)
+		if err != nil {
+			return err
+		}
 		approved, err := s.repo.LockAuthor(ctx, v.ID())
 		if err != nil {
 			return fmt.Errorf("lock author: %w", err)
@@ -151,7 +170,7 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, in CreateInput) (
 			}
 		}
 		needCase := false
-		n.Moderation, needCase = moderationFor(v, approved, in.Status)
+		n.Moderation, needCase = moderationFor(v, approved, in.Status, reviewAll)
 		id, created, err := s.repo.Insert(ctx, n)
 		if err != nil {
 			return fmt.Errorf("insert idea: %w", err)
@@ -160,6 +179,20 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, in CreateInput) (
 		if needCase {
 			if err := s.repo.OpenModerationCase(ctx, id); err != nil {
 				return fmt.Errorf("open moderation case: %w", err)
+			}
+		}
+		props := ideaProps(content.Category, in.Visibility, needCase, n.BadgeOrganizationID != "")
+		if err := anports.Record(ctx, s.events, anports.Event{Name: "idea.created", ActorID: v.ID(), SubjectType: "idea", SubjectID: slug, Props: props}); err != nil {
+			return err
+		}
+		if in.Status != domain.Draft && n.Moderation == domain.Approved {
+			if err := anports.Record(ctx, s.events, anports.Event{Name: "idea.published", ActorID: v.ID(), SubjectType: "idea", SubjectID: slug, Props: props}); err != nil {
+				return err
+			}
+		}
+		if needCase {
+			if err := anports.Record(ctx, s.events, anports.Event{Name: "case.opened", ActorID: v.ID(), SubjectType: "idea", SubjectID: slug, Props: map[string]any{"source": "PREMODERATION"}}); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -171,16 +204,32 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, in CreateInput) (
 }
 
 // moderationFor decides the initial moderation state of an idea that is being
-// published. A draft is not published and waits without a case.
-func moderationFor(v viewer.Viewer, approvedIdeas int, status domain.Status) (state domain.Moderation, openCase bool) {
+// published. A draft is not published and waits without a case. reviewAll
+// ignores membership and the trusted-author shortcut.
+func moderationFor(v viewer.Viewer, approvedIdeas int, status domain.Status, reviewAll bool) (state domain.Moderation, openCase bool) {
 	switch {
 	case status == domain.Draft:
 		return domain.Pending, false
-	case v.SkipPremoderation() || approvedIdeas >= domain.TrustedAfter:
+	case !reviewAll && (v.SkipPremoderation() || approvedIdeas >= domain.TrustedAfter):
 		return domain.Approved, false
 	default:
 		return domain.Pending, true
 	}
+}
+
+func (s *Service) reviewAll(ctx context.Context) (bool, error) {
+	if s.gate == nil {
+		return false, nil
+	}
+	all, err := s.gate.RequireReview(ctx)
+	if err != nil {
+		return false, fmt.Errorf("premoderation setting: %w", err)
+	}
+	return all, nil
+}
+
+func ideaProps(category domain.Category, visibility domain.Visibility, premoderated, campus bool) map[string]any {
+	return map[string]any{"category": string(category), "visibility": string(visibility), "premoderated": premoderated, "campus": campus}
 }
 
 // render turns Markdown into stored HTML. An empty body is allowed and renders to nothing.
@@ -319,7 +368,10 @@ func (s *Service) Delete(ctx context.Context, v viewer.Viewer, slug string) erro
 		if err != nil {
 			return err
 		}
-		return s.repo.SoftDelete(ctx, idea.ID, s.now().UTC())
+		if err := s.repo.SoftDelete(ctx, idea.ID, s.now().UTC()); err != nil {
+			return err
+		}
+		return anports.Record(ctx, s.events, anports.Event{Name: "idea.deleted", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug})
 	})
 }
 
@@ -345,9 +397,14 @@ func (s *Service) ChangeStatus(ctx context.Context, v viewer.Viewer, slug string
 			return nil
 		}
 		moderation, openCase := idea.Moderation, false
-		if idea.Status == domain.Draft {
+		publishing := idea.Status == domain.Draft && next != domain.Draft
+		if publishing {
 			if fields := idea.Content().Normalize().Validate(now, true); len(fields) > 0 {
 				return apperr.Validation(fields)
+			}
+			reviewAll, err := s.reviewAll(ctx)
+			if err != nil {
+				return err
 			}
 			// Publishing: decide by the author's standing now, not by the viewer's (staff may publish for others).
 			approved, err := s.repo.LockAuthor(ctx, idea.Author.ID)
@@ -358,7 +415,7 @@ func (s *Service) ChangeStatus(ctx context.Context, v viewer.Viewer, slug string
 			if v.ID() != idea.Author.ID {
 				actor = viewer.Viewer{} // staff publishing someone's draft does not lend them staff privileges
 			}
-			moderation, openCase = moderationFor(actor, approved, next)
+			moderation, openCase = moderationFor(actor, approved, next, reviewAll)
 		}
 		if err := s.repo.SetStatus(ctx, idea.ID, next, moderation, now); err != nil {
 			return fmt.Errorf("set status: %w", err)
@@ -367,6 +424,18 @@ func (s *Service) ChangeStatus(ctx context.Context, v viewer.Viewer, slug string
 			if err := s.repo.OpenModerationCase(ctx, idea.ID); err != nil {
 				return fmt.Errorf("open moderation case: %w", err)
 			}
+		}
+		props := ideaProps(idea.Category, idea.Visibility, openCase, idea.BadgeOrganizationID != "")
+		if err := anports.Record(ctx, s.events, anports.Event{Name: "idea.status_changed", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug, Props: props}); err != nil {
+			return err
+		}
+		if publishing && moderation == domain.Approved {
+			if err := anports.Record(ctx, s.events, anports.Event{Name: "idea.published", ActorID: idea.Author.ID, SubjectType: "idea", SubjectID: idea.Slug, Props: props}); err != nil {
+				return err
+			}
+		}
+		if openCase {
+			return anports.Record(ctx, s.events, anports.Event{Name: "case.opened", ActorID: v.ID(), SubjectType: "idea", SubjectID: idea.Slug, Props: map[string]any{"source": "PREMODERATION"}})
 		}
 		return nil
 	})

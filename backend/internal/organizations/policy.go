@@ -203,6 +203,36 @@ func (c condition) matches(i domain.Identity) bool {
 	return false
 }
 
+// VerifiedDomains lists every verified-email domain the rules mention.
+// Analytics uses them to count people who belong to a campus, not a hardcoded school.
+func (p *Policy) VerifiedDomains() []string {
+	if p == nil {
+		return []string{}
+	}
+	seen := map[string]bool{}
+	var out []string
+	var walk func(condition)
+	walk = func(c condition) {
+		if d := strings.ToLower(c.VerifiedEmailDomain); d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+		children := make([]condition, 0, len(c.All)+len(c.Any))
+		children = append(children, c.All...)
+		children = append(children, c.Any...)
+		for _, child := range children {
+			walk(child)
+		}
+	}
+	for _, org := range p.organizations {
+		walk(org.Match)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
 // Badge returns the public mark of an organization by id.
 func (p *Policy) Badge(id string) (domain.Badge, bool) {
 	if p == nil {

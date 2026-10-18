@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"os"
 	"strconv"
@@ -41,6 +42,11 @@ type Config struct {
 
 	SessionAbsoluteTTL time.Duration
 	SessionIdleTTL     time.Duration
+
+	// AdminEmails are verified addresses promoted to ADMIN on login. They cannot be demoted.
+	AdminEmails            []string
+	AnalyticsRetentionDays int
+	AnalyticsRatePerMin    int
 
 	DBMaxConns         int
 	DBStatementTimeout time.Duration
@@ -120,10 +126,25 @@ func Load() (Config, error) {
 		SessionAbsoluteTTL: duration("SESSION_ABSOLUTE_TTL", 30*24*time.Hour, time.Hour, 365*24*time.Hour),
 		SessionIdleTTL:     duration("SESSION_IDLE_TTL", 7*24*time.Hour, time.Minute, 365*24*time.Hour),
 
+		AnalyticsRetentionDays: integer("ANALYTICS_RETENTION_DAYS", 180, 7, 3650),
+		AnalyticsRatePerMin:    integer("ANALYTICS_RATE_LIMIT_PER_MIN", 60, 1, 100_000),
+
 		DBMaxConns:         integer("DB_MAX_CONNS", 20, 1, 500),
 		DBStatementTimeout: duration("DB_STATEMENT_TIMEOUT", 10*time.Second, 100*time.Millisecond, 5*time.Minute),
 		ShutdownTimeout:    duration("SHUTDOWN_TIMEOUT", 20*time.Second, time.Second, 5*time.Minute),
 		RequestTimeout:     duration("REQUEST_TIMEOUT", 15*time.Second, 500*time.Millisecond, 5*time.Minute),
+	}
+	for _, raw := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
+		email := strings.ToLower(strings.TrimSpace(raw))
+		if email == "" {
+			continue
+		}
+		addr, err := mail.ParseAddress(email)
+		if err != nil || addr.Address != email {
+			errs = append(errs, errors.New("ADMIN_EMAILS contains an address that is not a bare email"))
+			continue
+		}
+		cfg.AdminEmails = append(cfg.AdminEmails, email)
 	}
 	for _, cidr := range strings.Split(os.Getenv("TRUSTED_PROXY_CIDRS"), ",") {
 		if cidr = strings.TrimSpace(cidr); cidr != "" {

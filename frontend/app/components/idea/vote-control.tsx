@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import { useFetcher, useRouteLoaderData } from "react-router";
 import type { RootData } from "~/root";
 
@@ -16,7 +17,7 @@ export function VoteControl({ score, voted = false, variant = "primary", size = 
   const active = fetcher.data?.voted ?? voted;
   const count = fetcher.data?.votes ?? score;
   if (!root?.currentUser) {
-    return <Button to="/login" variant={variant} size={size}><IconUp className="size-4" />Підтримати <span className="tabular-nums opacity-70">{count}</span></Button>;
+    return <Button to="/login" variant={variant} size={size} onClick={() => track("ui.click", { target: "login" })}><IconUp className="size-4" />Підтримати <span className="tabular-nums opacity-70">{count}</span></Button>;
   }
   return (
     <fetcher.Form method="post">

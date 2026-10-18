@@ -30,6 +30,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/moderation/queue", httpx.Staff(h.queue))
 	mux.HandleFunc("POST /api/moderation/ideas/{id}/decision", httpx.Staff(h.decide))
 	mux.HandleFunc("GET /api/moderation/reports", httpx.Staff(h.reports))
+	mux.HandleFunc("GET /api/moderation/history", httpx.Staff(h.history))
 }
 
 func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
@@ -142,4 +143,44 @@ func (h *Handler) reports(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, struct {
 		Items []reportDTO `json:"items"`
 	}{items})
+}
+
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	limit, err := httpx.QueryInt(r, "limit", domain.DefaultQueueLimit, 1, domain.MaxQueueLimit)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	page, err := h.service.History(r.Context(), viewer.From(r.Context()), r.URL.Query().Get("cursor"), limit)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	type item struct {
+		CaseID    string    `json:"caseId"`
+		IdeaID    string    `json:"ideaId"`
+		Slug      string    `json:"slug"`
+		Title     string    `json:"title"`
+		Decision  string    `json:"decision"`
+		Note      string    `json:"note"`
+		Source    string    `json:"source"`
+		DecidedAt time.Time `json:"decidedAt"`
+		DecidedBy personDTO `json:"decidedBy"`
+	}
+	items := make([]item, len(page.Items))
+	for i, it := range page.Items {
+		items[i] = item{
+			CaseID: it.CaseID, IdeaID: it.IdeaID, Slug: it.Slug, Title: it.Title,
+			Decision: it.Decision, Note: it.Note, Source: it.Source, DecidedAt: it.DecidedAt,
+			DecidedBy: personDTO{Handle: it.Moderator.Handle, Name: it.Moderator.Name},
+		}
+	}
+	var next *string
+	if page.NextCursor != "" {
+		next = &page.NextCursor
+	}
+	httpx.WriteJSON(w, http.StatusOK, struct {
+		Items      []item  `json:"items"`
+		NextCursor *string `json:"nextCursor"`
+	}{items, next})
 }

@@ -366,6 +366,25 @@ html {
   }
 }
 
+/* Випадний список адмінки росте від кнопки, а не з центру. */
+@keyframes admin-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
+.admin-pop {
+  transform-origin: top left;
+  animation: admin-pop 180ms var(--ease-out-expo) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-pop {
+    animation: none;
+  }
+}
+
 ::selection {
   background-color: var(--color-accent);
   color: var(--color-bg);

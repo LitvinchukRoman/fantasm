@@ -146,6 +146,91 @@ export interface QueueItem {
   source: "PREMODERATION" | "REPORTS";
   openedAt: string;
   openReports?: number;
+  authorKarma?: number;
+  authorApprovedIdeas?: number;
+}
+
+export interface AdminPoint {
+  day: string;
+  value: number;
+}
+
+export interface AdminOverview {
+  range: "7d" | "30d" | "90d";
+  from: string;
+  to: string;
+  verdict: { status: "growing" | "falling" | "steady" | "insufficient"; score: number; summary: string; reasons: string[] };
+  kpis: Array<{ key: string; label: string; value: number; previous: number; delta: number | null }>;
+  series: {
+    visitors: AdminPoint[];
+    pageviews: AdminPoint[];
+    activeUsers: AdminPoint[];
+    signups: AdminPoint[];
+    ideas: AdminPoint[];
+    votes: AdminPoint[];
+    posts: AdminPoint[];
+    participations: AdminPoint[];
+    casesOpened: AdminPoint[];
+    casesDecided: AdminPoint[];
+    decisionSeconds: AdminPoint[];
+    httpRequests: AdminPoint[];
+    http5xx: AdminPoint[];
+  };
+  funnel: { visitors: number; signedIn: number; acted: number; authors: number };
+  retention: Array<{ week: string; size: number; rates: Array<number | null> }>;
+  breakdowns: {
+    pages: Array<{ key: string; value: number }>;
+    referrers: Array<{ key: string; value: number }>;
+    categories: Array<{ key: string; value: number }>;
+  };
+  topIdeas: Array<{ slug: string; title: string; views: number; votes: number; posts: number; joins: number }>;
+  insights: Array<{ kind: string; text: string }>;
+  health: AdminHealth;
+}
+
+export interface AdminHealth {
+  status: "ok" | "degraded" | "down";
+  reasons: string[];
+  uptimeSeconds: number;
+  ready: boolean;
+  dbPingMs: number;
+  dbPool: { acquired: number; idle: number; max: number };
+  jobs: Array<{ name: string; at: string; durationMs: number; failed: boolean; error: string }>;
+  hour: { requests: number; serverErrors: number; p95Ms: number };
+  day: { requests: number; serverErrors: number; p95Ms: number };
+  oldestQueueHours: number;
+}
+
+export interface AdminUser {
+  handle: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  badge: string | null;
+  karma: number;
+  approvedIdeas: number;
+  createdAt: string;
+  lastSeenAt: string | null;
+  protected: boolean;
+}
+
+export interface ModerationHistoryItem {
+  caseId: string;
+  ideaId: string;
+  slug: string;
+  title: string;
+  decision: string;
+  note: string;
+  source: string;
+  decidedAt: string;
+  decidedBy: Person;
+}
+
+export interface ModerationReport {
+  reporter: Person;
+  reason: string;
+  status: string;
+  createdAt: string;
 }
 
 export interface IdeaCreate {

@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import { SiteFooter } from "~/components/ui/site-footer";
 
 /** Фінальний заклик лендінгу і спільний футер сайту. */
@@ -10,7 +11,7 @@ export function CtaFooter() {
           Найкращі ідеї помирають не від браку таланту, а від браку людей поруч. Тут вони знаходять одне одного.
         </p>
         <div className="mt-8">
-          <Button to="/ideas/new" arrow>
+          <Button to="/ideas/new" arrow onClick={() => track("ui.click", { target: "publish" })}>
             Поділитися ідеєю
           </Button>
         </div>

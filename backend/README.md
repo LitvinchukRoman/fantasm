@@ -123,6 +123,8 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 | `LOG_LEVEL` | `info` |
 | `RATE_LIMIT_*`, `SESSION_*_TTL`, `DB_STATEMENT_TIMEOUT`, `REQUEST_TIMEOUT`, `SHUTDOWN_TIMEOUT` | значення за замовчуванням підходять; повний перелік із межами — у `.env.example` та `internal/platform/config` |
 | `MIGRATE_ON_START` | `true`: міграції застосовуються при старті; перед деплоєм `deploy-api` чекає `/healthz` і відкочується, якщо старт не вдався |
+| `ADMIN_EMAILS` | підтверджені пошти через кому: при вході стають `ADMIN` і їх не можна понизити. У проді значення лежить в SSM `/fantasm/<env>/app/admin-emails`, не в git |
+| `ANALYTICS_RETENTION_DAYS`, `ANALYTICS_RATE_LIMIT_PER_MIN` | скільки днів тримати сирі події (180) і скільки пачок маяка з однієї адреси за хвилину (60) |
 
 Після Caddy і CloudFront API бачить правильну адресу клієнта лише через `TRUSTED_PROXY_CIDRS`. Без нього всі запити виглядатимуть як одна адреса проксі, і ліміти по IP спрацьовуватимуть на всіх одразу.
 

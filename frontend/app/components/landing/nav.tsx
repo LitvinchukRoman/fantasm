@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useFetcher, useLocation, useRouteLoaderData } from "react-router";
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import type { RootData } from "~/root";
 import { IconArrowRight, IconUser } from "./icons";
 
@@ -84,7 +85,12 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
               {link.label}
             </NavLink>
           ))}
-          {(root?.currentUser?.role === "MODERATOR" || root?.currentUser?.role === "ADMIN") && (
+          {root?.currentUser?.role === "ADMIN" && (
+            <NavLink to="/admin" className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+              Адмінка
+            </NavLink>
+          )}
+          {root?.currentUser?.role === "MODERATOR" && (
             <NavLink to="/moderation" className="rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
               Модерація
             </NavLink>
@@ -116,6 +122,7 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
             <Link
               to="/login"
               prefetch="intent"
+              onClick={() => track("ui.click", { target: "login" })}
               className="rounded-[var(--radius-control)] border border-[var(--color-border-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-text)] transition-all duration-200 hover:bg-[var(--color-surface-strong)] hover:scale-105 sm:px-4"
             >
               Увійти
@@ -182,8 +189,24 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
                 </NavLink>
               </li>
             ))}
+            {root?.currentUser?.role === "ADMIN" && (
+              <li>
+                <NavLink to="/admin" className="flex items-center justify-between py-4 text-xl font-medium tracking-tight text-[var(--color-text-muted)]">
+                  Адмінка
+                  <IconArrowRight className="size-4 text-[var(--color-text-faint)]" />
+                </NavLink>
+              </li>
+            )}
+            {root?.currentUser?.role === "MODERATOR" && (
+              <li>
+                <NavLink to="/moderation" className="flex items-center justify-between py-4 text-xl font-medium tracking-tight text-[var(--color-text-muted)]">
+                  Модерація
+                  <IconArrowRight className="size-4 text-[var(--color-text-faint)]" />
+                </NavLink>
+              </li>
+            )}
           </ul>
-          <Button to="/ideas/new" arrow className="mt-4 w-full py-3.5">
+          <Button to="/ideas/new" arrow className="mt-4 w-full py-3.5" onClick={() => track("ui.click", { target: "publish" })}>
             Запропонувати ідею
           </Button>
         </nav>

@@ -93,6 +93,17 @@ aws ssm put-parameter --overwrite --type SecureString \
 
 Значення `unset` означає «провайдер вимкнений» (маршрут входу відповідає 404). Нові значення підхопляться при наступному деплої (`refresh-env`).
 
+### Перший адмін
+
+`/fantasm/<env>/app/admin-emails` — список підтверджених пошт через кому. Поки значення `unset`, ніхто не стає адміном автоматично. Пошту в git не кладемо:
+
+```bash
+aws ssm put-parameter --profile personal --region eu-central-1 --overwrite --type SecureString \
+  --name /fantasm/prod/app/admin-emails --value 'person@ukma.edu.ua'
+```
+
+Параметр з’являється після apply backend. Щоб бокс побачив новий `refresh-env.sh`, потрібен повторний прогін асоціації `fantasm-configure-host` (`terraform output -raw configure_host_command`). Наступний деплой API запише `ADMIN_EMAILS` у env контейнера; міграції застосуються самі (`MIGRATE_ON_START=true`).
+
 ## Змінні GitHub
 
 Задаються **на рівні environment** (`dev`, `prod`), не репозиторію. Точний набір для frontend workflow: `VITE_SITE_URL`, `AWS_DEPLOY_ROLE_ARN`, `AWS_FRONTEND_BUCKET`, `FRONTEND_ECR_REPOSITORY`, `FRONTEND_ECR_CACHE`, `EC2_INSTANCE_ID`, `FRONTEND_SSM_DEPLOY_DOCUMENT`. Backend workflow додатково використовує `ECR_REPOSITORY` і `SSM_DEPLOY_DOCUMENT`. `AWS_CLOUDFRONT_DISTRIBUTION_ID` лишається корисним для операційного виводу, але frontend workflow більше не інвалідує hashed assets. Секретів GitHub для деплою немає: AWS доступ — OIDC, application/OAuth секрети — SSM. Обидва `github_environment_commands` outputs задають усі значення.

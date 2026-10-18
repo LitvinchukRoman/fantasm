@@ -10,6 +10,7 @@ import { MetaGrid } from "~/components/ui/meta-grid";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
+import { track } from "~/lib/analytics";
 import { formatShortDate } from "~/lib/ideas";
 import { getCurrentUser, getProfile, routeApi } from "~/lib/api.server";
 import { isGeneratedHandle } from "~/lib/profile";
@@ -135,7 +136,7 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
                 </p>
                 {isOwner && (
                   <div className="mt-6 flex justify-center">
-                    <Button to="/ideas/new" arrow>
+                    <Button to="/ideas/new" arrow onClick={() => track("ui.click", { target: "publish" })}>
                       Запропонувати ідею
                     </Button>
                   </div>

@@ -56,6 +56,10 @@ func (r *Repository) AvatarByHandle(ctx context.Context, handle string) (domain.
 	return a, err
 }
 
+func (r *Repository) UserByID(ctx context.Context, userID string) (domain.User, error) {
+	return scanUser(r.db.Querier(ctx).QueryRow(ctx, `SELECT `+userColumns+` FROM users u WHERE u.id = $1`, userID))
+}
+
 func (r *Repository) UserByHandle(ctx context.Context, handle string) (domain.User, error) {
 	return scanUser(r.db.Querier(ctx).QueryRow(ctx, `SELECT `+userColumns+` FROM users u WHERE u.handle = $1`, handle))
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	anports "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/ports"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/apperr"
 )
@@ -14,6 +15,7 @@ import (
 // AccountRepository covers everything about an existing account that is not login itself.
 type AccountRepository interface {
 	UpdateProfile(ctx context.Context, userID string, update domain.ProfileUpdate, now time.Time) (domain.User, error)
+	UserByID(ctx context.Context, userID string) (domain.User, error)
 	UserByHandle(ctx context.Context, handle string) (domain.User, error)
 	SetAvatar(ctx context.Context, userID string, avatar domain.Avatar, now time.Time) (domain.User, error)
 	DeleteAvatar(ctx context.Context, userID string) (domain.User, error)
@@ -36,7 +38,27 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, update domai
 	if fields := update.Validate(); len(fields) > 0 {
 		return domain.User{}, apperr.Validation(fields)
 	}
-	user, err := s.repository.UpdateProfile(ctx, userID, update, s.now().UTC())
+	now := s.now().UTC()
+	var user domain.User
+	err := s.transactions.WithinTx(ctx, func(ctx context.Context) error {
+		before, err := s.repository.UserByID(ctx, userID)
+		if errors.Is(err, domain.ErrNotFound) {
+			return apperr.Unauthorized("account no longer exists")
+		}
+		if err != nil {
+			return fmt.Errorf("find account: %w", err)
+		}
+		user, err = s.repository.UpdateProfile(ctx, userID, update, now)
+		if err != nil {
+			return err
+		}
+		if !before.Onboarded && user.Onboarded {
+			return anports.Record(ctx, s.events, anports.Event{
+				Name: "user.onboarded", ActorID: user.ID, SubjectType: "user", SubjectID: user.Handle, OccurredAt: now,
+			})
+		}
+		return nil
+	})
 	switch {
 	case errors.Is(err, domain.ErrHandleTaken):
 		return domain.User{}, apperr.Validation(map[string]string{"handle": "is already taken"})
@@ -148,16 +170,23 @@ func (s *Service) SetRole(ctx context.Context, actorID, handle string, role doma
 	if target.ID == actorID {
 		return domain.User{}, apperr.Forbidden("you cannot change your own role")
 	}
+	if role != domain.AdminRole && s.bootstrapAdmin(target.Email) {
+		return domain.User{}, apperr.Forbidden("this account is listed in ADMIN_EMAILS and cannot be demoted")
+	}
+	now := s.now().UTC()
 	var updated domain.User
 	err = s.transactions.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
-		if updated, err = s.repository.SetRole(ctx, target.ID, role, s.now().UTC()); err != nil {
+		if updated, err = s.repository.SetRole(ctx, target.ID, role, now); err != nil {
 			return fmt.Errorf("set role: %w", err)
 		}
 		if err := s.repository.DeleteUserSessions(ctx, target.ID); err != nil {
 			return fmt.Errorf("revoke sessions: %w", err)
 		}
-		return nil
+		return anports.Record(ctx, s.events, anports.Event{
+			Name: "admin.role_changed", ActorID: actorID, SubjectType: "user", SubjectID: updated.Handle,
+			Props: map[string]any{"role": string(role), "reason": "admin"}, OccurredAt: now,
+		})
 	})
 	if err != nil {
 		return domain.User{}, err

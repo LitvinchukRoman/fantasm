@@ -31,6 +31,7 @@ tags:
   - name: moderation
   - name: notifications
   - name: admin
+  - name: analytics
 
 paths:
   /api/auth/providers:
@@ -219,6 +220,135 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+
+  /api/admin/overview:
+    get:
+      tags: [admin]
+      summary: Growth, charts and the health of the process
+      security: [{ session: [] }]
+      parameters:
+        - { name: range, in: query, schema: { type: string, enum: [7d, 30d, 90d], default: 30d } }
+      responses:
+        '200':
+          description: Dashboard for the requested range. The verdict always compares the last two complete weeks.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/admin/users:
+    get:
+      tags: [admin]
+      summary: Search accounts
+      security: [{ session: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { type: string, enum: [USER, MODERATOR, ADMIN] } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: A page of accounts, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUsers' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/admin/settings:
+    get:
+      tags: [admin]
+      summary: Read platform switches
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Current switches.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [admin]
+      summary: Change platform switches
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [premoderation]
+              properties:
+                premoderation: { type: string, enum: [EXTERNAL_ONLY, ALL] }
+      responses:
+        '200':
+          description: Switches after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/admin/health:
+    get:
+      tags: [admin]
+      summary: Whether the API, the database and the jobs are keeping up
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: A single status with the reasons behind it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminHealth' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/analytics/events:
+    post:
+      tags: [analytics]
+      summary: Record a small batch of anonymous product events
+      description: Bots are acknowledged and not stored. No cookies are set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [name]
+                    properties:
+                      name: { type: string, enum: [page_view, ui.click, feed.filter] }
+                      path: { type: string }
+                      props: { type: object, additionalProperties: { type: string } }
+      responses:
+        '204': { description: Accepted. A bot, or a stored batch, both answer this. }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/moderation/history:
+    get:
+      tags: [moderation]
+      summary: Decisions that have already been made
+      security: [{ session: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200':
+          description: Closed cases, newest decision first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModerationHistory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Validation' }
 
   /api/ideas:
@@ -861,6 +991,200 @@ components:
         Retry-After: { schema: { type: integer }, description: Seconds to wait. }
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
+    AdminPoint:
+      type: object
+      required: [day, value]
+      properties:
+        day: { type: string }
+        value: { type: integer }
+    AdminDim:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string }
+        value: { type: integer }
+    AdminSeries:
+      type: object
+      required: [visitors, pageviews, activeUsers, signups, ideas, votes, posts, participations, casesOpened, casesDecided, decisionSeconds, httpRequests, http5xx]
+      properties:
+        visitors: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        pageviews: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        activeUsers: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        signups: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        ideas: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        votes: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        posts: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        participations: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        casesOpened: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        casesDecided: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        decisionSeconds: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        httpRequests: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+        http5xx: { type: array, items: { $ref: '#/components/schemas/AdminPoint' } }
+    AdminHealth:
+      type: object
+      required: [status, reasons, uptimeSeconds, ready, dbPingMs, dbPool, jobs, hour, day, oldestQueueHours]
+      properties:
+        status: { type: string, enum: [ok, degraded, down] }
+        reasons: { type: array, items: { type: string } }
+        uptimeSeconds: { type: integer }
+        ready: { type: boolean }
+        dbPingMs: { type: integer }
+        dbPool:
+          type: object
+          required: [acquired, idle, max]
+          properties:
+            acquired: { type: integer }
+            idle: { type: integer }
+            max: { type: integer }
+        jobs:
+          type: array
+          items:
+            type: object
+            required: [name, at, durationMs, failed, error]
+            properties:
+              name: { type: string }
+              at: { type: string, format: date-time }
+              durationMs: { type: integer }
+              failed: { type: boolean }
+              error: { type: string }
+        hour:
+          type: object
+          required: [requests, serverErrors, p95Ms]
+          properties:
+            requests: { type: integer }
+            serverErrors: { type: integer }
+            p95Ms: { type: number }
+        day:
+          type: object
+          required: [requests, serverErrors, p95Ms]
+          properties:
+            requests: { type: integer }
+            serverErrors: { type: integer }
+            p95Ms: { type: number }
+        oldestQueueHours: { type: integer }
+    AdminOverview:
+      type: object
+      required: [range, from, to, verdict, kpis, series, funnel, retention, breakdowns, topIdeas, insights, health]
+      properties:
+        range: { type: string, enum: [7d, 30d, 90d] }
+        from: { type: string }
+        to: { type: string }
+        verdict:
+          type: object
+          required: [status, score, summary, reasons]
+          properties:
+            status: { type: string, enum: [growing, falling, steady, insufficient] }
+            score: { type: number }
+            summary: { type: string }
+            reasons: { type: array, items: { type: string } }
+        kpis:
+          type: array
+          items:
+            type: object
+            required: [key, label, value, previous, delta]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              value: { type: integer }
+              previous: { type: integer }
+              delta: { type: number, nullable: true }
+        series: { $ref: '#/components/schemas/AdminSeries' }
+        funnel:
+          type: object
+          required: [visitors, signedIn, acted, authors]
+          properties:
+            visitors: { type: integer }
+            signedIn: { type: integer }
+            acted: { type: integer }
+            authors: { type: integer }
+        retention:
+          type: array
+          items:
+            type: object
+            required: [week, size, rates]
+            properties:
+              week: { type: string }
+              size: { type: integer }
+              rates: { type: array, items: { type: number, nullable: true } }
+        breakdowns:
+          type: object
+          required: [pages, referrers, categories]
+          properties:
+            pages: { type: array, items: { $ref: '#/components/schemas/AdminDim' } }
+            referrers: { type: array, items: { $ref: '#/components/schemas/AdminDim' } }
+            categories: { type: array, items: { $ref: '#/components/schemas/AdminDim' } }
+        topIdeas:
+          type: array
+          items:
+            type: object
+            required: [slug, title, views, votes, posts, joins]
+            properties:
+              slug: { type: string }
+              title: { type: string }
+              views: { type: integer }
+              votes: { type: integer }
+              posts: { type: integer }
+              joins: { type: integer }
+        insights:
+          type: array
+          items:
+            type: object
+            required: [kind, text]
+            properties:
+              kind: { type: string }
+              text: { type: string }
+        health: { $ref: '#/components/schemas/AdminHealth' }
+    AdminUsers:
+      type: object
+      required: [users, nextCursor]
+      properties:
+        users:
+          type: array
+          items:
+            type: object
+            required: [handle, name, email, role, badge, karma, approvedIdeas, createdAt, lastSeenAt, protected]
+            properties:
+              handle: { type: string }
+              name: { type: string }
+              email: { type: string }
+              role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+              badge: { type: string, nullable: true }
+              karma: { type: integer }
+              approvedIdeas: { type: integer }
+              createdAt: { type: string, format: date-time }
+              lastSeenAt: { type: string, format: date-time, nullable: true }
+              protected: { type: boolean }
+        nextCursor: { type: string, nullable: true }
+    AdminSettings:
+      type: object
+      required: [premoderation]
+      properties:
+        premoderation: { type: string, enum: [EXTERNAL_ONLY, ALL] }
+    ModerationHistory:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [caseId, ideaId, slug, title, decision, note, source, decidedAt, decidedBy]
+            properties:
+              caseId: { type: string, format: uuid }
+              ideaId: { type: string, format: uuid }
+              slug: { type: string }
+              title: { type: string }
+              decision: { type: string }
+              note: { type: string }
+              source: { type: string }
+              decidedAt: { type: string, format: date-time }
+              decidedBy:
+                type: object
+                required: [handle, name]
+                properties:
+                  handle: { type: string }
+                  name: { type: string }
+        nextCursor: { type: string, nullable: true }
     Error:
       type: object
       required: [error, code]

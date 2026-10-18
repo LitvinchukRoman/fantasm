@@ -12,6 +12,7 @@ import { HudLabel } from "~/components/ui/hud-label";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
 import { getIdeas, routeApi } from "~/lib/api.server";
+import { track } from "~/lib/analytics";
 import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
 import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data";
@@ -136,10 +137,19 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
     setSearchParams(new URLSearchParams(), { replace: true, preventScrollReset: true });
     setMenu(null);
   }
-  const setCategory = (value: IdeaCategory | null) => update({ category: value });
+  const setCategory = (value: IdeaCategory | null) => {
+    track("feed.filter", { category: value ?? "all" });
+    update({ category: value });
+  };
   const setDateWindow = (value: DateWindow) => update({ dateWindow: value });
-  const setCampus = (value: CampusFilter) => update({ campus: value });
-  const setSort = (value: SortKey) => update({ sort: value });
+  const setCampus = (value: CampusFilter) => {
+    track("feed.filter", { campus: value });
+    update({ campus: value });
+  };
+  const setSort = (value: SortKey) => {
+    track("feed.filter", { sort: value });
+    update({ sort: value });
+  };
   const setTags = (next: string[]) => update({ tags: next });
   const toggleTag = (slug: string) =>
     update({ tags: latest.current.tags.includes(slug) ? latest.current.tags.filter((item) => item !== slug) : [...latest.current.tags, slug] });
@@ -351,7 +361,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
             Скинути фільтри
           </Button>
         )}
-        <Button to="/ideas/new" arrow>
+        <Button to="/ideas/new" arrow onClick={() => track("ui.click", { target: "publish" })}>
           Запропонувати ідею
         </Button>
       </div>
@@ -435,7 +445,7 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
           <SiteFooter />
           {ideas.length > 0 && (
             <ActionDock label="Нова ідея" visible={menu === null}>
-              <Button to="/ideas/new" size="sm" arrow>
+              <Button to="/ideas/new" size="sm" arrow onClick={() => track("ui.click", { target: "publish" })}>
                 Запропонувати ідею
               </Button>
             </ActionDock>

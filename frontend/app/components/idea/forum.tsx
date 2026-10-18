@@ -2,6 +2,7 @@ import { Link, useFetcher, useRouteLoaderData } from "react-router";
 import { useEffect, useState } from "react";
 import { GuideMarkdown } from "~/components/guides/markdown";
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import { RelativeTime } from "~/components/ui/relative-time";
 import { AuthorLink, useAuthorAvatar } from "~/components/idea/author-popover";
 import { UserAvatar } from "~/components/ui/user-avatar";
@@ -106,7 +107,7 @@ export function Forum({ thread, authorHandle, closed }: { thread: ForumThread; a
       ) : (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
           <p className="text-sm text-[var(--color-text-muted)]">Щоб написати допис або відповісти, увійди.</p>
-          <Button to="/login" size="sm">Увійти й написати</Button>
+          <Button to="/login" size="sm" onClick={() => track("ui.click", { target: "login" })}>Увійти й написати</Button>
         </div>
       )}
 

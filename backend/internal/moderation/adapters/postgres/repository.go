@@ -32,8 +32,10 @@ func (r *Repository) LockPublicIdea(ctx context.Context, ac ideaports.Access, sl
 
 func (r *Repository) LockIdea(ctx context.Context, ideaID string) (ports.IdeaRef, error) {
 	var ref ports.IdeaRef
-	err := r.db.Querier(ctx).QueryRow(ctx, `SELECT id, slug, title, author_id, moderation_state FROM ideas WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, ideaID).
-		Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.AuthorID, &ref.State)
+	err := r.db.Querier(ctx).QueryRow(ctx, `
+		SELECT id, slug, title, author_id, moderation_state, category, badge_organization_id IS NOT NULL
+		FROM ideas WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, ideaID).
+		Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.AuthorID, &ref.State, &ref.Category, &ref.Campus)
 	if postgres.IsNoRows(err) {
 		return ports.IdeaRef{}, ideadomain.ErrNotFound
 	}
@@ -108,9 +110,12 @@ func (r *Repository) RefreshHot(ctx context.Context, ideaID string, now time.Tim
 	return err
 }
 
-func (r *Repository) OpenCase(ctx context.Context, ideaID string, source domain.Source, now time.Time) error {
-	_, err := r.db.Querier(ctx).Exec(ctx, `INSERT INTO moderation_cases (id, idea_id, source, created_at) VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, ideaID, string(source), now)
-	return err
+func (r *Repository) OpenCase(ctx context.Context, ideaID string, source domain.Source, now time.Time) (bool, error) {
+	tag, err := r.db.Querier(ctx).Exec(ctx, `INSERT INTO moderation_cases (id, idea_id, source, created_at) VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, ideaID, string(source), now)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (r *Repository) OpenCaseOf(ctx context.Context, ideaID string) (string, bool, error) {
@@ -122,14 +127,17 @@ func (r *Repository) OpenCaseOf(ctx context.Context, ideaID string) (string, boo
 	return id, err == nil, err
 }
 
-func (r *Repository) CloseCase(ctx context.Context, caseID string, decision domain.Decision, by, note string, now time.Time) error {
+func (r *Repository) CloseCase(ctx context.Context, caseID string, decision domain.Decision, by, note string, now time.Time) (time.Time, error) {
 	var n any
 	if note != "" {
 		n = note
 	}
-	_, err := r.db.Querier(ctx).Exec(ctx, `UPDATE moderation_cases SET state = 'CLOSED', decision = $2, decided_by = $3, decided_at = $4, note = $5 WHERE id = $1 AND state = 'OPEN'`,
-		caseID, string(decision), by, now, n)
-	return err
+	var opened time.Time
+	err := r.db.Querier(ctx).QueryRow(ctx, `
+		UPDATE moderation_cases SET state = 'CLOSED', decision = $2, decided_by = $3, decided_at = $4, note = $5
+		WHERE id = $1 AND state = 'OPEN' RETURNING created_at`,
+		caseID, string(decision), by, now, n).Scan(&opened)
+	return opened, err
 }
 
 func (r *Repository) IncrementApproved(ctx context.Context, userID string) error {
@@ -165,6 +173,40 @@ func (r *Repository) Queue(ctx context.Context, state domain.State, after *curso
 		var it domain.QueueItem
 		if err := rows.Scan(&it.CaseID, &it.IdeaID, &it.Slug, &it.Title, &it.Summary, &it.Category, &it.HTML, &it.Author.ID, &it.Author.Handle, &it.Author.Name,
 			&it.State, &it.Source, &it.OpenedAt, &it.OpenReports, &it.AuthorKarma, &it.AuthorApproved); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) History(ctx context.Context, after *cursor.Position, limit int) ([]domain.HistoryItem, error) {
+	args := []any{limit}
+	where := ""
+	if after != nil {
+		at, err := cursor.Time(after.Key)
+		if err != nil {
+			return nil, cursor.ErrInvalid
+		}
+		args = append(args, at, after.ID)
+		where = ` AND (c.decided_at, c.id) < ($2, $3::uuid)`
+	}
+	rows, err := r.db.Querier(ctx).Query(ctx, `
+		SELECT c.id, i.id, i.slug, i.title, COALESCE(c.decision, ''), COALESCE(c.note, ''), c.source, c.decided_at,
+			COALESCE(u.handle, ''), COALESCE(u.name, '')
+		FROM moderation_cases c
+		JOIN ideas i ON i.id = c.idea_id
+		LEFT JOIN users u ON u.id = c.decided_by
+		WHERE c.state = 'CLOSED' AND c.decided_at IS NOT NULL`+where+`
+		ORDER BY c.decided_at DESC, c.id DESC LIMIT $1`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.HistoryItem{}
+	for rows.Next() {
+		var it domain.HistoryItem
+		if err := rows.Scan(&it.CaseID, &it.IdeaID, &it.Slug, &it.Title, &it.Decision, &it.Note, &it.Source, &it.DecidedAt, &it.Moderator.Handle, &it.Moderator.Name); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

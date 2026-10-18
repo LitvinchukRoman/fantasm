@@ -93,6 +93,7 @@ func New(t testing.TB, opts ...Option) *Env {
 	cfg := config.Config{
 		PublicURL: Origin, AppSecret: "test-secret-test-secret-test-secret!",
 		RateLimitAnonRPS: 10_000, RateLimitAnonBurst: 10_000, RateLimitUserRPS: 10_000, RateLimitUserBurst: 10_000, RateLimitLoginPerMin: 10_000, RateLimitPostsPerMin: 10_000,
+		AnalyticsRetentionDays: 180, AnalyticsRatePerMin: 10_000,
 		SessionAbsoluteTTL: 24 * time.Hour, SessionIdleTTL: 12 * time.Hour, RequestTimeout: 10 * time.Second,
 	}
 	if s.cfg != nil {

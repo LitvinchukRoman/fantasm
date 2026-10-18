@@ -12,6 +12,7 @@ import { NextIdea } from "~/components/idea/next-idea";
 import { PageIndex, type IndexItem } from "~/components/idea/page-index";
 import { VoteControl } from "~/components/idea/vote-control";
 import { Button } from "~/components/ui/button";
+import { track } from "~/lib/analytics";
 import { Chip } from "~/components/ui/chip";
 import { HudLabel } from "~/components/ui/hud-label";
 import { Marquee } from "~/components/ui/marquee";
@@ -212,7 +213,7 @@ function Stagger({
 function ParticipationControl({ joined, isEvent, size = "md" }: { joined: boolean; isEvent: boolean; size?: "md" | "sm" }) {
   const root = useRouteLoaderData<RootData>("root");
   const fetcher = useFetcher();
-  if (!root?.currentUser) return <Button to="/login" variant="secondary" size={size}>{isEvent ? "Я піду" : "Долучитися"}</Button>;
+  if (!root?.currentUser) return <Button to="/login" variant="secondary" size={size} onClick={() => track("ui.click", { target: "login" })}>{isEvent ? "Я піду" : "Долучитися"}</Button>;
   return (
     <fetcher.Form method="post">
       <input type="hidden" name="intent" value={joined ? "leave" : "participate"} />
@@ -239,6 +240,7 @@ const MODERATION_NOTES: Partial<Record<NonNullable<IdeaView["moderation"]>, { la
 function ShareButton({ size = "md" }: { size?: "md" | "sm" }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
+    track("ui.click", { target: "share" });
     try {
       await navigator.clipboard.writeText(window.location.href.split("#")[0]);
       setCopied(true);

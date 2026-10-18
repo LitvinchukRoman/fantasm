@@ -7,9 +7,15 @@ import type {
   Participant,
   Provider,
   PublicProfile,
+  AdminHealth,
+  AdminOverview,
+  AdminUser,
+  ModerationHistoryItem,
+  ModerationReport,
   QueueItem,
   Thread,
   User,
+  UserRole,
 } from "./api-types";
 import type { ProfileUpdate } from "./profile";
 
@@ -213,6 +219,35 @@ export const getModerationQueue = (request: Request, state?: string, cursor?: st
     request,
     query("/api/moderation/queue", { state, cursor, limit: 20 }),
   );
+
+export const getModerationReports = (request: Request, ideaId: string) =>
+  api<{ items: ModerationReport[] }>(request, query("/api/moderation/reports", { ideaId }));
+
+export const getModerationHistory = (request: Request, cursor?: string) =>
+  api<{ items: ModerationHistoryItem[]; nextCursor?: string | null }>(request, query("/api/moderation/history", { cursor, limit: 30 }));
+
+export const getAdminOverview = (request: Request, range?: string) =>
+  api<AdminOverview>(request, query("/api/admin/overview", { range }));
+
+export const getAdminHealth = (request: Request) => api<AdminHealth>(request, "/api/admin/health");
+
+export const getAdminUsers = (request: Request, q?: string, role?: string, cursor?: string) =>
+  api<{ users: AdminUser[]; nextCursor: string | null }>(request, query("/api/admin/users", { q, role, cursor }));
+
+export const setUserRole = (request: Request, handle: string, role: UserRole) =>
+  api<{ handle: string; role: UserRole }>(request, `/api/admin/users/${encodeURIComponent(handle)}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+
+export const getAdminSettings = (request: Request) =>
+  api<{ premoderation: "EXTERNAL_ONLY" | "ALL" }>(request, "/api/admin/settings");
+
+export const setAdminSettings = (request: Request, premoderation: "EXTERNAL_ONLY" | "ALL") =>
+  api<{ premoderation: "EXTERNAL_ONLY" | "ALL" }>(request, "/api/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify({ premoderation }),
+  });
 
 export const decideModeration = (request: Request, id: string, decision: string, note?: string) =>
   api<void>(request, `/api/moderation/ideas/${encodeURIComponent(id)}/decision`, {
