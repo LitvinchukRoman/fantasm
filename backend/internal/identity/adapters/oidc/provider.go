@@ -112,13 +112,34 @@ func (p *Provider) Authenticate(ctx context.Context, code, nonce, verifier strin
 }
 
 type tokenClaims struct {
-	Email                string `json:"email"`
-	EmailVerified        bool   `json:"email_verified"`
-	VerifiedPrimaryEmail string `json:"verified_primary_email"`
-	Name                 string `json:"name"`
-	Picture              string `json:"picture"`
-	TenantID             string `json:"tid"`
-	AuthorizedParty      string `json:"azp"`
+	Email                string      `json:"email"`
+	EmailVerified        bool        `json:"email_verified"`
+	VerifiedPrimaryEmail claimString `json:"verified_primary_email"`
+	Name                 string      `json:"name"`
+	Picture              string      `json:"picture"`
+	TenantID             string      `json:"tid"`
+	AuthorizedParty      string      `json:"azp"`
+}
+
+// claimString reads a claim Microsoft may send as a string or as an array of
+// strings (verified_primary_email arrives as ["person@example.com"]).
+type claimString string
+
+func (c *claimString) UnmarshalJSON(data []byte) error {
+	var one string
+	if err := json.Unmarshal(data, &one); err == nil {
+		*c = claimString(one)
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil {
+		return err
+	}
+	*c = ""
+	if len(many) > 0 {
+		*c = claimString(many[0])
+	}
+	return nil
 }
 
 func (p *Provider) identity(issuer, subject string, claims tokenClaims) (domain.Identity, error) {
@@ -133,7 +154,7 @@ func (p *Provider) identity(issuer, subject string, claims tokenClaims) (domain.
 		}
 		result.TenantID = strings.ToLower(claims.TenantID)
 		result.EmailVerified = false
-		if email := strings.TrimSpace(claims.VerifiedPrimaryEmail); email != "" {
+		if email := strings.TrimSpace(string(claims.VerifiedPrimaryEmail)); email != "" {
 			result.Email = email
 			result.EmailVerified = true
 		}
