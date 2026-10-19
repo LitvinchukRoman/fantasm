@@ -1,7 +1,7 @@
 # Build on the builder's native architecture and cross-compile for the target:
 # no QEMU emulation, whether the arm64 image (Graviton) is built on arm64 or amd64.
 # Base images are pinned by digest (immutable); Dependabot bumps tag and digest together.
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 WORKDIR /src
