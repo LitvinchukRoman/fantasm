@@ -20,11 +20,23 @@ const CAMERA_Z = 5;
 const CELL_SIZE = 0.085;
 const FOV = 50;
 /**
- * Пропорції, під які налаштовано хвилі (десктоп 16:10). Хвилі задані в uv площини, тож площина
- * не буває меншою, ніж для такого екрана: вузький портретний екран бачить середину тієї самої
- * хвилі, а не стиснуту копію з частішими вигинами. На 16:10 і ширших нічого не змінюється.
+ * Пропорції, під які налаштовано хвилі (десктоп 16:10). Хвилі задані в uv площини, а площина
+ * рахується від екрана, тож її розмір не опускається нижче, ніж для цієї пропорції: інакше хвилі
+ * стискаються. На 16:10 і ширших екранах хвилі однакові.
  */
 const REFERENCE_ASPECT = 1.6;
+
+/**
+ * Вузький або портретний екран (телефон, планшет вертикально) з десктопними значеннями бачить один
+ * пагорб на весь екран. Підйом вершин до камери через перспективу збільшує сітку під пагорбом
+ * (до 1.7 раза), тож уся сітка разом то наближається, то віддаляється, і екран «пливе».
+ * Тому там пагорби менші (площина під пропорцію `aspect`, а не 16:10), рух нижчий, повільніший
+ * і майже без «текучого» викривлення, клітинки більші, діагоналі тихіші, а верх екрана під
+ * заголовком гаситься. `aspect` і `topFade` абсолютні, решта множать значення варіанта.
+ */
+const NARROW_MAX_PX = 768;
+const WIDE = { aspect: REFERENCE_ASPECT, cell: 1, elevation: 1, speed: 1, warp: 1, diagonal: 1, topFade: 0 };
+const NARROW = { aspect: 1.15, cell: 1.4, elevation: 0.6, speed: 0.6, warp: 0.35, diagonal: 0.5, topFade: 0.55 };
 
 export type GridSceneHandle = {
   resize: (width: number, height: number) => void;
@@ -51,6 +63,8 @@ uniform float uTrailRadius;
 uniform vec3 uBendColor;
 uniform float uBendGlow;
 uniform float uSweep;
+uniform float uWarp;
+uniform float uRipple;
 
 varying vec3 vColor;
 varying vec2 vUv;
@@ -70,12 +84,12 @@ void main() {
     snoise(vec3(uv * 1.7, t * 0.9)),
     snoise(vec3(uv * 1.7 + 5.2, t * 0.9))
   );
-  vec2 flowField = field + warp * 0.55;
+  vec2 flowField = field + warp * uWarp;
   float hills = max(0.0, snoise(vec3(flowField.x + t, flowField.y - t * 0.6, t * 0.7)));
   float swell = snoise(vec3(uv * vec2(1.3, 1.7) + vec2(-t * 0.5, t * 0.35), 7.0 + t * 0.4)) * 0.5 + 0.5;
   float incline = uv.x * uIncline;
   float lean = incline * mix(-0.25, 0.25, uv.y);
-  float ripple = sin(uTime * 0.38 + position.x * 1.2 + position.y * 0.8) * 0.14;
+  float ripple = sin(uTime * 0.38 + position.x * 1.2 + position.y * 0.8) * uRipple;
 
   // Курсор притискає ділянку до камери.
   vec2 fromMouse = uv - uMouse;
@@ -115,6 +129,9 @@ void main() {
 const FRAGMENT = /* glsl */ `
 uniform float uCells;
 uniform float uStrength;
+uniform float uDiagonal;
+uniform float uTopFade;
+uniform float uViewportH;
 varying vec3 vColor;
 varying vec2 vUv;
 
@@ -134,12 +151,16 @@ void main() {
 
   float squares = max(lineMask(box.x, 0.75), lineMask(box.y, 0.75));
   // Діагоналі слабші: сітка читається як квадрати, а не як густа решітка.
-  float diagonals = lineMask(diag, 0.7) * 0.45;
+  float diagonals = lineMask(diag, 0.7) * uDiagonal;
   float alpha = max(squares, diagonals);
 
   // Там, де клітинка на екрані менша за ~6 px (дальній край хвилі), лінії зливаються й дають муар: гасимо.
   float cellPx = 1.0 / max(max(cellPerPx.x, cellPerPx.y), 1e-5);
   alpha *= smoothstep(3.0, 8.0, cellPx);
+
+  // Верх екрана (заголовок і текст) тихіший, щоб сітка не заливала весь вузький екран.
+  float fromTop = 1.0 - gl_FragCoord.y / uViewportH;
+  alpha *= mix(1.0 - uTopFade, 1.0, smoothstep(0.05, 0.6, fromTop));
 
   if (alpha < 0.01) discard;
   gl_FragColor = vec4(vColor, alpha * uStrength);
@@ -175,13 +196,16 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
   );
   const trailPositions = Array.from({ length: TRAIL_MAX }, () => new THREE.Vector2());
   const trailAlphas = new Float32Array(TRAIL_MAX);
+  const motion = { elevation: interactive ? 0.65 : 1.25, speed: interactive ? 0.12 : 0.075, incline: 0.6, warp: 0.55, ripple: 0.14 };
 
   const uniforms = {
     uTime: { value: 0 },
     uPalette: { value: palette },
-    uElevation: { value: interactive ? 0.65 : 1.25 },
-    uSpeed: { value: interactive ? 0.12 : 0.075 },
-    uIncline: { value: 0.6 },
+    uElevation: { value: motion.elevation },
+    uSpeed: { value: motion.speed },
+    uIncline: { value: motion.incline },
+    uWarp: { value: motion.warp },
+    uRipple: { value: motion.ripple },
     uColorSpeed: { value: interactive ? 0.35 : 0.1 },
     uSweep: { value: interactive ? 0 : calm ? 0.12 : 0.55 },
     uMouse: { value: new THREE.Vector2(0.5, 0.5) },
@@ -196,6 +220,9 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     uBendGlow: { value: interactive ? 0.32 : calm ? 0.4 : 0.8 },
     uStrength: { value: calm ? 0.62 : 1 },
     uCells: { value: 80 },
+    uDiagonal: { value: 0.45 },
+    uTopFade: { value: 0 },
+    uViewportH: { value: 1 },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -227,10 +254,19 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     camera.updateProjectionMatrix();
     viewH = 2 * CAMERA_Z * Math.tan((FOV * Math.PI) / 360);
     viewW = viewH * camera.aspect;
-    plane = 1.5 * Math.max(viewW, viewH * REFERENCE_ASPECT);
+    const tune = width < NARROW_MAX_PX || width < height ? NARROW : WIDE;
+    plane = 1.5 * Math.max(viewW, viewH * tune.aspect);
     // Клітинка має фіксований світовий розмір (≈16 px на екрані), а не фіксовану кількість на площину:
     // інакше на великому екрані вона стає дрібною, а лінії - шумом.
-    uniforms.uCells.value = Math.round(plane / CELL_SIZE);
+    uniforms.uCells.value = Math.round(plane / (CELL_SIZE * tune.cell));
+    uniforms.uElevation.value = motion.elevation * tune.elevation;
+    uniforms.uSpeed.value = motion.speed * tune.speed;
+    uniforms.uIncline.value = motion.incline * tune.elevation;
+    uniforms.uWarp.value = motion.warp * tune.warp;
+    uniforms.uRipple.value = motion.ripple * tune.elevation;
+    uniforms.uDiagonal.value = 0.45 * tune.diagonal;
+    uniforms.uTopFade.value = tune.topFade;
+    uniforms.uViewportH.value = renderer.domElement.height;
     build();
   };
 
