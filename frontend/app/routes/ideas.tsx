@@ -316,7 +316,10 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
             ) : undefined
           }
         />
-        <div className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2">
+        {tagOptions.length === 0 && (
+          <p className="px-3 pt-1 pb-3 text-sm text-[var(--color-text-muted)]">Серед цих ідей тегів немає.</p>
+        )}
+        <div className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2 empty:hidden">
           {tagOptions.map((tag) => (
             <FilterToggle
               key={tag.slug}
@@ -415,7 +418,9 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         </>
       ) : (
         <>
-          <main className="relative z-10 mx-auto w-full flex-1 max-w-3xl px-5 pt-24 pb-28 sm:px-8">
+          {/* Шторка фільтра на телефоні fixed, але живе в контексті накладання main: поки вона відкрита,
+              main стоїть над футером, інакше на короткій стрічці футер перекриває опції й ловить тапи. */}
+          <main className={`relative ${menu ? "z-50" : "z-10"} mx-auto w-full flex-1 max-w-3xl px-5 pt-24 pb-28 sm:px-8`}>
             <HudLabel as="h1" className="!text-[var(--color-text-muted)]">
               Ідеї · {ideas.length}
             </HudLabel>
