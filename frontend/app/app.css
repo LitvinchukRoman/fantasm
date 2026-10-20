@@ -539,6 +539,74 @@ html[data-consent] [data-consent-ssr] {
   }
 }
 
+/*
+ * Монограма НаУКМА поруч з аватаркою могилянця (NaukmaMark). Заливка тихо «дихає», а по контуру
+ * літер біжать п'ять відрізків світла (pathLength 100: штрих 6 + проміжок 14, зсув на -100 це рівно
+ * п'ять періодів, тож цикл без стрибка). stroke-dashoffset перемальовує лише SVG у ~60 px на сторінці
+ * профілю; правило про композитні анімації з PERFORMANCE.md стосується першого екрана головної.
+ */
+.naukma-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 3.75rem;
+  color: var(--color-accent);
+}
+
+/* Поруч з аватаркою 48 px (картка профілю автора). */
+.naukma-mark--sm {
+  width: 2.5rem;
+}
+
+.naukma-mark-logo {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.naukma-mark-fill {
+  animation: naukma-breathe 3.6s ease-in-out infinite alternate;
+}
+
+.naukma-mark-trace {
+  stroke: color-mix(in srgb, var(--color-accent) 55%, white);
+  /* Одиниці viewBox (2271 у ширину): при 3.75rem це ~1.5 px. non-scaling-stroke не підходить,
+     бо з ним Chrome ігнорує pathLength і штрих стає довшим за весь контур. */
+  stroke-width: 55;
+  stroke-linecap: round;
+  stroke-dasharray: 6 14;
+  filter: drop-shadow(0 0 3px var(--color-accent));
+  animation: naukma-trace 10s linear infinite;
+}
+
+@keyframes naukma-breathe {
+  from {
+    opacity: 0.45;
+  }
+
+  to {
+    opacity: 0.8;
+  }
+}
+
+@keyframes naukma-trace {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .naukma-mark-fill {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .naukma-mark-trace {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.6;
+  }
+}
+
 /* Однаковий відступ згори і знизу. Форма лишається по центру,
    коли панель виростає до реєстрації. */
 .auth-screen {
