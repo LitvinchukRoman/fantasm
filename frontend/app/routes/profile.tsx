@@ -7,6 +7,7 @@ import { Nav } from "~/components/landing/nav";
 import { Button } from "~/components/ui/button";
 import { HudLabel } from "~/components/ui/hud-label";
 import { MetaGrid } from "~/components/ui/meta-grid";
+import { NaukmaMark } from "~/components/ui/naukma-mark";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
@@ -59,7 +60,7 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <IdeasBackground />
+      <IdeasBackground interactive={false} />
       <Nav forceSolid />
 
       <main className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-5 pt-28 pb-20 sm:px-8">
@@ -67,7 +68,10 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
           {/* Ліва колонка: людина. Печатка, ім'я й дані тією ж мовою, що на сторінці ідеї. */}
           <aside className="z-20 mt-8 space-y-8 lg:sticky lg:top-36 lg:self-start lg:pr-4">
             <div>
-              <UserAvatar name={profile.name} src={profile.avatarUrl} className="mb-6 size-24 text-4xl" />
+              <div className="mb-6 flex items-center gap-5">
+                <UserAvatar name={profile.name} src={profile.avatarUrl} className="size-24 text-4xl" />
+                {profile.verified && <NaukmaMark />}
+              </div>
               <h1 className="display-entity text-3xl">{profile.name}</h1>
               {!isGeneratedHandle(profile.handle) && (
                 <HudLabel as="p" className="mt-2">

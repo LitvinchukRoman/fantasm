@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { IconArrowRight } from "~/components/landing/icons";
+import { NaukmaMark } from "~/components/ui/naukma-mark";
 import { UserAvatar } from "~/components/ui/user-avatar";
 import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { formatShortDate } from "~/lib/ideas";
@@ -235,6 +236,7 @@ function Popover({
       <div className="px-5 pt-5">
         <div className="flex items-center gap-4">
           <UserAvatar name={profile.name} src={profile.avatarUrl} className="size-12 text-lg" />
+          {profile.verified && <NaukmaMark className="naukma-mark--sm" />}
           <div className="min-w-0">
             <h2 className="display-entity text-xl [overflow-wrap:anywhere]">
               {profile.name}
