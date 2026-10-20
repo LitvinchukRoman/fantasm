@@ -1,0 +1,222 @@
+{
+  "author": {
+    "handle": "fantasm",
+    "name": "Fantasm",
+    "email": "seed@fantasm.invalid"
+  },
+  "ideas": [
+    {
+      "slug": "test-velyka-komanda",
+      "title": "Тест: ідея з великою командою",
+      "summary": "Тестова ідея для dev: 32 тестові учасники в усіх станах, щоб перевірити, як сторінка показує велику команду.",
+      "body": "## Навіщо ця ідея\n\nЦе **тестова** ідея лише для dev-середовища. Усі учасники — тестові акаунти без входу (`test-*`), справжніх людей тут немає.\n\n- 8 прийнятих автором\n- 16 тих, хто долучився\n- 6 зацікавлених\n- 2 відхилені (їх бачать лише автор і модератори)\n\nЗасіяно командою `api seed /app/seed/test-participants.json`, повторний запуск нічого не дублює.",
+      "category": "PROJECT",
+      "status": "OPEN",
+      "organization": "naukma",
+      "tags": [
+        "тест"
+      ],
+      "needsRoles": [
+        "Дизайн",
+        "Бекенд",
+        "Фронтенд",
+        "Маркетинг"
+      ],
+      "daysAgo": 2,
+      "participants": [
+        {
+          "handle": "test-olena-koval",
+          "name": "Олена Коваль (тест)",
+          "state": "ACCEPTED",
+          "role": "Дизайн"
+        },
+        {
+          "handle": "test-andrii-melnyk",
+          "name": "Андрій Мельник (тест)",
+          "state": "ACCEPTED",
+          "role": "Бекенд"
+        },
+        {
+          "handle": "test-iryna-shevchenko",
+          "name": "Ірина Шевченко (тест)",
+          "state": "ACCEPTED",
+          "role": "Фронтенд"
+        },
+        {
+          "handle": "test-taras-bondar",
+          "name": "Тарас Бондар (тест)",
+          "state": "ACCEPTED",
+          "role": "Менеджмент"
+        },
+        {
+          "handle": "test-sofiia-tkachenko",
+          "name": "Софія Ткаченко (тест)",
+          "state": "ACCEPTED",
+          "role": "Маркетинг"
+        },
+        {
+          "handle": "test-maksym-kravets",
+          "name": "Максим Кравець (тест)",
+          "state": "ACCEPTED",
+          "role": "Бекенд"
+        },
+        {
+          "handle": "test-daryna-oliinyk",
+          "name": "Дарина Олійник (тест)",
+          "state": "ACCEPTED",
+          "role": "Дослідження"
+        },
+        {
+          "handle": "test-bohdan-lysenko",
+          "name": "Богдан Лисенко (тест)",
+          "state": "ACCEPTED",
+          "role": "Фронтенд"
+        },
+        {
+          "handle": "test-anastasiia-moroz",
+          "name": "Анастасія Мороз (тест)",
+          "state": "JOINED",
+          "role": "Дизайн"
+        },
+        {
+          "handle": "test-yurii-pavlenko",
+          "name": "Юрій Павленко (тест)",
+          "state": "JOINED",
+          "role": "Аналітика"
+        },
+        {
+          "handle": "test-mariia-savchenko",
+          "name": "Марія Савченко (тест)",
+          "state": "JOINED",
+          "role": "Комунікації"
+        },
+        {
+          "handle": "test-dmytro-rudenko",
+          "name": "Дмитро Руденко (тест)",
+          "state": "JOINED",
+          "role": "Бекенд"
+        },
+        {
+          "handle": "test-kateryna-marchenko",
+          "name": "Катерина Марченко (тест)",
+          "state": "JOINED",
+          "role": "Тестування"
+        },
+        {
+          "handle": "test-oleksandr-zakharchenko",
+          "name": "Олександр Захарченко (тест)",
+          "state": "JOINED",
+          "role": "DevOps"
+        },
+        {
+          "handle": "test-viktoriia-polishchuk",
+          "name": "Вікторія Поліщук (тест)",
+          "state": "JOINED",
+          "role": "Контент"
+        },
+        {
+          "handle": "test-roman-hnatiuk",
+          "name": "Роман Гнатюк (тест)",
+          "state": "JOINED",
+          "role": "Фронтенд"
+        },
+        {
+          "handle": "test-yuliia-kovalenko",
+          "name": "Юлія Коваленко (тест)",
+          "state": "JOINED",
+          "role": "Дизайн"
+        },
+        {
+          "handle": "test-artem-boiko",
+          "name": "Артем Бойко (тест)",
+          "state": "JOINED",
+          "role": "Мобільна розробка"
+        },
+        {
+          "handle": "test-khrystyna-levchenko",
+          "name": "Христина Левченко (тест)",
+          "state": "JOINED",
+          "role": ""
+        },
+        {
+          "handle": "test-nazar-kuzmenko",
+          "name": "Назар Кузьменко (тест)",
+          "state": "JOINED",
+          "role": "Фото й відео"
+        },
+        {
+          "handle": "test-alina-romaniuk",
+          "name": "Аліна Романюк (тест)",
+          "state": "JOINED",
+          "role": ""
+        },
+        {
+          "handle": "test-ivan-sydorenko",
+          "name": "Іван Сидоренко (тест)",
+          "state": "JOINED",
+          "role": "Фінанси"
+        },
+        {
+          "handle": "test-valeriia-zinchenko",
+          "name": "Валерія Зінченко (тест)",
+          "state": "JOINED",
+          "role": "Маркетинг"
+        },
+        {
+          "handle": "test-mykyta-honchar",
+          "name": "Микита Гончар (тест)",
+          "state": "JOINED",
+          "role": "Бекенд"
+        },
+        {
+          "handle": "test-polina-vasylenko",
+          "name": "Поліна Василенко (тест)",
+          "state": "INTERESTED",
+          "role": "Дизайн"
+        },
+        {
+          "handle": "test-denys-karpenko",
+          "name": "Денис Карпенко (тест)",
+          "state": "INTERESTED",
+          "role": ""
+        },
+        {
+          "handle": "test-zlata-ostapenko",
+          "name": "Злата Остапенко (тест)",
+          "state": "INTERESTED",
+          "role": "Комунікації"
+        },
+        {
+          "handle": "test-vladyslav-fedorenko",
+          "name": "Владислав Федоренко (тест)",
+          "state": "INTERESTED",
+          "role": "Аналітика"
+        },
+        {
+          "handle": "test-oksana-prykhodko",
+          "name": "Оксана Приходько (тест)",
+          "state": "INTERESTED",
+          "role": ""
+        },
+        {
+          "handle": "test-mark-klymenko",
+          "name": "Марк Клименко (тест)",
+          "state": "INTERESTED",
+          "role": "Фронтенд"
+        },
+        {
+          "handle": "test-liliia-yaremchuk",
+          "name": "Лілія Яремчук (тест)",
+          "state": "DECLINED",
+          "role": "Дизайн"
+        },
+        {
+          "handle": "test-stepan-tymoshenko",
+          "name": "Степан Тимошенко (тест)",
+          "state": "DECLINED",
+          "role": ""
+        }
+      ]
+    }
+  ]
+}

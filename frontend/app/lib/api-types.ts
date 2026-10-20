@@ -27,6 +27,9 @@ export interface User extends Person {
   avatarUrl?: string;
   bio?: string;
   faculty?: string;
+  github?: string;
+  linkedin?: string;
+  instagram?: string;
   role: UserRole;
   karma?: number;
   verified?: boolean;
@@ -115,6 +118,9 @@ export interface Thread {
 export interface PublicProfile extends Person {
   bio?: string;
   faculty?: string;
+  github?: string;
+  linkedin?: string;
+  instagram?: string;
   avatarUrl?: string;
   verified?: boolean;
   campus?: Campus | null;

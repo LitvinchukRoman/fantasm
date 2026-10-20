@@ -46,6 +46,8 @@ GOOGLE_CLIENT_SECRET=$(opt app/google-client-secret)
 ENTRA_CLIENT_ID=$(opt app/entra-client-id)
 ENTRA_CLIENT_SECRET=$(opt app/entra-client-secret)
 ADMIN_EMAILS=$(opt app/admin-emails)
+GITHUB_CLIENT_ID=$(opt app/github-client-id)
+GITHUB_CLIENT_SECRET=$(opt app/github-client-secret)
 ENVFILE
 chmod 600 "$tmp"
 mv "$tmp" "/opt/fantasm/$env_name.env"

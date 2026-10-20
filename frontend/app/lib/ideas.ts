@@ -4,11 +4,25 @@
  * Кампус — рядок `{ id, label }`, не окремий тип «могилянець».
  */
 import type { TocItem } from "./content-meta";
-import type { IdeaCard as ApiIdeaCard, IdeaView as ApiIdeaView } from "./api-types";
+import type { IdeaCard as ApiIdeaCard, IdeaView as ApiIdeaView, User } from "./api-types";
 
 export type Campus = { id: string; label: string };
 
 export const NAUKMA: Campus = { id: "naukma", label: "Могилянка" };
+
+const CAMPUS_LABELS: Record<string, string> = { [NAUKMA.id]: NAUKMA.label };
+
+/**
+ * Кампуси, за якими людина може фільтрувати стрічку: лише її власні університети (id кампусу збігається
+ * з id організації). Без членства список порожній і фільтра «Кампус» немає. Новий університет
+ * в organizations.json з'являється тут сам, з назвою організації як підписом.
+ */
+export function viewerCampuses(user: Pick<User, "memberships"> | null | undefined): Campus[] {
+  return (user?.memberships ?? []).map((membership) => ({
+    id: membership.organizationId,
+    label: CAMPUS_LABELS[membership.organizationId] ?? membership.name,
+  }));
+}
 
 export type IdeaCategory = "STARTUP" | "PROJECT" | "EVENT" | "COMMUNITY" | "VOLUNTEERING" | "OTHER";
 

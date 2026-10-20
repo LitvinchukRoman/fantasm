@@ -1,6 +1,6 @@
 import type { User } from "./api-types";
 
-export const PROFILE_FIELDS = ["name", "handle", "bio", "faculty"] as const;
+export const PROFILE_FIELDS = ["name", "handle", "bio", "faculty", "linkedin", "instagram"] as const;
 export type ProfileField = (typeof PROFILE_FIELDS)[number];
 export type ProfileUpdate = Partial<Pick<User, ProfileField>>;
 
@@ -13,6 +13,8 @@ export function isGeneratedHandle(handle: string): boolean {
 export function profileChanges(form: FormData, current: User): ProfileUpdate {
   const update: ProfileUpdate = {};
   for (const field of PROFILE_FIELDS) {
+    // Поля, яких немає у формі (онбординг без посилань), лишаються як були.
+    if (!form.has(field)) continue;
     const value = String(form.get(field) ?? "").trim();
     if (value !== (current[field] ?? "")) update[field] = value;
   }
@@ -20,21 +22,54 @@ export function profileChanges(form: FormData, current: User): ProfileUpdate {
 }
 
 // Бекенд відповідає англійськими повідомленнями валідації; тут їхній український зміст.
-const HANDLE_ERRORS: Record<string, string> = {
-  "is already taken": "Цей нікнейм уже зайнятий.",
-  "is reserved": "Цей нікнейм зарезервований.",
+const SPECIFIC_ERRORS: Partial<Record<ProfileField, Record<string, string>>> = {
+  handle: {
+    "is already taken": "Цей нікнейм уже зайнятий.",
+    "is reserved": "Цей нікнейм зарезервований.",
+  },
 };
 const FIELD_ERRORS: Record<ProfileField, string> = {
   name: "Імʼя: від 1 до 100 символів, без < і >.",
   handle: "3–30 символів: малі латинські літери, цифри, «_» або «-», на початку літера чи цифра.",
   bio: "Про себе: до 500 символів, без < і >.",
   faculty: "Факультет: до 100 символів, без < і >.",
+  linkedin: "Посилання на профіль linkedin.com/in/… або його назва.",
+  instagram: "Нікнейм в Instagram, @нікнейм або посилання.",
+};
+
+export type ProfileLinkKey = "github" | "linkedin" | "instagram";
+/** Посилання, які людина вписує сама. GitHub підтверджує сам GitHub, тож його не вписують. */
+export type TypedLinkKey = Exclude<ProfileLinkKey, "github">;
+
+/**
+ * Мережі для посилань у профілі. Бекенд зберігає лише назву акаунта, адресу будуємо тут,
+ * тож у профілі не опиниться чужий хост чи javascript:.
+ */
+export const PROFILE_LINKS: { key: ProfileLinkKey; label: string; href: (name: string) => string }[] = [
+  { key: "github", label: "GitHub", href: (name) => `https://github.com/${encodeURIComponent(name)}` },
+  { key: "linkedin", label: "LinkedIn", href: (name) => `https://www.linkedin.com/in/${encodeURIComponent(name)}` },
+  { key: "instagram", label: "Instagram", href: (name) => `https://www.instagram.com/${encodeURIComponent(name)}/` },
+];
+
+export const TYPED_LINKS = PROFILE_LINKS.filter(
+  (link): link is (typeof PROFILE_LINKS)[number] & { key: TypedLinkKey } => link.key !== "github",
+);
+
+/** Чим скінчилось підключення GitHub: бекенд повертає на /settings?github=<код>. */
+export const GITHUB_OUTCOMES: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: "GitHub підключено." },
+  cancelled: { ok: false, text: "Підключення GitHub скасовано." },
+  expired: { ok: false, text: "Посилання на підключення застаріло. Спробуйте ще раз." },
+  taken: { ok: false, text: "Цей GitHub уже підключено до іншого профілю Fantasm." },
+  unavailable: { ok: false, text: "Підключення GitHub зараз недоступне." },
+  failed: { ok: false, text: "Не вдалося підключити GitHub. Спробуйте ще раз." },
 };
 
 export function profileFieldErrors(fields: Record<string, string> = {}): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [field, message] of Object.entries(fields)) {
-    out[field] = (field === "handle" && HANDLE_ERRORS[message]) || FIELD_ERRORS[field as ProfileField] || message;
+    out[field] =
+      SPECIFIC_ERRORS[field as ProfileField]?.[message] || FIELD_ERRORS[field as ProfileField] || message;
   }
   return out;
 }

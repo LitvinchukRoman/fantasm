@@ -14,13 +14,49 @@ func (r *Repository) UpdateProfile(ctx context.Context, userID string, u domain.
 		UPDATE users u SET
 			handle = COALESCE($2, u.handle), name = COALESCE($3, u.name),
 			bio = COALESCE($4, u.bio), faculty = COALESCE($5, u.faculty), updated_at = $6,
-			onboarded_at = COALESCE(u.onboarded_at, $6)
+			onboarded_at = COALESCE(u.onboarded_at, $6),
+			linkedin = COALESCE($7, u.linkedin), instagram = COALESCE($8, u.instagram)
 		WHERE u.id = $1
-		RETURNING `+userColumns, userID, u.Handle, u.Name, u.Bio, u.Faculty, now))
+		RETURNING `+userColumns, userID, u.Handle, u.Name, u.Bio, u.Faculty, now, u.LinkedIn, u.Instagram))
 	if postgres.IsUniqueViolation(err, "users_handle_key") {
 		return domain.User{}, domain.ErrHandleTaken
 	}
 	return user, err
+}
+
+func (r *Repository) CreateGitHubLink(ctx context.Context, a domain.GitHubLinkAttempt) error {
+	_, err := r.db.Querier(ctx).Exec(ctx, `
+		INSERT INTO github_link_attempts (state_hash, browser_hash, user_id, verifier, expires_at)
+		VALUES ($1, $2, $3, $4, $5)`, a.StateHash, a.BrowserHash, a.UserID, a.Verifier, a.ExpiresAt)
+	return err
+}
+
+// ConsumeGitHubLink deletes the attempt as it reads it: a callback works once.
+func (r *Repository) ConsumeGitHubLink(ctx context.Context, stateHash, browserHash, userID string, now time.Time) (domain.GitHubLinkAttempt, error) {
+	var a domain.GitHubLinkAttempt
+	err := r.db.Querier(ctx).QueryRow(ctx, `
+		DELETE FROM github_link_attempts
+		WHERE state_hash = $1 AND browser_hash = $2 AND user_id = $3 AND expires_at > $4
+		RETURNING state_hash, browser_hash, user_id, verifier, expires_at`, stateHash, browserHash, userID, now).
+		Scan(&a.StateHash, &a.BrowserHash, &a.UserID, &a.Verifier, &a.ExpiresAt)
+	return a, notFound(err)
+}
+
+// SetGitHub links the account, or unlinks GitHub when account is nil.
+func (r *Repository) SetGitHub(ctx context.Context, userID string, account *domain.GitHubAccount, now time.Time) (domain.User, error) {
+	var id *int64
+	login := ""
+	if account != nil {
+		id, login = &account.ID, account.Login
+	}
+	user, err := scanUser(r.db.Querier(ctx).QueryRow(ctx, `
+		UPDATE users u SET github_id = $2, github = $3, updated_at = $4
+		WHERE u.id = $1
+		RETURNING `+userColumns, userID, id, login, now))
+	if postgres.IsUniqueViolation(err, "users_github_id_key") {
+		return domain.User{}, domain.ErrGitHubTaken
+	}
+	return user, notFound(err)
 }
 
 // SetAvatar replaces the user's photo. The user is read back in a second
@@ -132,6 +168,7 @@ func (r *Repository) PurgeExpired(ctx context.Context, now, idleCutoff time.Time
 	}{
 		{`DELETE FROM sessions WHERE expires_at <= $1 OR last_seen_at <= $2`, []any{now, idleCutoff}},
 		{`DELETE FROM login_attempts WHERE expires_at <= $1`, []any{now}},
+		{`DELETE FROM github_link_attempts WHERE expires_at <= $1`, []any{now}},
 	} {
 		tag, err := r.db.Querier(ctx).Exec(ctx, stmt.sql, stmt.args...)
 		if err != nil {

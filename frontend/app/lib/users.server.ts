@@ -63,6 +63,9 @@ export interface AuthorPreview {
   name: string;
   bio: string;
   faculty?: string;
+  github?: string;
+  linkedin?: string;
+  instagram?: string;
   avatarUrl?: string;
   verified: boolean;
   karma: number;

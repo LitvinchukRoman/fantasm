@@ -11,7 +11,7 @@ var keys = []string{
 	"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET", "LOG_LEVEL", "APP_SECRET", "TRUSTED_PROXY_CIDRS",
 	"RATE_LIMIT_ANON_RPS", "RATE_LIMIT_ANON_BURST", "RATE_LIMIT_USER_RPS", "RATE_LIMIT_USER_BURST", "RATE_LIMIT_LOGIN_PER_MIN", "RATE_LIMIT_POSTS_PER_MIN",
 	"SESSION_ABSOLUTE_TTL", "SESSION_IDLE_TTL", "DB_MAX_CONNS", "DB_STATEMENT_TIMEOUT", "SHUTDOWN_TIMEOUT", "REQUEST_TIMEOUT", "METRICS_ADDR",
-	"ADMIN_EMAILS", "ANALYTICS_RETENTION_DAYS", "ANALYTICS_RATE_LIMIT_PER_MIN",
+	"ADMIN_EMAILS", "ANALYTICS_RETENTION_DAYS", "ANALYTICS_RATE_LIMIT_PER_MIN", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_URL", "GITHUB_API_URL",
 }
 
 // env starts from an empty environment and applies overrides.
@@ -43,6 +43,9 @@ func TestDefaultsAreSafeAndValid(t *testing.T) {
 	if cfg.MetricsAddr != "" {
 		t.Fatal("metrics must be disabled by default")
 	}
+	if cfg.GitHubClientID != "" || cfg.GitHubURL != "https://github.com" || cfg.GitHubAPIURL != "https://api.github.com" {
+		t.Errorf("GitHub defaults: %q %q %q", cfg.GitHubClientID, cfg.GitHubURL, cfg.GitHubAPIURL)
+	}
 	if cfg.RequestTimeout <= 0 || cfg.ShutdownTimeout <= 0 || cfg.DBStatementTimeout <= 0 || cfg.DBMaxConns <= 0 {
 		t.Errorf("unbounded defaults: %+v", cfg)
 	}
@@ -59,6 +62,8 @@ func TestEveryOverrideIsRead(t *testing.T) {
 		"GOOGLE_CLIENT_ID":    "id", "GOOGLE_CLIENT_SECRET": "secret",
 		"ADMIN_EMAILS":             " Admin@Example.com , second@example.com ",
 		"ANALYTICS_RETENTION_DAYS": "90", "ANALYTICS_RATE_LIMIT_PER_MIN": "30",
+		"GITHUB_CLIENT_ID": "Iv23li", "GITHUB_CLIENT_SECRET": "gh-secret",
+		"GITHUB_URL": "https://github.example", "GITHUB_API_URL": "https://github.example/api/v3",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -77,6 +82,9 @@ func TestEveryOverrideIsRead(t *testing.T) {
 	}
 	if strings.Join(cfg.AdminEmails, "|") != "admin@example.com|second@example.com" || cfg.AnalyticsRetentionDays != 90 || cfg.AnalyticsRatePerMin != 30 {
 		t.Errorf("analytics/admin not applied: %+v", cfg)
+	}
+	if cfg.GitHubClientID != "Iv23li" || cfg.GitHubClientSecret != "gh-secret" || cfg.GitHubURL != "https://github.example" || cfg.GitHubAPIURL != "https://github.example/api/v3" {
+		t.Errorf("github not applied: %q %q %q", cfg.GitHubClientID, cfg.GitHubURL, cfg.GitHubAPIURL)
 	}
 }
 
@@ -100,6 +108,8 @@ func TestMisconfigurationStopsStartup(t *testing.T) {
 		"metrics invalid port":      {"METRICS_ADDR": "localhost:70000"},
 		"admin email with a name":   {"ADMIN_EMAILS": "Admin <a@example.com>"},
 		"analytics retention":       {"ANALYTICS_RETENTION_DAYS": "1"},
+		"relative github api":       {"GITHUB_API_URL": "api.github.com"},
+		"half a github pair":        {"GITHUB_CLIENT_ID": "Iv23li"},
 	}
 	for name, overrides := range cases {
 		env(t, overrides)

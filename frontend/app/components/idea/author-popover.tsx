@@ -8,9 +8,9 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { IconArrowRight } from "~/components/landing/icons";
+import { ProfileLinks } from "~/components/profile/profile-links";
 import { NaukmaMark } from "~/components/ui/naukma-mark";
 import { UserAvatar } from "~/components/ui/user-avatar";
-import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { formatShortDate } from "~/lib/ideas";
 import { isGeneratedHandle } from "~/lib/profile";
 import type { AuthorPreview } from "~/lib/users.server";
@@ -222,7 +222,15 @@ function Popover({
       <Corner className="right-1 bottom-1 border-r border-b" />
 
       <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] px-5 py-3">
-        <span className="hud-label">[ Профіль ]</span>
+        <Link
+          to={`/u/${profile.handle}`}
+          prefetch="intent"
+          onClick={onClose}
+          className="hud-label transition-colors hover:!text-[var(--color-text)]"
+          aria-label={`Відкрити профіль: ${profile.name}`}
+        >
+          [ Профіль ]
+        </Link>
         <button
           type="button"
           onClick={onClose}
@@ -244,11 +252,7 @@ function Popover({
             {!isGeneratedHandle(profile.handle) && <p className="hud-label mt-1">@{profile.handle}</p>}
           </div>
         </div>
-        {profile.verified && (
-          <div className="mt-4">
-            <VerifiedSeal />
-          </div>
-        )}
+        <ProfileLinks links={profile} className="mt-4" />
         {profile.bio && (
           <p className="mt-4 text-sm leading-relaxed text-[var(--color-text-muted)]">
             {profile.bio}
@@ -257,14 +261,11 @@ function Popover({
       </div>
 
       <dl className="mx-5 mt-5 border-t border-[var(--color-border)]">
-        {rows.map((row, index) => (
+        {rows.map((row) => (
           <div
             key={row.key}
-            className="grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-2 border-b border-[var(--color-border)] py-2.5"
+            className="grid grid-cols-[1fr_auto] items-baseline gap-2 border-b border-[var(--color-border)] py-2.5"
           >
-            <dt className="hud-label tabular-nums !text-[var(--color-accent)]">
-              {String(index + 1).padStart(2, "0")}
-            </dt>
             <dt className="hud-label">{row.key}</dt>
             <dd className="text-sm text-[var(--color-text)]">{row.value}</dd>
           </div>
@@ -273,15 +274,9 @@ function Popover({
 
       {profile.ideas.length > 0 && (
         <section className="px-5 pt-5" aria-label="Останні ідеї">
-          <h3 className="hud-label flex items-center gap-3 !text-[var(--color-text-muted)]">
-            <span className="tabular-nums text-[var(--color-accent)]">
-              {String(rows.length + 1).padStart(2, "0")}
-            </span>
-            <span aria-hidden="true">//</span>
-            <span>Останні ідеї</span>
-          </h3>
+          <h3 className="hud-label !text-[var(--color-text-muted)]">Останні ідеї</h3>
           <ul className="mt-3 border-t border-[var(--color-border)]">
-            {profile.ideas.map((idea, index) => (
+            {profile.ideas.map((idea) => (
               <li
                 key={idea.slug}
                 className="border-b border-[var(--color-border)]"
@@ -289,11 +284,8 @@ function Popover({
                 <Link
                   to={`/ideas/${idea.slug}`}
                   prefetch="intent"
-                  className="group grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-2 py-2.5 text-sm text-[var(--color-text)] transition-colors hover:text-[var(--color-accent)]"
+                  className="group grid grid-cols-[1fr_auto] items-baseline gap-2 py-2.5 text-sm text-[var(--color-text)] transition-colors hover:text-[var(--color-accent)]"
                 >
-                  <span className="hud-label tabular-nums">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
                   <span className="line-clamp-2 [overflow-wrap:anywhere]">
                     {idea.title}
                   </span>

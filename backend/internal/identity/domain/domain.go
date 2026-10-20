@@ -32,8 +32,12 @@ type User struct {
 	AvatarURL   string
 	Bio         string
 	Faculty     string
-	Role        Role
-	Karma       int
+	// Account names on the networks, "" when the person left the link out.
+	GitHub    string
+	LinkedIn  string
+	Instagram string
+	Role      Role
+	Karma     int
 	// ApprovedIdeas counts ideas a moderator approved; it lifts premoderation.
 	ApprovedIdeas int
 	// Onboarded is set once the user has confirmed their own profile after the first login.

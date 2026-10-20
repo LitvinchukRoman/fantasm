@@ -37,7 +37,11 @@ References: [Microsoft multitenant authentication](https://learn.microsoft.com/e
 
 `POST /api/auth/logout` requires an `Origin` header equal to `PUBLIC_URL`. Logout is idempotent. Disabled or unknown providers return 404. Invalid, expired, or replayed authentication returns 401 for API clients. Browser login/callback requests accepting HTML redirect to `/login?error=authentication_failed` (or `provider_unavailable` for a disabled provider). Error details and provider claims are never placed in that URL. Internal errors return a generic 500 response and are logged server-side.
 
-`/api/me` returns `id`, `handle`, `name`, `email`, `avatarUrl`, `bio`, `faculty`, `role`, `createdAt`, and `memberships`. It is private, not a public profile endpoint. Tokens are never included in JSON. Identity responses use `Cache-Control: no-store`.
+Profile links store only the account name. LinkedIn and Instagram are typed in. Pasted URLs must be on the network's own host (or a subdomain), and pages of the network itself (`instagram.com/p/…`) are rejected. Neither network offers a way to prove ownership, so these links are checked for form only.
+
+GitHub is never typed in: GitHub vouches for it. `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` belong to a GitHub App with no permissions, no webhook, and callback URLs `${PUBLIC_URL}/api/me/github/callback` for every environment. `GET /api/me/github/connect` starts an attempt bound to the signed-in user and to the browser (cookie `fantasm_github_link`, 10 minutes). It then redirects to GitHub with `state` and PKCE S256. The callback consumes the attempt once, for that same user and browser. It then redeems the code, reads `GET /user`, revokes the token, and stores the numeric `github_id` with the login. A callback planted in someone else's browser therefore links nothing. `github_id` is unique, so one GitHub account backs at most one profile. `DELETE /api/me/github` unlinks it. Without the app, the connect route redirects to `/settings?github=unavailable`.
+
+`/api/me` returns `id`, `handle`, `name`, `email`, `avatarUrl`, `bio`, `faculty`, `github`, `linkedin`, `instagram`, `role`, `createdAt`, and `memberships`. It is private, not a public profile endpoint. Tokens are never included in JSON. Identity responses use `Cache-Control: no-store`.
 
 ## Sessions and login attempts
 

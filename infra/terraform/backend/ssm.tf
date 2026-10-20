@@ -90,7 +90,9 @@ resource "aws_ssm_parameter" "public_url" {
 }
 
 # OAuth clients are registered by hand (redirect URI
-# https://<public host>/api/auth/{google|entra}/callback). SSM rejects empty
+# https://<public host>/api/auth/{google|entra}/callback; the GitHub App, which
+# links GitHub accounts to profiles rather than signing in, uses
+# https://<public host>/api/me/github/callback). SSM rejects empty
 # values, so "unset" means "provider disabled" (refresh-env turns it into an
 # empty variable and the API answers 404 for that provider's login route).
 # Real values are put with `aws ssm put-parameter --overwrite`, never in Terraform.
@@ -100,6 +102,8 @@ locals {
     "google-client-secret",
     "entra-client-id",
     "entra-client-secret",
+    "github-client-id",
+    "github-client-secret",
   ])
   oauth_param_keys = {
     for pair in setproduct(keys(local.envs), local.oauth_params) : "${pair[0]}/${pair[1]}" => {

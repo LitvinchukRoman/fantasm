@@ -121,6 +121,8 @@ paths:
                 name: { type: string }
                 bio: { type: string }
                 faculty: { type: string }
+                linkedin: { type: string, description: 'Profile name from linkedin.com/in/<name> or the link itself. Empty removes it.' }
+                instagram: { type: string, description: 'Account name, @name or a link. Empty removes it.' }
       responses:
         '200':
           description: Updated profile.
@@ -157,6 +159,51 @@ paths:
       responses:
         '200':
           description: Profile without avatarUrl.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/me/github/connect:
+    get:
+      tags: [me]
+      summary: Start linking a GitHub account
+      description: |
+        A browser navigation. Starts an attempt bound to this user and this browser (a short-lived cookie)
+        and redirects to GitHub, where the user authorizes the Fantasm GitHub App. The app asks for no permissions.
+        Signed-out browsers are sent to `/login`.
+      security: [{ session: [] }]
+      responses:
+        '302': { description: "Redirect to GitHub's authorization screen." }
+        '303': { description: "Browser navigation only. Redirect to `/login`, or to `/settings?github=unavailable` when linking is not configured." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/me/github/callback:
+    get:
+      tags: [me]
+      summary: Finish linking a GitHub account
+      description: |
+        Consumes the attempt (once, for the same user and browser), redeems the code with PKCE, reads who signed in to GitHub,
+        revokes the token and stores the GitHub user ID and login. One GitHub account backs at most one profile.
+      security: [{ session: [] }]
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: error, in: query, description: "Set by GitHub when the user declined.", schema: { type: string } }
+      responses:
+        '303': { description: "Redirect to `/settings?github=` with `connected`, `cancelled`, `expired`, `taken`, `unavailable` or `failed`; signed-out browsers go to `/login`." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "The GitHub account is linked to another profile." }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/me/github:
+    delete:
+      tags: [me]
+      summary: Unlink GitHub
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Profile without github.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
@@ -1234,6 +1281,9 @@ components:
         avatarUrl: { type: string, description: 'Path of the uploaded photo (/api/users/{handle}/avatar?v=…); empty without one.' }
         bio: { type: string }
         faculty: { type: string }
+        github: { type: string, description: 'Login of the GitHub account the user linked through GitHub; empty when none is linked.' }
+        linkedin: { type: string, description: 'LinkedIn profile name (linkedin.com/in/<name>), empty without a link.' }
+        instagram: { type: string, description: 'Instagram account name, empty without a link.' }
         role: { type: string, enum: [USER, MODERATOR, ADMIN] }
         karma: { type: integer }
         verified: { type: boolean }
@@ -1364,6 +1414,9 @@ components:
         name: { type: string }
         bio: { type: string }
         faculty: { type: string }
+        github: { type: string, description: 'Login of a GitHub account GitHub confirmed belongs to this user; absent when none is linked.' }
+        linkedin: { type: string, description: 'LinkedIn profile name; absent without a link.' }
+        instagram: { type: string, description: 'Instagram account name; absent without a link.' }
         avatarUrl: { type: string, description: 'Path of the uploaded photo; absent without one.' }
         verified: { type: boolean }
         campus: { $ref: '#/components/schemas/Campus' }

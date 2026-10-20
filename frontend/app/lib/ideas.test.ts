@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toIdeaCard, toIdeaView } from "./ideas";
+import { toIdeaCard, toIdeaView, viewerCampuses } from "./ideas";
 
 const card = {
   slug: "typed-api",
@@ -26,5 +26,19 @@ describe("idea adapters", () => {
   it("maps the API toc level to the existing component depth", () => {
     expect(toIdeaView({ ...card, toc: [{ id: "part", text: "Part", level: 2 }] }).toc)
       .toEqual([{ id: "part", text: "Part", depth: 2 }]);
+  });
+});
+
+describe("viewerCampuses", () => {
+  it("gives no campus filter to a user outside any university", () => {
+    expect(viewerCampuses(null)).toEqual([]);
+    expect(viewerCampuses({ memberships: [] })).toEqual([]);
+  });
+
+  it("offers only the viewer's own universities", () => {
+    expect(viewerCampuses({ memberships: [{ organizationId: "naukma", name: "НаУКМА" }] }))
+      .toEqual([{ id: "naukma", label: "Могилянка" }]);
+    expect(viewerCampuses({ memberships: [{ organizationId: "kpi", name: "КПІ" }] }))
+      .toEqual([{ id: "kpi", label: "КПІ" }]);
   });
 });

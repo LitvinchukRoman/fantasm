@@ -135,6 +135,8 @@ export const uploadAvatar = (request: Request, image: Blob) =>
 
 export const deleteAvatar = (request: Request) => api<User>(request, "/api/me/avatar", { method: "DELETE" });
 
+export const unlinkGitHub = (request: Request) => api<User>(request, "/api/me/github", { method: "DELETE" });
+
 export const getProviders = (request: Request) =>
   api<{ providers: Provider[] }>(request, "/api/auth/providers");
 

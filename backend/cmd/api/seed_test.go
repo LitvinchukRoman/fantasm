@@ -13,9 +13,9 @@ import (
 	"github.com/LitvinchukRoman/fantasm/backend/internal/organizations"
 )
 
-func TestSeedDemoIdeas(t *testing.T) {
-	env := apptest.New(t)
-	raw, err := os.ReadFile("../../seed/demo-ideas.json")
+func loadSeed(t *testing.T, path string) (seedFile, *organizations.Policy) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +29,12 @@ func TestSeedDemoIdeas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return file, policy
+}
+
+func TestSeedDemoIdeas(t *testing.T) {
+	env := apptest.New(t)
+	file, policy := loadSeed(t, "../../seed/demo-ideas.json")
 	logger := slog.New(slog.DiscardHandler)
 	now := time.Now()
 
@@ -81,6 +87,40 @@ func TestSeedDemoIdeas(t *testing.T) {
 	}
 	if len(events.Items) != wantEvents {
 		t.Fatalf("upcoming events %d, want %d", len(events.Items), wantEvents)
+	}
+}
+
+func TestSeedTestParticipants(t *testing.T) {
+	env := apptest.New(t)
+	file, policy := loadSeed(t, "../../seed/test-participants.json")
+	logger := slog.New(slog.DiscardHandler)
+	for range 2 {
+		if _, err := seedIdeas(t.Context(), env.DB, policy, []byte("test-secret"), file, time.Now(), logger); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	seeded := file.Ideas[0]
+	active := 0
+	for _, p := range seeded.Participants {
+		if p.State == "JOINED" || p.State == "ACCEPTED" {
+			active++
+		}
+	}
+	anon := env.Anon()
+	var idea struct {
+		Participants int `json:"participants"`
+	}
+	anon.Do(http.MethodGet, "/api/ideas/"+seeded.Slug, nil).Decode(&idea)
+	var list struct {
+		Items []struct {
+			Handle string `json:"handle"`
+		} `json:"items"`
+	}
+	anon.Do(http.MethodGet, "/api/ideas/"+seeded.Slug+"/participants", nil).Decode(&list)
+	// A rerun keeps every person once; interested and declined people stay hidden from visitors.
+	if idea.Participants != active || len(list.Items) != active {
+		t.Fatalf("participants: idea says %d, list has %d; want %d of %d", idea.Participants, len(list.Items), active, len(seeded.Participants))
 	}
 }
 

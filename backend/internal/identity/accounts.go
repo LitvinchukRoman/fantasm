@@ -15,6 +15,11 @@ import (
 // AccountRepository covers everything about an existing account that is not login itself.
 type AccountRepository interface {
 	UpdateProfile(ctx context.Context, userID string, update domain.ProfileUpdate, now time.Time) (domain.User, error)
+	CreateGitHubLink(ctx context.Context, attempt domain.GitHubLinkAttempt) error
+	// ConsumeGitHubLink removes and returns a live attempt of this user from this browser.
+	ConsumeGitHubLink(ctx context.Context, stateHash, browserHash, userID string, now time.Time) (domain.GitHubLinkAttempt, error)
+	// SetGitHub links the account, or unlinks GitHub when account is nil.
+	SetGitHub(ctx context.Context, userID string, account *domain.GitHubAccount, now time.Time) (domain.User, error)
 	UserByID(ctx context.Context, userID string) (domain.User, error)
 	UserByHandle(ctx context.Context, handle string) (domain.User, error)
 	SetAvatar(ctx context.Context, userID string, avatar domain.Avatar, now time.Time) (domain.User, error)

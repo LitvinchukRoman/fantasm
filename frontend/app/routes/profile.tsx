@@ -6,11 +6,11 @@ import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Nav } from "~/components/landing/nav";
 import { Button } from "~/components/ui/button";
 import { HudLabel } from "~/components/ui/hud-label";
+import { ProfileLinks } from "~/components/profile/profile-links";
 import { MetaGrid } from "~/components/ui/meta-grid";
 import { NaukmaMark } from "~/components/ui/naukma-mark";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { UserAvatar } from "~/components/ui/user-avatar";
-import { VerifiedSeal } from "~/components/ui/verified-seal";
 import { track } from "~/lib/analytics";
 import { formatShortDate } from "~/lib/ideas";
 import { getCurrentUser, getProfile, routeApi } from "~/lib/api.server";
@@ -78,11 +78,7 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
                   @{profile.handle}
                 </HudLabel>
               )}
-              {profile.verified && (
-                <div className="mt-4">
-                  <VerifiedSeal />
-                </div>
-              )}
+              <ProfileLinks links={profile} className="mt-4" />
             </div>
 
             {profile.bio && <p className="text-[var(--color-text-muted)]">{profile.bio}</p>}
