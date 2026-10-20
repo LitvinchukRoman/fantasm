@@ -7,9 +7,19 @@ import type { User } from "~/lib/api-types";
 import { CONSENT_PATTERN } from "~/lib/consent";
 import { useNonce } from "~/lib/csp";
 import { SITE_URL } from "~/lib/site";
+import icon48 from "./assets/icon-48.png";
+import onestCyrillic from "./fonts/onest-cyrillic.woff2";
+import onestLatin from "./fonts/onest-latin.woff2";
 import type { Route } from "./+types/root";
 
 import "./app.css";
+
+/** Підмножини Onest, які є на кожній сторінці. Решту (-ext) браузер довантажить за unicode-range. */
+export const links: Route.LinksFunction = () => [
+  { rel: "preload", href: onestCyrillic, as: "font", type: "font/woff2", crossOrigin: "anonymous" },
+  { rel: "preload", href: onestLatin, as: "font", type: "font/woff2", crossOrigin: "anonymous" },
+  { rel: "icon", type: "image/png", href: icon48 },
+];
 
 const GA_ID = "G-SBRF7E3C29";
 
@@ -19,6 +29,8 @@ const GA_ID = "G-SBRF7E3C29";
  * `consent default` мусить іти до `config`: без згоди gtag шле лише знеособлені пінги без
  * cookies, а збережений вибір застосовується одразу, ще до банера. Перегляди при клієнтських
  * переходах GA4 рахує сам (enhanced measurement), тому окремий page_view дав би подвійний підрахунок.
+ * Сам gtag.js (~175 КБ) вантажиться після load у вільний час основного потоку: до того команди
+ * чекають у dataLayer, і gtag виконує їх по порядку, щойно завантажиться.
  */
 const GA_SNIPPET = `if (location.origin === ${JSON.stringify(SITE_URL)}) {
   window.dataLayer = window.dataLayer || [];
@@ -30,34 +42,39 @@ const GA_SNIPPET = `if (location.origin === ${JSON.stringify(SITE_URL)}) {
     ad_personalization: "denied",
     analytics_storage: choice ? choice[1] : "denied"
   });
-  var s = document.createElement("script");
-  s.async = true;
-  s.src = "https://www.googletagmanager.com/gtag/js?id=${GA_ID}";
-  document.head.appendChild(s);
   gtag("js", new Date());
   gtag("config", "${GA_ID}");
+  var load = function () {
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=${GA_ID}";
+    document.head.appendChild(s);
+  };
+  addEventListener("load", function () {
+    if ("requestIdleCallback" in window) requestIdleCallback(load, { timeout: 3000 });
+    else setTimeout(load, 0);
+  });
 }`;
+
+/** Вибір щодо cookies уже збережено: ховає SSR-копію банера ще до першого кадру (consent-banner.tsx). */
+const CONSENT_SNIPPET = `if (document.cookie.match(${CONSENT_PATTERN})) document.documentElement.dataset.consent = "";`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const nonce = useNonce();
   return (
-    <html lang="uk">
+    // data-consent ставить CONSENT_SNIPPET до гідратації, React його не рендерить.
+    <html lang="uk" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#08090a" />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: CONSENT_SNIPPET }} />
         {import.meta.env.PROD && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: GA_SNIPPET }} />}
-        <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <Meta />
         <Links />
+        {/* Без JS немає ні заставки, ні аналітики, тож і питати згоду нема про що. */}
         <noscript>
-          <style>{".page-loader{display:none}"}</style>
+          <style>{".page-loader,[data-consent-ssr]{display:none}"}</style>
         </noscript>
       </head>
       <body>

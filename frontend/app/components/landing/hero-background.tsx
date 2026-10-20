@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
+import { hasHardwareWebGL, whenIdleAfterLoad } from "~/lib/webgl";
 import type { HeroSceneHandle } from "./webgl/create-hero-scene";
 
 /**
- * Повноекранна сфера. WebGL лише на клієнті: до гідратації видно CSS-підкладку
- * того самого радіального світіння, тож кадр не чорніє.
+ * Повноекранна сфера. WebGL лише на клієнті й лише з апаратним прискоренням, стартує після
+ * завантаження сторінки: до того (і назавжди без GPU) видно CSS-підкладку того самого
+ * радіального світіння, а канвас проявляється поверх неї з першим кадром.
  */
 export function HeroBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -25,12 +27,16 @@ export function HeroBackground() {
       scene.setActive(isIntersecting);
     };
 
-    import("./webgl/create-hero-scene").then(({ createHeroScene }) => {
-      if (cancelled) return;
-      scene = createHeroScene(canvas);
-      const rect = container.getBoundingClientRect();
-      applySize(rect.width, rect.height);
-      syncActivity(true);
+    const cancelStart = whenIdleAfterLoad(async () => {
+      if (!(await hasHardwareWebGL()) || cancelled) return;
+      import("./webgl/create-hero-scene").then(({ createHeroScene }) => {
+        if (cancelled) return;
+        scene = createHeroScene(canvas);
+        const rect = container.getBoundingClientRect();
+        applySize(rect.width, rect.height);
+        syncActivity(intersecting);
+        canvas.dataset.ready = "";
+      });
     });
 
     // Висоту контейнера тримає h-lvh (див. routes/_index.tsx), тож згортання адресного рядка
@@ -70,6 +76,7 @@ export function HeroBackground() {
 
     return () => {
       cancelled = true;
+      cancelStart();
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
       window.removeEventListener("scroll", onScroll);
@@ -84,7 +91,10 @@ export function HeroBackground() {
       aria-hidden="true"
       className="absolute inset-0 overflow-hidden bg-[#08090a] bg-[radial-gradient(ellipse_80%_90%_at_68%_42%,rgba(216,216,216,0.16),transparent_62%)]"
     >
-      <canvas ref={canvasRef} className="block h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        className="block h-full w-full opacity-0 transition-opacity duration-700 data-[ready]:opacity-100"
+      />
     </div>
   );
 }

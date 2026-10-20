@@ -4,6 +4,8 @@
 
 Повний інтент, правила і те, що свідомо не переносимо з MVP, — у [FULL_CONTEXT.md](FULL_CONTEXT.md). Прочитай його перед першим змістовним кодом.
 
+Правила, які тримають mobile PageSpeed на рівні ~90, і перевірка перед мерджем — у [frontend/PERFORMANCE.md](frontend/PERFORMANCE.md).
+
 | Каталог | Що це |
 | --- | --- |
 | `frontend/` | новий клієнт, React + TypeScript |

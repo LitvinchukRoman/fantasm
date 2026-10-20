@@ -4,6 +4,7 @@ import { Button } from "~/components/ui/button";
 import { track } from "~/lib/analytics";
 import type { RootData } from "~/root";
 import { IconArrowRight, IconUser } from "./icons";
+import logo96 from "~/assets/logo-96.webp";
 
 const NAV_LINKS = [
   { href: "/ideas", label: "Ідеї" },
@@ -65,7 +66,7 @@ export function Nav({ forceSolid = false }: { forceSolid?: boolean }) {
       {/* Рівні бокові колонки тримають навігацію по центру незалежно від ширини правого блоку. */}
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-5 sm:px-8">
         <Link to="/" prefetch="intent" className="flex items-center gap-2 justify-self-start" aria-label="Fantasm, головна">
-          <img src="/favicon.jpg" alt="" width={32} height={32} className="size-8 rounded-lg" />
+          <img src={logo96} alt="" width={32} height={32} className="size-8 rounded-lg" />
           <span className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]">
             Fantasm
           </span>

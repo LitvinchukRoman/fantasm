@@ -1,6 +1,50 @@
 @import "tailwindcss";
 
 /*
+ * Onest (OFL, fonts/OFL.txt) з власного домену: Google Fonts додавав блокуючий CSS і два
+ * сторонні з'єднання до першого кадру. Один variable-файл на підмножину покриває ваги 400–700,
+ * браузер вантажить лише ті підмножини, символи яких є на сторінці. Підмножини й unicode-range
+ * взяті з css2?family=Onest:wght@400..700; cyrillic і latin preload-ить root.tsx.
+ */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./fonts/onest-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./fonts/onest-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./fonts/onest-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./fonts/onest-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
  * Токени теми — джерела за пріоритетом, який задав користувач:
  * 1) raycast.com (frontend/pages/raycast.com/index.html) — головне джерело:
  *    майже чорний фон, білий текст, нейтральні сірі D8D8D8, тонкі hairline-межі.
@@ -53,8 +97,8 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Override — Inter прийнятний, коли бриф явно просить linear/raycast-стиль
-     (frontend-design skill, розділ 4.1, override path). Системний стек без
-     зовнішнього <link> на Google Fonts. */
+     (frontend-design skill, розділ 4.1, override path). Onest self-hosted
+     (@font-face угорі файлу), далі системний стек. */
   --font-sans:
     "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
@@ -121,7 +165,40 @@ html {
 @keyframes page-loader-failsafe {
   to {
     opacity: 0;
-    visibility: hidden;
+  }
+}
+
+/*
+ * Звичайне зникнення, коли шрифт готовий (PageLoader ставить data-leaving). Запобіжник лишається
+ * останнім у списку: якщо він уже сховав оверлей, page-loader-out не поверне його на мить.
+ */
+.page-loader[data-leaving] {
+  animation:
+    page-loader-out 0.6s ease-out forwards,
+    page-loader-failsafe 0.6s ease-out 2.5s forwards;
+}
+
+@keyframes page-loader-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.page-loader-logo {
+  animation: page-loader-logo 0.8s ease-out 0.3s both;
+}
+
+@keyframes page-loader-logo {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -129,6 +206,11 @@ html {
   .page-loader {
     display: none;
   }
+}
+
+/* SSR-копія банера згоди, коли вибір уже збережено (CONSENT_SNIPPET у root.tsx). */
+html[data-consent] [data-consent-ssr] {
+  display: none;
 }
 
 /*
