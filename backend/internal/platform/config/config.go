@@ -25,6 +25,12 @@ type Config struct {
 	GoogleClientSecret    string
 	EntraClientID         string
 	EntraClientSecret     string
+	// The GitHub App that links GitHub accounts to profiles; an empty client ID
+	// turns linking off. GitHubURL and GitHubAPIURL point elsewhere only in tests.
+	GitHubClientID     string
+	GitHubClientSecret string
+	GitHubURL          string
+	GitHubAPIURL       string
 
 	LogLevel          string
 	MetricsAddr       string
@@ -112,6 +118,10 @@ func Load() (Config, error) {
 		GoogleClientSecret:    os.Getenv("GOOGLE_CLIENT_SECRET"),
 		EntraClientID:         os.Getenv("ENTRA_CLIENT_ID"),
 		EntraClientSecret:     os.Getenv("ENTRA_CLIENT_SECRET"),
+		GitHubClientID:        os.Getenv("GITHUB_CLIENT_ID"),
+		GitHubClientSecret:    os.Getenv("GITHUB_CLIENT_SECRET"),
+		GitHubURL:             str("GITHUB_URL", "https://github.com"),
+		GitHubAPIURL:          str("GITHUB_API_URL", "https://api.github.com"),
 		LogLevel:              str("LOG_LEVEL", "info"),
 		MetricsAddr:           os.Getenv("METRICS_ADDR"),
 		AppSecret:             os.Getenv("APP_SECRET"),
@@ -162,9 +172,15 @@ func Load() (Config, error) {
 	if cfg.SessionIdleTTL > cfg.SessionAbsoluteTTL {
 		errs = append(errs, errors.New("SESSION_IDLE_TTL must not exceed SESSION_ABSOLUTE_TTL"))
 	}
-	for _, pair := range [][2]string{{"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"}, {"ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET"}} {
+	for _, pair := range [][2]string{{"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"}, {"ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET"}, {"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"}} {
 		if (os.Getenv(pair[0]) == "") != (os.Getenv(pair[1]) == "") {
 			errs = append(errs, fmt.Errorf("%s and %s must be set together", pair[0], pair[1]))
+		}
+	}
+
+	for key, raw := range map[string]string{"GITHUB_URL": cfg.GitHubURL, "GITHUB_API_URL": cfg.GitHubAPIURL} {
+		if u, err := url.Parse(raw); err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+			errs = append(errs, fmt.Errorf("%s must be an absolute URL", key))
 		}
 	}
 

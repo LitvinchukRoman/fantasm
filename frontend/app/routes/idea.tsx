@@ -21,7 +21,7 @@ import { RelativeTime } from "~/components/ui/relative-time";
 import { SectionLabel } from "~/components/ui/section-label";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { UserAvatar } from "~/components/ui/user-avatar";
-import { VerifiedSeal } from "~/components/ui/verified-seal";
+import { NaukmaMark } from "~/components/ui/naukma-mark";
 import { CATEGORY_LABELS, eventWhen, type IdeaView } from "~/lib/ideas";
 import { toIdeaView } from "~/lib/ideas";
 import { isGeneratedHandle } from "~/lib/profile";
@@ -83,6 +83,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       name: profile.name,
       bio: profile.bio ?? "",
       faculty: profile.faculty,
+      github: profile.github,
+      linkedin: profile.linkedin,
+      instagram: profile.instagram,
       avatarUrl: profile.avatarUrl,
       verified: profile.verified ?? false,
       karma: profile.karma ?? 0,
@@ -228,6 +231,14 @@ function ParticipationControl({ joined, isEvent, size = "md" }: { joined: boolea
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 /** Чому ідею бачить лише автор. Для схваленої ідеї пояснювати нічого. */
+/** Підпис учасника без ролі. INTERESTED і DECLINED бачать лише автор і модератори. */
+const PARTICIPANT_STATES: Record<string, string> = {
+  ACCEPTED: "У команді",
+  JOINED: "Долучився",
+  INTERESTED: "Цікавиться",
+  DECLINED: "Відхилено",
+};
+
 const MODERATION_NOTES: Partial<Record<NonNullable<IdeaView["moderation"]>, { label: string; note: string }>> = {
   PENDING: {
     label: "на модерації",
@@ -409,6 +420,7 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
 
                   <div className="mt-8 flex items-center gap-4">
                     <UserAvatar name={idea.author.name} src={profiles[idea.author.handle]?.avatarUrl} className="size-14 text-xl" />
+                    {idea.author.verified && <NaukmaMark className="naukma-mark--sm" />}
                     <div className="min-w-0">
                       <AuthorLink
                         handle={idea.author.handle}
@@ -418,7 +430,6 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                       </AuthorLink>
                       {!isGeneratedHandle(idea.author.handle) && <span className="hud-label">@{idea.author.handle}</span>}
                     </div>
-                    {idea.author.verified && <VerifiedSeal />}
                   </div>
 
                   <div
@@ -581,7 +592,8 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                               <UserAvatar name={participant.name} src={profiles[participant.handle]?.avatarUrl} className="size-8 text-sm" />
                               <span className="min-w-0">
                                 <AuthorLink handle={participant.handle} className="font-medium hover:underline">{participant.name}</AuthorLink>
-                                <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || participant.state}</span>
+                                {participant.verified && <NaukmaMark className="naukma-mark--xs ml-2 align-middle" />}
+                                <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || PARTICIPANT_STATES[participant.state] || participant.state}</span>
                               </span>
                             </span>
                             {idea.canEdit && (participant.state === "JOINED" || participant.state === "INTERESTED") && <ParticipantActions handle={participant.handle} />}

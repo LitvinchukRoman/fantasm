@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/LitvinchukRoman/fantasm/backend/internal/admin"
@@ -24,6 +25,7 @@ import (
 	ideashttp "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/adapters/http"
 	ideaspostgres "github.com/LitvinchukRoman/fantasm/backend/internal/ideas/adapters/postgres"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity"
+	identitygithub "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/github"
 	identityhttp "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/http"
 	identitypostgres "github.com/LitvinchukRoman/fantasm/backend/internal/identity/adapters/postgres"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/identity/domain"
@@ -89,11 +91,20 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 	analyticsService := analytics.NewService(analyticspg.NewRepository(db), cfg.AppSecret, domains, time.Duration(retentionDays)*24*time.Hour)
 	tracker := health.New()
 
-	identityService := identity.NewService(identitypostgres.NewRepository(db), db, providers,
+	identityOptions := []func(*identity.Service){
 		identity.WithMembershipPolicy(policy),
 		identity.WithSessionPolicy(cfg.SessionAbsoluteTTL, cfg.SessionIdleTTL),
 		identity.WithBootstrapAdmins(cfg.AdminEmails),
-		identity.WithEvents(analyticsService))
+		identity.WithEvents(analyticsService),
+	}
+	if cfg.GitHubClientID != "" {
+		identityOptions = append(identityOptions, identity.WithGitHub(identitygithub.NewClient(identitygithub.Config{
+			ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret,
+			RedirectURL: strings.TrimSuffix(cfg.PublicURL, "/") + "/api/me/github/callback",
+			WebURL:      cfg.GitHubURL, APIURL: cfg.GitHubAPIURL,
+		})))
+	}
+	identityService := identity.NewService(identitypostgres.NewRepository(db), db, providers, identityOptions...)
 	identityHandler, err := identityhttp.NewHandler(identityService, logger, cfg.PublicURL,
 		identityhttp.WithClientInfo(clientInfo(cfg.AppSecret, proxies)),
 		identityhttp.WithAuthRateLimit(func(next http.HandlerFunc) http.HandlerFunc {

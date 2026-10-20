@@ -13,6 +13,10 @@ type ProfileUpdate struct {
 	Name    *string
 	Bio     *string
 	Faculty *string
+	// Account names on the networks; "" removes the link. GitHub is linked
+	// through GitHub instead.
+	LinkedIn  *string
+	Instagram *string
 }
 
 var handlePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,29}$`)
@@ -45,11 +49,22 @@ func (p ProfileUpdate) Normalize() ProfileUpdate {
 		v := strings.ToLower(strings.TrimSpace(*s))
 		return &v
 	}
-	return ProfileUpdate{Handle: lower(p.Handle), Name: trim(p.Name), Bio: trim(p.Bio), Faculty: trim(p.Faculty)}
+	account := func(n network, s *string) *string {
+		if s == nil {
+			return nil
+		}
+		v := n.account(*s)
+		return &v
+	}
+	return ProfileUpdate{
+		Handle: lower(p.Handle), Name: trim(p.Name), Bio: trim(p.Bio), Faculty: trim(p.Faculty),
+		LinkedIn: account(linkedin, p.LinkedIn), Instagram: account(instagram, p.Instagram),
+	}
 }
 
 func (p ProfileUpdate) IsEmpty() bool {
-	return p.Handle == nil && p.Name == nil && p.Bio == nil && p.Faculty == nil
+	return p.Handle == nil && p.Name == nil && p.Bio == nil && p.Faculty == nil &&
+		p.LinkedIn == nil && p.Instagram == nil
 }
 
 // Validate returns field errors for a normalized update.
@@ -82,6 +97,14 @@ func (p ProfileUpdate) Validate() map[string]string {
 			fields["bio"] = "must be at most 500 characters"
 		} else if !plainText(*p.Bio, true) {
 			fields["bio"] = "contains characters that are not allowed"
+		}
+	}
+	for field, link := range map[string]struct {
+		value *string
+		n     network
+	}{"linkedin": {p.LinkedIn, linkedin}, "instagram": {p.Instagram, instagram}} {
+		if link.value != nil && !link.n.valid(*link.value) {
+			fields[field] = "must be an account name or a link to it"
 		}
 	}
 	return fields

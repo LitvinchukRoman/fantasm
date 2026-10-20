@@ -28,6 +28,7 @@ type Handler struct {
 	secure        bool
 	sessionCookie string
 	loginCookie   string
+	linkCookie    string
 	clientInfo    func(*http.Request) identity.ClientInfo
 	limitAuth     func(http.HandlerFunc) http.HandlerFunc
 }
@@ -54,10 +55,11 @@ func NewHandler(service *identity.Service, logger *slog.Logger, publicURL string
 	if !secure && (u.Scheme != "http" || u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1") {
 		return nil, fmt.Errorf("PUBLIC_URL must use HTTPS except on loopback")
 	}
-	h := &Handler{service: service, logger: logger, origin: u.Scheme + "://" + u.Host, secure: secure, sessionCookie: "fantasm_session", loginCookie: "fantasm_login"}
+	h := &Handler{service: service, logger: logger, origin: u.Scheme + "://" + u.Host, secure: secure, sessionCookie: "fantasm_session", loginCookie: "fantasm_login", linkCookie: "fantasm_github_link"}
 	if secure {
 		h.sessionCookie = "__Host-fantasm_session"
 		h.loginCookie = "__Host-fantasm_login"
+		h.linkCookie = "__Host-fantasm_github_link"
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -98,6 +100,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/me", httpx.Authed(h.updateMe))
 	mux.HandleFunc("PUT /api/me/avatar", httpx.Authed(h.putAvatar))
 	mux.HandleFunc("DELETE /api/me/avatar", httpx.Authed(h.deleteAvatar))
+	mux.HandleFunc("GET /api/me/github/connect", h.limitAuth(h.connectGitHub))
+	mux.HandleFunc("GET /api/me/github/callback", h.limitAuth(h.githubCallback))
+	mux.HandleFunc("DELETE /api/me/github", httpx.Authed(h.unlinkGitHub))
 	mux.HandleFunc("GET /api/users/{handle}/avatar", h.avatar)
 	mux.HandleFunc("GET /api/me/sessions", httpx.Authed(h.sessions))
 	mux.HandleFunc("DELETE /api/me/sessions/{id}", httpx.Authed(h.revokeSession))
@@ -160,10 +165,12 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 	h.private(w)
 	var body struct {
-		Handle  *string `json:"handle"`
-		Name    *string `json:"name"`
-		Bio     *string `json:"bio"`
-		Faculty *string `json:"faculty"`
+		Handle    *string `json:"handle"`
+		Name      *string `json:"name"`
+		Bio       *string `json:"bio"`
+		Faculty   *string `json:"faculty"`
+		LinkedIn  *string `json:"linkedin"`
+		Instagram *string `json:"instagram"`
 	}
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
 		h.writeError(w, r, err)
@@ -171,6 +178,7 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.service.UpdateProfile(r.Context(), viewer.From(r.Context()).ID(), domain.ProfileUpdate{
 		Handle: body.Handle, Name: body.Name, Bio: body.Bio, Faculty: body.Faculty,
+		LinkedIn: body.LinkedIn, Instagram: body.Instagram,
 	})
 	if err != nil {
 		h.writeError(w, r, err)
@@ -209,6 +217,83 @@ func (h *Handler) deleteAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// connectGitHub is a browser navigation, not a fetch: it ends on github.com.
+func (h *Handler) connectGitHub(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	v := viewer.From(r.Context())
+	if !v.Authenticated {
+		h.githubOutcome(w, r, apperr.Unauthorized("authentication required"))
+		return
+	}
+	login, err := h.service.BeginGitHubLink(r.Context(), v.ID())
+	if err != nil {
+		h.githubOutcome(w, r, err)
+		return
+	}
+	h.setCookie(w, h.linkCookie, login.BrowserToken, login.ExpiresAt, int(identity.LoginTTL.Seconds()))
+	http.Redirect(w, r, login.URL, http.StatusFound)
+}
+
+func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	h.clearCookie(w, h.linkCookie)
+	v := viewer.From(r.Context())
+	if !v.Authenticated {
+		h.githubOutcome(w, r, apperr.Unauthorized("authentication required"))
+		return
+	}
+	query := r.URL.Query()
+	if query.Get("error") == "access_denied" {
+		http.Redirect(w, r, h.origin+"/settings?github=cancelled", http.StatusSeeOther)
+		return
+	}
+	user, err := h.service.CompleteGitHubLink(r.Context(), v.ID(), query.Get("state"), cookieValue(r, h.linkCookie), query.Get("code"))
+	if err != nil {
+		h.log(r).WarnContext(r.Context(), "github link failed", "event", "auth.github_link_failed", "outcome", "failure",
+			"kind", apperr.KindOf(err), "reason", apperr.MessageOf(err), "provider_error", oauthErrorCode(query.Get("error")))
+		h.githubOutcome(w, r, err)
+		return
+	}
+	h.log(r).InfoContext(r.Context(), "github linked", "event", "auth.github_linked", "outcome", "success", "user_id", user.ID)
+	http.Redirect(w, r, h.origin+"/settings?github=connected", http.StatusSeeOther)
+}
+
+func (h *Handler) unlinkGitHub(w http.ResponseWriter, r *http.Request) {
+	h.private(w)
+	user, err := h.service.UnlinkGitHub(r.Context(), viewer.From(r.Context()).ID())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// githubOutcome answers API clients with the error and sends a browser back to
+// the settings page with a short code, never the error text.
+func (h *Handler) githubOutcome(w http.ResponseWriter, r *http.Request, err error) {
+	w.Header().Add("Vary", "Accept")
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		h.writeError(w, r, err)
+		return
+	}
+	code := "failed"
+	switch apperr.KindOf(err) {
+	case apperr.KindUnauthorized:
+		if !viewer.From(r.Context()).Authenticated {
+			http.Redirect(w, r, h.origin+"/login", http.StatusSeeOther)
+			return
+		}
+		code = "expired"
+	case apperr.KindConflict:
+		code = "taken"
+	case apperr.KindNotFound:
+		code = "unavailable"
+	case apperr.KindInternal:
+		h.log(r).ErrorContext(r.Context(), "github link failed", "error", err)
+	}
+	http.Redirect(w, r, h.origin+"/settings?github="+code, http.StatusSeeOther)
 }
 
 // pathHandle admits chosen handles and the generated u_<uuid> placeholder, and
@@ -331,6 +416,9 @@ type userResponse struct {
 	AvatarURL   string              `json:"avatarUrl"`
 	Bio         string              `json:"bio"`
 	Faculty     string              `json:"faculty"`
+	GitHub      string              `json:"github"`
+	LinkedIn    string              `json:"linkedin"`
+	Instagram   string              `json:"instagram"`
 	Role        domain.Role         `json:"role"`
 	Karma       int                 `json:"karma"`
 	Verified    bool                `json:"verified"`
@@ -348,6 +436,7 @@ func toUserResponse(u domain.User) userResponse {
 	resp := userResponse{
 		ID: u.ID, Handle: u.Handle, Name: u.Name, Email: u.Email,
 		AvatarURL: u.AvatarPath(), Bio: u.Bio, Faculty: u.Faculty,
+		GitHub: u.GitHub, LinkedIn: u.LinkedIn, Instagram: u.Instagram,
 		Role: u.Role, Karma: u.Karma, Verified: len(memberships) > 0, Onboarded: u.Onboarded,
 		CreatedAt: u.CreatedAt, Memberships: memberships,
 	}

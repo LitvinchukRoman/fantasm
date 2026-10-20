@@ -76,7 +76,6 @@ type Provider interface {
 type MembershipPolicy interface {
 	Evaluate([]domain.Identity) []domain.Membership
 }
-
 type Service struct {
 	membershipPolicy MembershipPolicy
 	repository       Repository
@@ -87,6 +86,7 @@ type Service struct {
 	sessionIdleTTL   time.Duration
 	bootstrap        map[string]bool
 	events           anports.Recorder
+	github           GitHub
 }
 
 func NewService(repository Repository, transactions Transactor, providers map[domain.Provider]Provider, options ...func(*Service)) *Service {

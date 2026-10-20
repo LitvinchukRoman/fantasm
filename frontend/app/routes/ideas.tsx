@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useRouteLoaderData, useSearchParams } from "react-router";
 import { CurvedRows } from "~/components/ideas/curved-rows";
 import { FilterMenu, FilterOption, FilterPanelHeader, FilterReset, FilterToggle } from "~/components/ideas/filter-bar";
 import { IdeaRow } from "~/components/ideas/idea-row";
@@ -10,8 +10,8 @@ import { ActionDock } from "~/components/ui/action-dock";
 import { Button } from "~/components/ui/button";
 import { HudLabel } from "~/components/ui/hud-label";
 import { SiteFooter } from "~/components/ui/site-footer";
-import { CATEGORY_LABELS, NAUKMA, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
-import { getIdeas, routeApi } from "~/lib/api.server";
+import { CATEGORY_LABELS, viewerCampuses, type IdeaCategory, type IdeaTag } from "~/lib/ideas";
+import { getCurrentUser, getIdeas, routeApi } from "~/lib/api.server";
 import { track } from "~/lib/analytics";
 import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
@@ -19,6 +19,7 @@ import { breadcrumbList, collectionPage, itemList } from "~/lib/structured-data"
 import { readFeedPosition, saveFeedPosition } from "~/lib/feed-position";
 import { canCurve, useCurvedMode } from "~/lib/use-curved-mode";
 import { useHydrated } from "~/lib/use-hydrated";
+import type { RootData } from "~/root";
 import type { Route } from "./+types/ideas";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as IdeaCategory[];
@@ -33,7 +34,8 @@ const TYPE_HINTS: Record<IdeaCategory, string> = {
 };
 
 type DateWindow = "all" | "7" | "30";
-type CampusFilter = "all" | "naukma" | "none";
+/** "all", "none" або id кампусу (організації) самого глядача. */
+type CampusFilter = string;
 type SortKey = "new" | "old" | "votes";
 type MenuId = "type" | "date" | "campus" | "tags" | "sort";
 
@@ -45,12 +47,16 @@ const DESCRIPTION = "Стрічка ідей спільноти: стартап�
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const sort = url.searchParams.get("sort");
+  // Фільтр за кампусом є лише в студентів його університету; чужий ?campus= з посилання ігноруємо.
+  const campusParam = url.searchParams.get("campus");
+  const viewer = campusParam && campusParam !== "none" ? await routeApi(getCurrentUser(request)) : null;
+  const campus = viewerCampuses(viewer).some((item) => item.id === campusParam) ? campusParam : undefined;
   const page = await routeApi(getIdeas(request, {
     sort: sort === "votes" ? "top" : "new",
     category: url.searchParams.get("type")?.toUpperCase(),
     status: url.searchParams.get("status") ?? undefined,
     tag: url.searchParams.get("tag") ?? undefined,
-    campus: url.searchParams.get("campus") === "naukma" ? NAUKMA.id : undefined,
+    campus: campus ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: 50,
   }));
@@ -79,7 +85,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 const SORT_KEYS: SortKey[] = ["new", "old", "votes"];
 
-function readFilters(params: URLSearchParams) {
+function readFilters(params: URLSearchParams, campusIds: string[]) {
   const type = params.get("type")?.toUpperCase() as IdeaCategory | undefined;
   const date = params.get("date");
   const campus = params.get("campus");
@@ -87,7 +93,7 @@ function readFilters(params: URLSearchParams) {
   return {
     category: type && CATEGORIES.includes(type) ? type : null,
     dateWindow: (date === "7" || date === "30" ? date : "all") as DateWindow,
-    campus: (campus === "naukma" || campus === "none" ? campus : "all") as CampusFilter,
+    campus: (campus && (campusIds.includes(campus) || (campus === "none" && campusIds.length > 0)) ? campus : "all") as CampusFilter,
     sort: sort && SORT_KEYS.includes(sort) ? sort : ("new" as SortKey),
     tags: params.getAll("tag"),
   };
@@ -105,7 +111,7 @@ function writeFilters(filters: Filters): URLSearchParams {
   return params;
 }
 
-const EMPTY_FILTERS = readFilters(new URLSearchParams());
+const EMPTY_FILTERS = readFilters(new URLSearchParams(), []);
 
 export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const barRef = useRef<HTMLDivElement>(null);
@@ -118,7 +124,8 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   // Пререндерений HTML зібраний без query: до гідрації рендеримо стрічку без
   // фільтрів, щоб розмітка збіглася, а фільтри з URL застосовуємо одразу після.
   const hydrated = useHydrated();
-  const filters = hydrated ? readFilters(searchParams) : EMPTY_FILTERS;
+  const campuses = viewerCampuses(useRouteLoaderData<RootData>("root")?.currentUser);
+  const filters = hydrated ? readFilters(searchParams, campuses.map((item) => item.id)) : EMPTY_FILTERS;
   const { category, dateWindow, campus, sort, tags } = filters;
 
   // Остання відома комбінація фільтрів. URL оновлюється асинхронно, тож два швидкі кліки поспіль
@@ -190,8 +197,8 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
   const ideas = loaderData.ideas
     .filter((idea) => {
       if (category && idea.category !== category) return false;
-      if (campus === "naukma" && idea.campus?.id !== NAUKMA.id) return false;
       if (campus === "none" && idea.campus) return false;
+      if (campus !== "all" && campus !== "none" && idea.campus?.id !== campus) return false;
       if (tags.length > 0 && !idea.tags.some((tag) => tags.includes(tag.slug))) return false;
       const age = now - Date.parse(idea.createdAt);
       if (dateWindow === "7" && age > 7 * DAY) return false;
@@ -288,17 +295,27 @@ export default function IdeasPage({ loaderData }: Route.ComponentProps) {
         <FilterOption title="За 7 днів" hint="Опубліковані цього тижня" selected={dateWindow === "7"} onClick={() => choose("date", setDateWindow)("7")} />
         <FilterOption title="За 30 днів" hint="Опубліковані цього місяця" selected={dateWindow === "30"} onClick={() => choose("date", setDateWindow)("30")} />
       </FilterMenu>
-      <FilterMenu
-        up={curved}
-        label="Кампус"
-        value={campus === "naukma" ? NAUKMA.label : campus === "none" ? "Без кампусу" : undefined}
-        open={menu === "campus"}
-        onToggle={() => toggleMenu("campus")}
-      >
-        <FilterOption title="Усі" hint="З кампусом і без нього" selected={campus === "all"} onClick={() => choose("campus", setCampus)("all")} />
-        <FilterOption title={NAUKMA.label} hint="Лише ідеї цього кампусу" selected={campus === "naukma"} onClick={() => choose("campus", setCampus)("naukma")} />
-        <FilterOption title="Без кампусу" hint="Відкриті ідеї без печатки кампусу" selected={campus === "none"} onClick={() => choose("campus", setCampus)("none")} />
-      </FilterMenu>
+      {campuses.length > 0 && (
+        <FilterMenu
+          up={curved}
+          label="Кампус"
+          value={campus === "none" ? "Без кампусу" : campuses.find((item) => item.id === campus)?.label}
+          open={menu === "campus"}
+          onToggle={() => toggleMenu("campus")}
+        >
+          <FilterOption title="Усі" hint="З кампусом і без нього" selected={campus === "all"} onClick={() => choose("campus", setCampus)("all")} />
+          {campuses.map((item) => (
+            <FilterOption
+              key={item.id}
+              title={item.label}
+              hint="Лише ідеї цього кампусу"
+              selected={campus === item.id}
+              onClick={() => choose("campus", setCampus)(item.id)}
+            />
+          ))}
+          <FilterOption title="Без кампусу" hint="Відкриті ідеї без печатки кампусу" selected={campus === "none"} onClick={() => choose("campus", setCampus)("none")} />
+        </FilterMenu>
+      )}
       <FilterMenu
         up={curved}
         label="Теги"

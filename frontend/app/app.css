@@ -491,59 +491,11 @@ html[data-consent] [data-consent-ssr] {
 }
 
 /*
- * Печатка могилянця. Кромка суцільна 1px (без пунктиру з крапок: на малих радіусах він
- * давав зернисті краї). Заливка заїжджає один раз і зупиняється.
- */
-.verified-badge {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 38%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
-  color: var(--color-accent);
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  overflow: hidden;
-  isolation: isolate;
-  -webkit-font-smoothing: antialiased;
-}
-
-.verified-badge-fill {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent);
-  transform: translateX(-100%);
-  animation: badge-fill-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .verified-badge-fill {
-    animation: none;
-    transform: none;
-  }
-}
-
-@keyframes badge-fill-in {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(0%);
-  }
-}
-
-/*
  * Монограма НаУКМА поруч з аватаркою могилянця (NaukmaMark). Заливка тихо «дихає», а по контуру
  * літер біжать п'ять відрізків світла (pathLength 100: штрих 6 + проміжок 14, зсув на -100 це рівно
- * п'ять періодів, тож цикл без стрибка). stroke-dashoffset перемальовує лише SVG у ~60 px на сторінці
- * профілю; правило про композитні анімації з PERFORMANCE.md стосується першого екрана головної.
+ * п'ять періодів, тож цикл без стрибка). stroke-dashoffset перемальовує лише SVG до ~60 px у профілі,
+ * на сторінці ідеї й у форумі; правило про композитні анімації з PERFORMANCE.md стосується першого
+ * екрана головної.
  */
 .naukma-mark {
   display: inline-flex;
@@ -552,9 +504,19 @@ html[data-consent] [data-consent-ssr] {
   color: var(--color-accent);
 }
 
-/* Поруч з аватаркою 48 px (картка профілю автора). */
+/* Поруч з аватаркою 48–56 px (картка автора, автор на сторінці ідеї). */
 .naukma-mark--sm {
   width: 2.5rem;
+}
+
+/* Поруч з іменем у рядку тексту (автори дописів у форумі). */
+.naukma-mark--xs {
+  width: 1.5rem;
+}
+
+/* При 1.5rem 55 одиниць viewBox дають ~0.6 px, світло губиться. */
+.naukma-mark--xs .naukma-mark-trace {
+  stroke-width: 90;
 }
 
 .naukma-mark-logo {

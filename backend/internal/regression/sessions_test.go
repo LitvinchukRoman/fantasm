@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -393,6 +394,11 @@ func TestProfileEditsAreValidatedAndScoped(t *testing.T) {
 		"long name":       {"name": strings.Repeat("n", 101)},
 		"long bio":        {"bio": strings.Repeat("b", 501)},
 		"long faculty":    {"faculty": strings.Repeat("f", 101)},
+		"foreign link":    {"linkedin": "https://evil.example/in/someone"},
+		"script link":     {"instagram": "javascript:alert(1)"},
+		"company page":    {"linkedin": "https://www.linkedin.com/company/naukma"},
+		"instagram post":  {"instagram": "https://www.instagram.com/p/C1x2y3/"},
+		"typed github":    {"github": "octo-cat"},
 		"nul in name":     {"name": "a\x00b"},
 		"role escalation": {"role": "ADMIN"},
 		"karma":           {"karma": 9999},
@@ -413,5 +419,141 @@ func TestProfileEditsAreValidatedAndScoped(t *testing.T) {
 	r := who.Anon.Do(http.MethodGet, "/api/users/"+mine, nil)
 	if r.Code != http.StatusOK || strings.Contains(string(r.Body), "@") {
 		t.Errorf("public profile: %d %s", r.Code, r.Body)
+	}
+
+	// Pasted links keep only the account name; the public profile carries it, an empty value removes it.
+	links := map[string]any{"linkedin": "linkedin.com/in/boris-b/", "instagram": "@boris.b"}
+	if r := who.Outsider.Do(http.MethodPatch, "/api/me", links); r.Code != http.StatusOK {
+		t.Fatalf("links: %d %s", r.Code, r.Body)
+	}
+	var public struct{ LinkedIn, Instagram string }
+	who.Anon.Do(http.MethodGet, "/api/users/"+mine, nil).Decode(&public)
+	if public.LinkedIn != "boris-b" || public.Instagram != "boris.b" {
+		t.Errorf("public links: %+v", public)
+	}
+	if r := who.Outsider.Do(http.MethodPatch, "/api/me", map[string]any{"instagram": ""}); r.Code != http.StatusOK {
+		t.Fatalf("clear link: %d %s", r.Code, r.Body)
+	}
+	if body := string(who.Anon.Do(http.MethodGet, "/api/users/"+mine, nil).Body); strings.Contains(body, `"instagram"`) {
+		t.Errorf("cleared instagram still public: %s", body)
+	}
+}
+
+// fakeGitHub is a GitHub App's view of github.com: the authorization code names
+// the GitHub user who signed in.
+func fakeGitHub(t *testing.T) *httptest.Server {
+	users := map[string]string{"octo": `{"id":583231,"login":"Octo-Cat"}`, "hubot": `{"id":480938,"login":"hubot"}`}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/login/oauth/access_token":
+			_ = r.ParseForm()
+			if _, ok := users[r.Form.Get("code")]; !ok || r.Form.Get("client_secret") != "gh-secret" || r.Form.Get("code_verifier") == "" {
+				_, _ = w.Write([]byte(`{"error":"bad_verification_code"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"access_token":"token-` + r.Form.Get("code") + `","token_type":"bearer"}`))
+		case r.URL.Path == "/user":
+			user, ok := users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer token-")]
+			if !ok {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(user))
+		case r.Method == http.MethodDelete && r.URL.Path == "/applications/gh-app/token":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+var browser = map[string]string{"Accept": "text/html"}
+
+// connectGitHub starts the flow as a browser would and returns the state GitHub would echo back.
+func connectGitHub(t *testing.T, c *apptest.Client) string {
+	t.Helper()
+	r := c.DoWith(http.MethodGet, "/api/me/github/connect", nil, browser)
+	loc, err := url.Parse(r.Header.Get("Location"))
+	if r.Code != http.StatusFound || err != nil || loc.Path != "/login/oauth/authorize" {
+		t.Fatalf("connect: %d %q", r.Code, r.Header.Get("Location"))
+	}
+	if loc.Query().Get("redirect_uri") != apptest.Origin+"/api/me/github/callback" || loc.Query().Get("code_challenge") == "" {
+		t.Fatalf("authorize URL: %s", loc)
+	}
+	return loc.Query().Get("state")
+}
+
+func githubCallback(c *apptest.Client, query url.Values) string {
+	return c.DoWith(http.MethodGet, "/api/me/github/callback?"+query.Encode(), nil, browser).Header.Get("Location")
+}
+
+func TestGitHubIsLinkedThroughGitHubOnly(t *testing.T) {
+	gh := fakeGitHub(t)
+	env := apptest.New(t, apptest.WithConfig(func(c *config.Config) {
+		c.GitHubClientID, c.GitHubClientSecret, c.GitHubURL, c.GitHubAPIURL = "gh-app", "gh-secret", gh.URL, gh.URL
+	}))
+	who := cast(env)
+	mine := apptestHandle(env, outsiderMail)
+	settings := func(outcome string) string { return apptest.Origin + "/settings?github=" + outcome }
+
+	// Signed out, the button leads to sign-in rather than to GitHub.
+	if r := who.Anon.DoWith(http.MethodGet, "/api/me/github/connect", nil, browser); r.Header.Get("Location") != apptest.Origin+"/login" {
+		t.Errorf("anonymous connect: %d %q", r.Code, r.Header.Get("Location"))
+	}
+
+	// A callback carrying someone else's attempt (a link planted by an attacker) links nothing.
+	attackerState := connectGitHub(t, who.Member.Clone())
+	connectGitHub(t, who.Outsider) // the victim holds a link cookie of their own
+	if got := githubCallback(who.Outsider, url.Values{"state": {attackerState}, "code": {"hubot"}}); got != settings("expired") {
+		t.Errorf("planted callback: %q", got)
+	}
+
+	if got := githubCallback(who.Outsider.Clone(), url.Values{"state": {connectGitHub(t, who.Outsider)}, "error": {"access_denied"}}); got != settings("cancelled") {
+		t.Errorf("cancelled on GitHub: %q", got)
+	}
+
+	state := connectGitHub(t, who.Outsider)
+	if got := githubCallback(who.Outsider.Clone(), url.Values{"state": {state}, "code": {"octo"}}); got != settings("connected") {
+		t.Fatalf("link: %q", got)
+	}
+	var public struct{ GitHub string }
+	who.Anon.Do(http.MethodGet, "/api/users/"+mine, nil).Decode(&public)
+	if public.GitHub != "Octo-Cat" {
+		t.Errorf("public github = %q", public.GitHub)
+	}
+	if got := githubCallback(who.Outsider, url.Values{"state": {state}, "code": {"octo"}}); got != settings("expired") {
+		t.Errorf("replayed callback: %q", got)
+	}
+
+	// One GitHub account backs one profile.
+	if got := githubCallback(who.Member, url.Values{"state": {connectGitHub(t, who.Member)}, "code": {"octo"}}); got != settings("taken") {
+		t.Errorf("second profile, same GitHub: %q", got)
+	}
+	if got := githubCallback(who.Member, url.Values{"state": {connectGitHub(t, who.Member)}, "code": {"forged"}}); got != settings("failed") {
+		t.Errorf("code GitHub rejects: %q", got)
+	}
+
+	// The name cannot be typed in, only unlinked.
+	if r := who.Outsider.Do(http.MethodPatch, "/api/me", map[string]any{"github": "torvalds"}); r.Code != http.StatusBadRequest {
+		t.Errorf("typed github: %d %s", r.Code, r.Body)
+	}
+	if r := who.Outsider.Do(http.MethodDelete, "/api/me/github", nil); r.Code != http.StatusOK || !strings.Contains(string(r.Body), `"github":""`) {
+		t.Fatalf("unlink: %d %s", r.Code, r.Body)
+	}
+	if body := string(who.Anon.Do(http.MethodGet, "/api/users/"+mine, nil).Body); strings.Contains(body, `"github"`) {
+		t.Errorf("unlinked github still public: %s", body)
+	}
+	if got := githubCallback(who.Member, url.Values{"state": {connectGitHub(t, who.Member)}, "code": {"octo"}}); got != settings("connected") {
+		t.Errorf("relink after the first profile let go: %q", got)
+	}
+}
+
+func TestGitHubLinkingOffWithoutAnApp(t *testing.T) {
+	who := cast(apptest.New(t))
+	if r := who.Outsider.DoWith(http.MethodGet, "/api/me/github/connect", nil, browser); r.Header.Get("Location") != apptest.Origin+"/settings?github=unavailable" {
+		t.Errorf("connect without an app: %d %q", r.Code, r.Header.Get("Location"))
 	}
 }

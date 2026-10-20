@@ -93,6 +93,21 @@ aws ssm put-parameter --overwrite --type SecureString \
 
 Значення `unset` означає «провайдер вимкнений» (маршрут входу відповідає 404). Нові значення підхопляться при наступному деплої (`refresh-env`).
 
+### GitHub App (підтвердження GitHub у профілі)
+
+Це не вхід: людина вже залогінена і доводить, що GitHub-акаунт її. Застосунок один на обидва середовища: Settings → Developer settings → GitHub Apps → New.
+
+- Callback URLs: `https://fantasm-dev.naukma.com/api/me/github/callback`, `https://ideas.naukma.com/api/me/github/callback` (для локальної розробки ще `http://localhost:5173/api/me/github/callback`)
+- Permissions: жодних. Webhook: вимкнений. «Expire user authorization tokens»: увімкнено. Встановлення: Only on this account (людям не треба встановлювати застосунок, вони лише авторизуються)
+
+```bash
+aws ssm put-parameter --profile personal --region eu-central-1 --overwrite --type SecureString \
+  --name /fantasm/dev/app/github-client-id --value 'Iv23…'
+# те саме для github-client-secret і для prod
+```
+
+Параметри з’являються після apply backend. Щоб бокс побачив новий `refresh-env.sh`, потрібен повторний прогін `fantasm-configure-host`.
+
 ### Перший адмін
 
 `/fantasm/<env>/app/admin-emails` — список підтверджених пошт через кому. Поки значення `unset`, ніхто не стає адміном автоматично. Пошту в git не кладемо:

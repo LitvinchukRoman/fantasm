@@ -35,7 +35,7 @@ __ACME_EMAIL__
 					window 1m
 				}
 			}
-			@auth path /api/auth/*/login /api/auth/*/callback
+			@auth path /api/auth/*/login /api/auth/*/callback /api/me/github/connect /api/me/github/callback
 			rate_limit @auth {
 				zone auth {
 					key    {client_ip}

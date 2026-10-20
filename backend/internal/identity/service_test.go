@@ -21,10 +21,47 @@ type memoryRepository struct {
 	sessions    map[string]domain.Session
 	failSession bool
 	seen        map[string]time.Time
+	links       map[string]domain.GitHubLinkAttempt
+	githubIDs   map[string]int64 // user ID → linked GitHub ID
 }
 
 func newMemoryRepository() *memoryRepository {
-	return &memoryRepository{identities: make(map[string]domain.Identity), logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session), seen: make(map[string]time.Time)}
+	return &memoryRepository{identities: make(map[string]domain.Identity), logins: make(map[string]domain.LoginAttempt), users: make(map[string]domain.User), sessions: make(map[string]domain.Session), seen: make(map[string]time.Time),
+		links: make(map[string]domain.GitHubLinkAttempt), githubIDs: make(map[string]int64)}
+}
+
+func (r *memoryRepository) CreateGitHubLink(_ context.Context, attempt domain.GitHubLinkAttempt) error {
+	r.links[attempt.StateHash] = attempt
+	return nil
+}
+
+func (r *memoryRepository) ConsumeGitHubLink(_ context.Context, state, browser, userID string, now time.Time) (domain.GitHubLinkAttempt, error) {
+	a, ok := r.links[state]
+	if !ok || a.BrowserHash != browser || a.UserID != userID || !a.ExpiresAt.After(now) {
+		return domain.GitHubLinkAttempt{}, domain.ErrNotFound
+	}
+	delete(r.links, state)
+	return a, nil
+}
+
+func (r *memoryRepository) SetGitHub(_ context.Context, userID string, account *domain.GitHubAccount, now time.Time) (domain.User, error) {
+	user, err := r.userBy(func(u domain.User) bool { return u.ID == userID })
+	if err != nil {
+		return domain.User{}, err
+	}
+	user.GitHub = ""
+	delete(r.githubIDs, userID)
+	if account != nil {
+		for other, id := range r.githubIDs {
+			if other != userID && id == account.ID {
+				return domain.User{}, domain.ErrGitHubTaken
+			}
+		}
+		user.GitHub, r.githubIDs[userID] = account.Login, account.ID
+	}
+	user.UpdatedAt = now
+	r.save(user)
+	return user, nil
 }
 
 func (r *memoryRepository) CreateLogin(_ context.Context, attempt domain.LoginAttempt) error {
