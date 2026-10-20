@@ -8,6 +8,10 @@ import { onConsentSettingsOpen, saveConsent, useConsent, type Consent } from "~/
  * «Лише необхідні» стоїть поруч і того ж розміру, що «Дозволити»: відмова має бути не важчою за згоду.
  * Кнопки не переносять рядок, тож до 400 px вони стоять одна під одною, інакше «Лише необхідні» не влазить.
  * Над доком дій (z-40), бо до відповіді це головне, що бачить нова людина.
+ *
+ * Сервер вибору не бачить, тож банер є в SSR-HTML завжди: він малюється з першим кадром, а не
+ * після гідратації (інакше він, найбільший текст першого екрана, затримує LCP). Якщо вибір уже
+ * зроблено, CONSENT_SNIPPET у root.tsx ставить html[data-consent], і CSS ховає банер до гідратації.
  */
 export function ConsentBanner() {
   const consent = useConsent();
@@ -15,7 +19,7 @@ export function ConsentBanner() {
 
   useEffect(() => onConsentSettingsOpen(() => setReopened(true)), []);
 
-  if (consent === undefined || (consent !== null && !reopened)) return null;
+  if (consent !== undefined && consent !== null && !reopened) return null;
 
   const choose = (value: Consent) => {
     saveConsent(value);
@@ -28,6 +32,7 @@ export function ConsentBanner() {
       aria-modal="false"
       aria-labelledby="consent-title"
       aria-describedby="consent-text"
+      data-consent-ssr={consent === undefined ? "" : undefined}
       className="fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:right-auto sm:left-0 sm:max-w-md sm:pb-5 sm:pl-5"
     >
       <div className="rounded-[var(--radius-card)] border border-[var(--color-border-strong)] bg-[var(--color-bg)]/90 p-5 shadow-[0_16px_40px_rgb(0_0_0/0.5)] backdrop-blur-2xl saturate-150">

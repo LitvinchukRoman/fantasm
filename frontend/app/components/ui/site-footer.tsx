@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { openConsentSettings } from "~/lib/consent";
+import logo96 from "~/assets/logo-96.webp";
 
 /**
  * Єдиний футер сайту: бренд-блок і кластер «Продукт». Лендінг, стрічка, ідея, профіль, події, гайди.
@@ -19,7 +20,7 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-[1.4fr_1fr]">
         <div>
           <div className="flex items-center gap-2">
-            <img src="/favicon.jpg" alt="" width={32} height={32} className="size-8 rounded-lg" />
+            <img src={logo96} alt="" width={32} height={32} className="size-8 rounded-lg" />
             <span className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]">Fantasm</span>
           </div>
           <p className="mt-3 max-w-xs text-sm text-[var(--color-text-muted)]">

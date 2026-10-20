@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Link, Outlet } from "react-router";
 import { GlyphHalo } from "../components/auth/glyph-halo";
 import { PageLoader } from "../components/ui/page-loader";
+import logo192 from "~/assets/logo-192.webp";
 
 export default function AuthLayout() {
   const innerRef = useRef<HTMLDivElement>(null);
@@ -27,7 +28,7 @@ export default function AuthLayout() {
           <GlyphHalo />
           <div className="relative z-20 mb-8 flex justify-center">
             <Link to="/" className="flex items-center gap-2 transition-transform hover:scale-105" aria-label="На головну">
-              <img src="/favicon.jpg" alt="" width={48} height={48} className="size-12 rounded-xl shadow-md" />
+              <img src={logo192} alt="" width={48} height={48} className="size-12 rounded-xl shadow-md" />
             </Link>
           </div>
           <div

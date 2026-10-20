@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { hasHardwareWebGL, whenIdleAfterLoad } from "~/lib/webgl";
 import type { GridSceneHandle } from "./webgl/create-grid-scene";
 
 /**
- * Живий фон-сітка. WebGL підключається на клієнті після гідрації. Без WebGL або при
- * `prefers-reduced-motion` лишається статична CSS-сітка з тими ж лініями, без руху.
+ * Живий фон-сітка. WebGL підключається на клієнті після завантаження сторінки. Без апаратного
+ * WebGL або при `prefers-reduced-motion` лишається статична CSS-сітка з тими ж лініями, без руху.
  */
 export function GridBackground({ interactive = true, calm = true }: { interactive?: boolean; calm?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,17 +24,24 @@ export function GridBackground({ interactive = true, calm = true }: { interactiv
     let scene: GridSceneHandle | null = null;
     let cancelled = false;
 
-    import("./webgl/create-grid-scene")
-      .then(({ createGridScene }) => {
-        if (cancelled) return;
-        const compact = window.innerWidth < 1024;
-        scene = createGridScene(canvas, { segments: compact ? 140 : 200, interactive, calm });
-        const rect = host.getBoundingClientRect();
-        scene.resize(rect.width, rect.height);
-      })
-      .catch(() => {
+    const cancelStart = whenIdleAfterLoad(async () => {
+      if (!(await hasHardwareWebGL())) {
         if (!cancelled) setFallback(true);
-      });
+        return;
+      }
+      if (cancelled) return;
+      import("./webgl/create-grid-scene")
+        .then(({ createGridScene }) => {
+          if (cancelled) return;
+          const compact = window.innerWidth < 1024;
+          scene = createGridScene(canvas, { segments: compact ? 140 : 200, interactive, calm });
+          const rect = host.getBoundingClientRect();
+          scene.resize(rect.width, rect.height);
+        })
+        .catch(() => {
+          if (!cancelled) setFallback(true);
+        });
+    });
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -43,6 +51,7 @@ export function GridBackground({ interactive = true, calm = true }: { interactiv
 
     return () => {
       cancelled = true;
+      cancelStart();
       observer.disconnect();
       scene?.dispose();
     };
