@@ -19,6 +19,12 @@ const CAMERA_Z = 5;
 /** Розмір клітинки сітки у світових одиницях. */
 const CELL_SIZE = 0.085;
 const FOV = 50;
+/**
+ * Пропорції, під які налаштовано хвилі (десктоп 16:10). Хвилі задані в uv площини, тож площина
+ * не буває меншою, ніж для такого екрана: вузький портретний екран бачить середину тієї самої
+ * хвилі, а не стиснуту копію з частішими вигинами. На 16:10 і ширших нічого не змінюється.
+ */
+const REFERENCE_ASPECT = 1.6;
 
 export type GridSceneHandle = {
   resize: (width: number, height: number) => void;
@@ -221,7 +227,7 @@ export function createGridScene(canvas: HTMLCanvasElement, options: GridSceneOpt
     camera.updateProjectionMatrix();
     viewH = 2 * CAMERA_Z * Math.tan((FOV * Math.PI) / 360);
     viewW = viewH * camera.aspect;
-    plane = 1.5 * Math.max(viewW, viewH);
+    plane = 1.5 * Math.max(viewW, viewH * REFERENCE_ASPECT);
     // Клітинка має фіксований світовий розмір (≈16 px на екрані), а не фіксовану кількість на площину:
     // інакше на великому екрані вона стає дрібною, а лінії - шумом.
     uniforms.uCells.value = Math.round(plane / CELL_SIZE);
