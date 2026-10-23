@@ -4,7 +4,6 @@ export interface UserProfile {
   handle: string;
   name: string;
   bio: string;
-  faculty?: string;
   verified: boolean;
   role: "USER" | "MODERATOR" | "ADMIN";
   karma: number;
@@ -16,7 +15,6 @@ const USERS: UserProfile[] = [
     handle: "naukma-ideas",
     name: "NaUKMA Ideas",
     bio: "Редакційний акаунт платформи. Публікуємо зразки та важливі анонси.",
-    faculty: "ФІ",
     verified: true,
     role: "ADMIN",
     karma: 999,
@@ -35,7 +33,6 @@ const USERS: UserProfile[] = [
     handle: "hacker_bob",
     name: "Кібер Боб",
     bio: "Пишу код, ламаю стереотипи. C++ / Rust ентузіаст.",
-    faculty: "ФІ",
     verified: false,
     role: "USER",
     karma: 128,
@@ -45,7 +42,6 @@ const USERS: UserProfile[] = [
     handle: "design_guru",
     name: "Марія Дизайн",
     bio: "Бруталізм у серці, Figma в руках.",
-    faculty: "ФГН",
     verified: true,
     role: "MODERATOR",
     karma: 512,
@@ -62,7 +58,6 @@ export interface AuthorPreview {
   handle: string;
   name: string;
   bio: string;
-  faculty?: string;
   github?: string;
   linkedin?: string;
   instagram?: string;
@@ -85,7 +80,6 @@ export function getAuthorPreview(
     handle: profile.handle,
     name: profile.name,
     bio: profile.bio,
-    faculty: profile.faculty,
     verified: profile.verified,
     karma: profile.karma,
     joinedAt: profile.joinedAt,

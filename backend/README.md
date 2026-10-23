@@ -125,6 +125,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 | `MIGRATE_ON_START` | `true`: міграції застосовуються при старті; перед деплоєм `deploy-api` чекає `/healthz` і відкочується, якщо старт не вдався |
 | `ADMIN_EMAILS` | підтверджені пошти через кому: при вході стають `ADMIN` і їх не можна понизити. У проді значення лежить в SSM `/fantasm/<env>/app/admin-emails`, не в git |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub App, через яку людина підтверджує свій GitHub у профілі (це не вхід). Значення лежать у SSM `/fantasm/<env>/app/github-client-{id,secret}`. Поки там `unset`, кнопка «Підключити GitHub» веде на `/settings?github=unavailable` |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | необовʼязкова пара для браузерних сповіщень. Порожні — API сам створює пару і тримає її в таблиці `push_keys` |
 | `ANALYTICS_RETENTION_DAYS`, `ANALYTICS_RATE_LIMIT_PER_MIN` | скільки днів тримати сирі події (180) і скільки пачок маяка з однієї адреси за хвилину (60) |
 
 Після Caddy і CloudFront API бачить правильну адресу клієнта лише через `TRUSTED_PROXY_CIDRS`. Без нього всі запити виглядатимуть як одна адреса проксі, і ліміти по IP спрацьовуватимуть на всіх одразу.

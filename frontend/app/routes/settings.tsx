@@ -1,5 +1,6 @@
 import { data, Form, redirect, useNavigation } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
+import { BrowserNotifications } from "~/components/push/browser-notifications";
 import { Button } from "~/components/ui/button";
 import { AvatarPicker } from "~/components/profile/avatar-picker";
 import { IconCheck, IconGitHub } from "~/components/landing/icons";
@@ -134,14 +135,8 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
           </div>
 
           <div>
-            <label htmlFor="faculty" className="block text-sm font-medium text-[var(--color-text)]">Факультет</label>
-            <input type="text" maxLength={100} placeholder="Наприклад: ФІ" {...field("faculty")} />
-            {error("faculty")}
-          </div>
-
-          <div>
             <label htmlFor="bio" className="block text-sm font-medium text-[var(--color-text)]">Про себе</label>
-            <textarea rows={4} maxLength={500} {...field("bio", "mt-1.5 resize-y !rounded-xl")} />
+            <textarea rows={4} maxLength={500} {...field("bio", "mt-1.5 resize-y !rounded-2xl !px-4 !py-3 !leading-6")} />
             {error("bio")}
           </div>
 
@@ -222,6 +217,7 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
         <Form method="post" id="github-unlink" hidden>
           <input type="hidden" name="intent" value="github-unlink" />
         </Form>
+        <BrowserNotifications />
       </div>
     </GuideFrame>
   );

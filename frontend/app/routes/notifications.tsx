@@ -1,5 +1,6 @@
 import { data, Link, redirect, useFetcher } from "react-router";
 import { GuideFrame } from "~/components/guides/frame";
+import { BrowserNotifications } from "~/components/push/browser-notifications";
 import { Button } from "~/components/ui/button";
 import { ApiError, getCurrentUser, getNotifications, markNotificationsRead, routeApi } from "~/lib/api.server";
 import { eventTime, formatShortDate } from "~/lib/ideas";
@@ -38,6 +39,7 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
             <fetcher.Form method="post"><Button type="submit" size="sm" variant="secondary">Прочитати всі</Button></fetcher.Form>
           )}
         </div>
+        <BrowserNotifications />
         {loaderData.items.length === 0 ? <p className="mt-8 text-[var(--color-text-muted)]">Нових сповіщень немає.</p> : (
           <ul className="mt-8 divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
             {loaderData.items.map((item) => {

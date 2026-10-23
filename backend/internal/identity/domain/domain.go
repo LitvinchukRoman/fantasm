@@ -31,7 +31,6 @@ type User struct {
 	Email       string
 	AvatarURL   string
 	Bio         string
-	Faculty     string
 	// Account names on the networks, "" when the person left the link out.
 	GitHub    string
 	LinkedIn  string

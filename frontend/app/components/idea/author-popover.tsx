@@ -123,8 +123,8 @@ function Corner({ className }: { className: string }) {
 }
 
 /**
- * Попап у мові сайту-референсу (saifullah.dev): гостра рамка з кутовими мітками, моно-підписи в дужках,
- * нумеровані розділи `01 // …`, рядки «ключ / значення» з тонкими лініями.
+ * Попап як на проді: гостра рамка, «[ Профіль ]» веде на сторінку людини,
+ * знак НаУКМА біля аватара, рядки «ключ / значення» без нумерації.
  */
 function Popover({
   profile,
@@ -196,7 +196,6 @@ function Popover({
       key: "Карма",
       value: <span className="tabular-nums">{profile.karma}</span>,
     },
-    ...(profile.faculty ? [{ key: "Факультет", value: profile.faculty }] : []),
     {
       key: "З нами з",
       value: (

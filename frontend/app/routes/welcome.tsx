@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import { IconArrowRight } from "~/components/landing/icons";
+import { AskNotifications } from "~/components/push/ask-notifications";
 import { AvatarPicker } from "~/components/profile/avatar-picker";
 import { ApiError, getCurrentUser, routeApi, updateProfile } from "~/lib/api.server";
 import { isGeneratedHandle, PROFILE_FIELDS, profileFieldErrors, type ProfileField, type ProfileUpdate } from "~/lib/profile";
@@ -26,7 +27,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     name: user.name,
     handle: isGeneratedHandle(user.handle) ? (user.suggestedHandle ?? "") : user.handle,
-    faculty: user.faculty ?? "",
     bio: user.bio ?? "",
     avatarUrl: user.avatarUrl || undefined,
     next,
@@ -44,7 +44,13 @@ export async function action({ request }: Route.ActionArgs) {
     const fields = profileFieldErrors(error.body.fields);
     return data({ error: Object.keys(fields).length ? "Перевірте поля." : error.body.error, fields }, { status: error.status });
   }
-  return redirect(safeNext(new URL(request.url).searchParams.get("next")));
+  return { next: safeNext(new URL(request.url).searchParams.get("next")) };
+}
+
+/** Після збереження профілю лишаємось на сторінці й питаємо дозвіл. Інакше лоадер одразу відправить далі. */
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (actionResult && typeof actionResult === "object" && "next" in actionResult) return false;
+  return defaultShouldRevalidate;
 }
 
 const INPUT =
@@ -53,6 +59,7 @@ const INPUT =
 export default function Welcome({ loaderData, actionData }: Route.ComponentProps) {
   const saving = useNavigation().state === "submitting";
   const [handle, setHandle] = useState(loaderData.handle);
+  if (actionData && "next" in actionData) return <AskNotifications next={actionData.next} />;
   const fields: Record<string, string> = actionData?.fields ?? {};
   const field = (name: ProfileField) => ({
     id: name,
@@ -115,14 +122,6 @@ export default function Welcome({ loaderData, actionData }: Route.ComponentProps
         </div>
 
         <div>
-          <label htmlFor="faculty" className="block text-sm font-medium text-[var(--color-text)]">
-            Факультет <span className="font-normal text-[var(--color-text-faint)]">· необовʼязково</span>
-          </label>
-          <input type="text" maxLength={100} placeholder="Наприклад: ФІ" defaultValue={loaderData.faculty} {...field("faculty")} />
-          {fields.faculty && hint("faculty", null)}
-        </div>
-
-        <div>
           <label htmlFor="bio" className="block text-sm font-medium text-[var(--color-text)]">
             Про себе <span className="font-normal text-[var(--color-text-faint)]">· необовʼязково</span>
           </label>
@@ -132,7 +131,7 @@ export default function Welcome({ loaderData, actionData }: Route.ComponentProps
             placeholder="Що вмієте, що шукаєте, чим горите"
             defaultValue={loaderData.bio}
             {...field("bio")}
-            className={`${field("bio").className} resize-y`}
+            className={`${field("bio").className} resize-y !rounded-2xl !px-4 !py-3 !leading-6`}
           />
           {fields.bio && hint("bio", null)}
         </div>

@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/LitvinchukRoman/fantasm/backend/internal/notifications"
 	notificationshttp "github.com/LitvinchukRoman/fantasm/backend/internal/notifications/adapters/http"
 	notificationspostgres "github.com/LitvinchukRoman/fantasm/backend/internal/notifications/adapters/postgres"
+	notificationspush "github.com/LitvinchukRoman/fantasm/backend/internal/notifications/adapters/push"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/organizations"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/config"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/platform/health"
@@ -135,6 +137,17 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 	})
 
 	notificationsService := notifications.NewService(inbox, []byte(cfg.AppSecret))
+	keyCtx, cancelKeys := context.WithTimeout(context.Background(), 5*time.Second)
+	publicKey, privateKey, err := notificationspostgres.LoadKeys(keyCtx, db, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey)
+	cancelKeys()
+	if err != nil {
+		return nil, err
+	}
+	public, err := url.Parse(cfg.PublicURL)
+	if err != nil {
+		return nil, err
+	}
+	notificationsService = notificationsService.WithPush(publicKey, inbox, notificationspush.New(publicKey, privateKey, cfg.PublicURL), logger, public.Scheme != "https")
 	notificationsHandler := notificationshttp.NewHandler(notificationsService)
 
 	adminService := admin.NewService(db, analyticsService, store, tracker, identityService, []byte(cfg.AppSecret), cfg.AdminEmails, logger)
@@ -181,6 +194,11 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 				if err == nil && n > 0 {
 					logger.Info("purged old notifications", "rows", n)
 				}
+				return err
+			}},
+			// Frequent, and usually a no-op. Success is not logged; a failure still is.
+			{Name: "push-notifications", Interval: 5 * time.Second, Timeout: 30 * time.Second, Quiet: true, Run: func(ctx context.Context) error {
+				_, err := notificationsService.Deliver(ctx)
 				return err
 			}},
 			{Name: "rank-hot", Interval: 10 * time.Minute, Timeout: time.Minute, Run: func(ctx context.Context) error {

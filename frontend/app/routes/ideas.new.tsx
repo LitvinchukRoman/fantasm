@@ -7,6 +7,8 @@ import { Nav } from "~/components/landing/nav";
 import { SiteFooter } from "~/components/ui/site-footer";
 import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { Button } from "~/components/ui/button";
+import { WhenPicker } from "~/components/ideas/when-picker";
+import { formatPickedWhen, pickedIsFuture } from "~/lib/when";
 import { CATEGORY_LABELS, type IdeaCategory } from "~/lib/ideas";
 import { ApiError, createIdea, getCurrentUser, routeApi } from "~/lib/api.server";
 import type { IdeaCreate } from "~/lib/api-types";
@@ -90,11 +92,22 @@ export function meta(_args: Route.MetaArgs) {
   });
 }
 
-export default function IdeaNewPage() {
+function publishError(body: { error?: string; fields?: Record<string, string> } | undefined): string | null {
+  if (!body?.error) return null;
+  if (body.fields?.eventAt === "must be in the future") return "Обери час, який ще не минув.";
+  if (body.fields?.eventAt) return "Вкажи, коли відбудеться.";
+  if (body.fields?.eventLocation) return "Вкажи, де відбудеться.";
+  if (body.error === "validation failed") return "Перевір поля і спробуй ще раз.";
+  return body.error;
+}
+
+export default function IdeaNewPage({ loaderData }: Route.ComponentProps) {
   const root = useRouteLoaderData<RootData>("root");
+  const campus = loaderData.user.memberships?.find((item) => item.capabilities?.includes("ideas.create_internal"));
   const fetcher = useFetcher<{ error?: string; fields?: Record<string, string> }>();
   const [step, setStep] = useState(1);
   const [shakeStep, setShakeStep] = useState<number | null>(null);
+  const [stepError, setStepError] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -112,15 +125,20 @@ export default function IdeaNewPage() {
     setFormData((prev) => ({ ...prev, ...patch }));
   };
 
+  const lastStep = campus ? 3 : 2;
+
   const nextStep = () => {
     if (step === 1 && !isStep1Valid) {
+      setStepError(1);
       setShakeStep(1); setTimeout(() => setShakeStep(null), 300); return;
     }
     if (step === 2 && !isStep2Valid) {
+      setStepError(2);
       setShakeStep(2); setTimeout(() => setShakeStep(null), 300); return;
     }
+    setStepError(null);
     setStep((s) => {
-      const next = Math.min(s + 1, 3);
+      const next = Math.min(s + 1, lastStep);
       if (next !== s) {
         setTimeout(() => {
           containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -131,22 +149,30 @@ export default function IdeaNewPage() {
   };
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
-  const isStep1Valid = !!(formData.title.trim() && formData.summary.trim() && formData.category && (formData.category !== "EVENT" || (formData.eventAt && formData.eventLocation.trim())));
+  const isStep1Valid = !!(formData.title.trim() && formData.summary.trim() && formData.category && (formData.category !== "EVENT" || (pickedIsFuture(formData.eventAt) && formData.eventLocation.trim())));
   const isStep2Valid = formData.body.trim().length > 5;
 
-  const steps = ["Суть", "Деталі", "Публікація"];
+  const steps = campus ? ["Суть", "Деталі", "Публікація"] : ["Суть", "Деталі"];
 
   function publish() {
     if (!root?.currentUser) {
       window.location.assign("/login");
       return;
     }
+    const internal = Boolean(campus && formData.visibility === "MEMBERS_ONLY");
     const payload: IdeaCreate = {
-      ...formData,
+      title: formData.title.trim(),
+      summary: formData.summary.trim(),
+      body: formData.body,
       category: formData.category!,
+      tags: formData.tags,
+      needsRoles: formData.category === "EVENT" ? undefined : formData.needsRoles,
       status: "OPEN",
-      eventAt: formData.eventAt ? new Date(formData.eventAt).toISOString() : undefined,
-      eventLocation: formData.eventLocation || undefined,
+      visibility: internal ? "ORGANIZATION_ONLY" : "PUBLIC",
+      ...(internal ? { organizationId: campus!.organizationId } : {}),
+      ...(formData.category === "EVENT"
+        ? { eventAt: new Date(formData.eventAt).toISOString(), eventLocation: formData.eventLocation.trim() }
+        : {}),
     };
     fetcher.submit({ payload: JSON.stringify(payload) }, { method: "post" });
   }
@@ -235,7 +261,6 @@ export default function IdeaNewPage() {
                         <input
                           id="title"
                           type="text"
-                          required
                           placeholder="Наприклад: Хакатон з ШІ для студентів"
                           value={formData.title}
                           onChange={(e) => update({ title: e.target.value })}
@@ -249,7 +274,6 @@ export default function IdeaNewPage() {
                         </label>
                         <textarea
                           id="summary"
-                          required
                           rows={2}
                           placeholder="Це побачать у стрічці. Зачепіть увагу."
                           value={formData.summary}
@@ -276,31 +300,33 @@ export default function IdeaNewPage() {
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.25, ease: EASE_OUT }}
-                            className="flex flex-col gap-4 overflow-hidden pt-2"
+                            className="flex flex-col gap-4 overflow-hidden px-5 py-4 -mx-5"
                           >
                             <div className="flex flex-col gap-2.5">
-                              <label className="text-sm font-medium text-[var(--color-text-muted)] select-none">
+                              <label htmlFor="event-at" className="text-sm font-medium text-[var(--color-text-muted)] select-none">
                                 Коли відбудеться?
                               </label>
-                              <input
-                                type="datetime-local"
-                                required
+                              <WhenPicker
+                                id="event-at"
                                 value={formData.eventAt}
-                                onChange={(e) => update({ eventAt: e.target.value })}
-                                className={`block w-full [color-scheme:dark] rounded-xl border ${shakeStep === 1 && !formData.eventAt ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                                invalid={stepError === 1 && !pickedIsFuture(formData.eventAt)}
+                                onChange={(eventAt) => update({ eventAt })}
                               />
+                              {stepError === 1 && !pickedIsFuture(formData.eventAt) && (
+                                <p className="text-sm text-red-300">{formData.eventAt ? "Цей час уже минув." : "Вкажи день і час."}</p>
+                              )}
                             </div>
                             <div className="flex flex-col gap-2.5">
-                              <label className="text-sm font-medium text-[var(--color-text-muted)] select-none">
+                              <label htmlFor="event-where" className="text-sm font-medium text-[var(--color-text-muted)] select-none">
                                 Де саме?
                               </label>
                               <input
+                                id="event-where"
                                 type="text"
-                                required
                                 placeholder="Аудиторія, локація або посилання на зустріч"
                                 value={formData.eventLocation}
                                 onChange={(e) => update({ eventLocation: e.target.value })}
-                                className={`block w-full rounded-xl border ${shakeStep === 1 && !formData.eventLocation.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
+                                className={`block w-full rounded-xl border ${stepError === 1 && !formData.eventLocation.trim() ? "border-red-500" : "border-[var(--color-border)]"} bg-[var(--color-bg)] px-3 py-2 text-[16px] sm:text-sm text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-accent)] hover:shadow-[0_0_12px_rgb(255_99_99/0.3)] input-focus-pulse focus:outline-none`}
                               />
                             </div>
                           </motion.div>
@@ -327,7 +353,6 @@ export default function IdeaNewPage() {
                         </label>
                           <textarea
                             rows={6}
-                            required
                             placeholder="Розкажіть деталі: що це, для кого, і хто вам потрібен..."
                             value={formData.body}
                             onChange={(e) => update({ body: e.target.value })}
@@ -356,7 +381,7 @@ export default function IdeaNewPage() {
                     </motion.div>
                   )}
 
-                  {step === 3 && (
+                  {campus && step === 3 && (
                     <motion.div
                       key="step3"
                       initial="hidden"
@@ -422,7 +447,7 @@ export default function IdeaNewPage() {
                 </AnimatePresence>
               </motion.div>
 
-              <motion.div variants={itemVariants} className="sticky bottom-0 z-30 mt-12 flex items-center justify-between border-t border-[var(--color-border-strong)] bg-[var(--color-bg)]/90 backdrop-blur-md pt-4 pb-8 px-1 -mx-1 sm:static sm:bg-transparent sm:backdrop-blur-none sm:pb-0 sm:px-0 sm:mx-0 sm:pt-6">
+              <motion.div variants={itemVariants} className="mt-12 flex items-center justify-between pt-6">
                 {step > 1 ? (
                   <Button variant="secondary" onClick={prevStep} className="active:scale-[0.97] transition-transform">
                     Назад
@@ -430,7 +455,7 @@ export default function IdeaNewPage() {
                 ) : (
                   <div />
                 )}
-                {step < 3 ? (
+                {step < lastStep ? (
                   <Button
                     onClick={nextStep}
                     arrow
@@ -449,7 +474,7 @@ export default function IdeaNewPage() {
                   </Button>
                 )}
               </motion.div>
-              {fetcher.data?.error ? <p role="alert" className="mt-3 text-sm text-red-300">{fetcher.data.error}</p> : null}
+              {publishError(fetcher.data) ? <p role="alert" className="mt-3 text-sm text-red-300">{publishError(fetcher.data)}</p> : null}
             </div>
 
             {/* Right Column: Live Preview */}
@@ -924,7 +949,7 @@ function IdeaPreviewCard({ data }: { data: any }) {
       {data.eventAt && data.category === "EVENT" && (
         <motion.div variants={childVariants} className="mt-2 flex items-center gap-2 text-sm text-[var(--color-text-faint)]">
           <IconCalendar className="size-4" />
-          <span>{new Date(data.eventAt).toLocaleString("uk-UA")}</span>
+          <span>{formatPickedWhen(data.eventAt)}</span>
           {data.eventLocation && (
             <>
               <span className="w-1 h-1 rounded-full bg-[var(--color-border-strong)]" />

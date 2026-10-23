@@ -6,6 +6,7 @@ import { IdeasBackground } from "~/components/ideas/ideas-background";
 import { IconArrowRight, IconCheck, IconFlag, IconLink } from "~/components/landing/icons";
 import { Nav } from "~/components/landing/nav";
 import { AuthorLink, AuthorPopoverProvider } from "~/components/idea/author-popover";
+import { TeamWheel } from "~/components/idea/team-wheel";
 import { Forum } from "~/components/idea/forum";
 import { IDEA_ACTIONS_ID, IdeaDock } from "~/components/idea/idea-dock";
 import { NextIdea } from "~/components/idea/next-idea";
@@ -42,6 +43,7 @@ import {
 import type { AuthorPreview } from "~/lib/users.server";
 import type { ForumPost } from "~/lib/forum";
 import { toForumThread } from "~/lib/forum";
+import { devCrowd } from "~/lib/dev-crowd";
 import { seo } from "~/lib/seo";
 import {
   breadcrumbList,
@@ -64,10 +66,16 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const idea = toIdeaView(rawIdea);
   const thread = toForumThread(rawThread);
   const next = rawNext ? { ...rawNext, summary: rawNext.summary ?? "" } : null;
+  const crowd = devCrowd(request, params.slug, participants.items.length);
+  const people = crowd?.participants ?? participants.items;
+  if (crowd) idea.participants = people.length;
 
   // Профілі автора ідеї й усіх, хто писав у гілці: клік по імені відкриває панель на місці.
+  // Мокових людей з дев-натовпу в API немає, їхні профілі вже зібрані локально.
   const handles = new Set<string>([idea.author.handle]);
-  for (const participant of participants.items) handles.add(participant.handle);
+  for (const participant of people) {
+    if (!crowd?.profiles[participant.handle]) handles.add(participant.handle);
+  }
   const walk = (posts: ForumPost[]) =>
     posts.forEach((post) => {
       if (!post.deleted) handles.add(post.author.handle);
@@ -75,14 +83,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     });
   walk(thread.posts);
 
-  const profiles: Record<string, AuthorPreview> = {};
+  const profiles: Record<string, AuthorPreview> = { ...crowd?.profiles };
   await routeApi(Promise.all([...handles].map(async (handle) => {
     const profile = await getProfile(request, handle);
     profiles[handle] = {
       handle: profile.handle,
       name: profile.name,
       bio: profile.bio ?? "",
-      faculty: profile.faculty,
       github: profile.github,
       linkedin: profile.linkedin,
       instagram: profile.instagram,
@@ -99,7 +106,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     idea,
     thread,
     next,
-    participants: participants.items,
+    participants: people,
     profiles,
   };
 }
@@ -231,14 +238,6 @@ function ParticipationControl({ joined, isEvent, size = "md" }: { joined: boolea
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 /** Чому ідею бачить лише автор. Для схваленої ідеї пояснювати нічого. */
-/** Підпис учасника без ролі. INTERESTED і DECLINED бачать лише автор і модератори. */
-const PARTICIPANT_STATES: Record<string, string> = {
-  ACCEPTED: "У команді",
-  JOINED: "Долучився",
-  INTERESTED: "Цікавиться",
-  DECLINED: "Відхилено",
-};
-
 const MODERATION_NOTES: Partial<Record<NonNullable<IdeaView["moderation"]>, { label: string; note: string }>> = {
   PENDING: {
     label: "на модерації",
@@ -353,18 +352,6 @@ function ReportControl() {
         )}
       </AnimatePresence>
     </>
-  );
-}
-
-function ParticipantActions({ handle }: { handle: string }) {
-  const fetcher = useFetcher();
-  return (
-    <fetcher.Form method="post" className="inline-flex gap-2">
-      <input type="hidden" name="intent" value="participant-decision" />
-      <input type="hidden" name="handle" value={handle} />
-      <Button type="submit" name="decision" value="accept" size="sm" disabled={fetcher.state !== "idle"}>Прийняти</Button>
-      <Button type="submit" name="decision" value="decline" size="sm" variant="secondary" disabled={fetcher.state !== "idle"}>Відхилити</Button>
-    </fetcher.Form>
   );
 }
 
@@ -584,23 +571,7 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                         "Поки ніхто не долучився. Коли хтось подасть заявку, вона зʼявиться тут, і ви вирішите, кого прийняти."
                       )}
                     </p>
-                    {participants.length > 0 && (
-                      <ul className="space-y-2">
-                        {participants.map((participant) => (
-                          <li key={participant.handle} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] p-3">
-                            <span className="flex min-w-0 items-center gap-3">
-                              <UserAvatar name={participant.name} src={profiles[participant.handle]?.avatarUrl} className="size-8 text-sm" />
-                              <span className="min-w-0">
-                                <AuthorLink handle={participant.handle} className="font-medium hover:underline">{participant.name}</AuthorLink>
-                                {participant.verified && <NaukmaMark className="naukma-mark--xs ml-2 align-middle" />}
-                                <span className="ml-2 text-xs text-[var(--color-text-faint)]">{participant.role || PARTICIPANT_STATES[participant.state] || participant.state}</span>
-                              </span>
-                            </span>
-                            {idea.canEdit && (participant.state === "JOINED" || participant.state === "INTERESTED") && <ParticipantActions handle={participant.handle} />}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <TeamWheel participants={participants} profiles={profiles} canDecide={Boolean(idea.canEdit)} />
                     {!isOwner && <ParticipationControl joined={Boolean(idea.viewer?.participation)} isEvent={isEvent} />}
                   </div>
                 </section>

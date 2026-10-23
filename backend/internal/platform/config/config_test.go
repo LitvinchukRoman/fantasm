@@ -12,6 +12,7 @@ var keys = []string{
 	"RATE_LIMIT_ANON_RPS", "RATE_LIMIT_ANON_BURST", "RATE_LIMIT_USER_RPS", "RATE_LIMIT_USER_BURST", "RATE_LIMIT_LOGIN_PER_MIN", "RATE_LIMIT_POSTS_PER_MIN",
 	"SESSION_ABSOLUTE_TTL", "SESSION_IDLE_TTL", "DB_MAX_CONNS", "DB_STATEMENT_TIMEOUT", "SHUTDOWN_TIMEOUT", "REQUEST_TIMEOUT", "METRICS_ADDR",
 	"ADMIN_EMAILS", "ANALYTICS_RETENTION_DAYS", "ANALYTICS_RATE_LIMIT_PER_MIN", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_URL", "GITHUB_API_URL",
+	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
 }
 
 // env starts from an empty environment and applies overrides.
@@ -96,6 +97,7 @@ func TestMisconfigurationStopsStartup(t *testing.T) {
 		"idle longer than absolute": {"SESSION_IDLE_TTL": "100h", "SESSION_ABSOLUTE_TTL": "10h"},
 		"half a google pair":        {"GOOGLE_CLIENT_ID": "id"},
 		"half an entra pair":        {"ENTRA_CLIENT_SECRET": "secret"},
+		"half a vapid pair":         {"VAPID_PUBLIC_KEY": "not-a-key"},
 		"not a number":              {"DB_MAX_CONNS": "many"},
 		"zero connections":          {"DB_MAX_CONNS": "0"},
 		"absurd connections":        {"DB_MAX_CONNS": "100000"},

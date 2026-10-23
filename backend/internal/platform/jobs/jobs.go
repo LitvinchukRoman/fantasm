@@ -15,7 +15,10 @@ type Job struct {
 	Interval time.Duration
 	// Timeout bounds one run so a stuck query cannot pile up ticks.
 	Timeout time.Duration
-	Run     func(ctx context.Context) error
+	// Quiet skips the success log. A job that ticks every few seconds would
+	// otherwise write a line each time it finds nothing to do. Failures are still logged.
+	Quiet bool
+	Run   func(ctx context.Context) error
 }
 
 type Runner struct {
@@ -68,6 +71,9 @@ func (r *Runner) once(ctx context.Context, job Job) {
 	}
 	if err != nil {
 		r.logger.ErrorContext(ctx, "job failed", "event", "job.finished", "outcome", "error", "job", job.Name, "error", err, "duration_ms", float64(duration)/float64(time.Millisecond))
+		return
+	}
+	if job.Quiet {
 		return
 	}
 	r.logger.InfoContext(ctx, "job finished", "event", "job.finished", "outcome", "success", "job", job.Name, "duration_ms", float64(duration)/float64(time.Millisecond))

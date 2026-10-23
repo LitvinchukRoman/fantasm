@@ -54,6 +54,11 @@ type Config struct {
 	AnalyticsRetentionDays int
 	AnalyticsRatePerMin    int
 
+	// VAPIDPublicKey and VAPIDPrivateKey sign browser push requests. Both empty
+	// means the process creates a pair on first start and stores it in the database.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+
 	DBMaxConns         int
 	DBStatementTimeout time.Duration
 	ShutdownTimeout    time.Duration
@@ -139,6 +144,9 @@ func Load() (Config, error) {
 		AnalyticsRetentionDays: integer("ANALYTICS_RETENTION_DAYS", 180, 7, 3650),
 		AnalyticsRatePerMin:    integer("ANALYTICS_RATE_LIMIT_PER_MIN", 60, 1, 100_000),
 
+		VAPIDPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VAPIDPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+
 		DBMaxConns:         integer("DB_MAX_CONNS", 20, 1, 500),
 		DBStatementTimeout: duration("DB_STATEMENT_TIMEOUT", 10*time.Second, 100*time.Millisecond, 5*time.Minute),
 		ShutdownTimeout:    duration("SHUTDOWN_TIMEOUT", 20*time.Second, time.Second, 5*time.Minute),
@@ -176,6 +184,9 @@ func Load() (Config, error) {
 		if (os.Getenv(pair[0]) == "") != (os.Getenv(pair[1]) == "") {
 			errs = append(errs, fmt.Errorf("%s and %s must be set together", pair[0], pair[1]))
 		}
+	}
+	if (cfg.VAPIDPublicKey == "") != (cfg.VAPIDPrivateKey == "") {
+		errs = append(errs, errors.New("VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together"))
 	}
 
 	for key, raw := range map[string]string{"GITHUB_URL": cfg.GitHubURL, "GITHUB_API_URL": cfg.GitHubAPIURL} {

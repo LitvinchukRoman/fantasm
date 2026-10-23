@@ -1,5 +1,4 @@
 import type { MetaFunction } from "react-router";
-import { Link } from "react-router";
 import { motion, type Variants } from "motion/react";
 import { getProviders, routeApi } from "~/lib/api.server";
 import { noindexSeo } from "~/lib/seo";
@@ -68,16 +67,6 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
               Увійти через Google
             </a>}
             {loaderData.providers.length === 0 && <p role="status" className="text-center text-sm text-[var(--color-text-muted)]">Провайдери входу зараз недоступні.</p>}
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="auth-reveal mt-8 text-center text-sm text-[var(--color-text-muted)]">
-            Немає акаунту?{" "}
-            <Link
-              to="/register"
-              className="inline-block font-medium text-[var(--color-text)] transition-all hover:scale-105 hover:text-[var(--color-accent)]"
-            >
-              Створити зараз
-            </Link>
           </motion.div>
           </div>
     </motion.div>

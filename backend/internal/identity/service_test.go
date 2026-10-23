@@ -164,9 +164,6 @@ func (r *memoryRepository) UpdateProfile(_ context.Context, userID string, updat
 	if update.Bio != nil {
 		user.Bio = *update.Bio
 	}
-	if update.Faculty != nil {
-		user.Faculty = *update.Faculty
-	}
 	user.Onboarded = true
 	user.UpdatedAt = now
 	r.save(user)

@@ -26,7 +26,6 @@ export interface User extends Person {
   email: string;
   avatarUrl?: string;
   bio?: string;
-  faculty?: string;
   github?: string;
   linkedin?: string;
   instagram?: string;
@@ -117,7 +116,6 @@ export interface Thread {
 
 export interface PublicProfile extends Person {
   bio?: string;
-  faculty?: string;
   github?: string;
   linkedin?: string;
   instagram?: string;
@@ -246,6 +244,7 @@ export interface IdeaCreate {
   category: ApiCategory;
   tags?: string[];
   visibility?: ApiVisibility;
+  organizationId?: string;
   status?: "DRAFT" | "OPEN";
   eventAt?: string;
   eventLocation?: string;

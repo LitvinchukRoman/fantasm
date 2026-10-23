@@ -379,7 +379,7 @@ func TestProfileEditsAreValidatedAndScoped(t *testing.T) {
 	env.Exec(`UPDATE users SET handle = 'taken-one' WHERE email = $1`, thirdMail)
 	theirs := apptestHandle(env, thirdMail)
 
-	if r := who.Outsider.Do(http.MethodPatch, "/api/me", map[string]any{"name": "Boris B.", "bio": "I build things", "faculty": "FI"}); r.Code != http.StatusOK {
+	if r := who.Outsider.Do(http.MethodPatch, "/api/me", map[string]any{"name": "Boris B.", "bio": "I build things"}); r.Code != http.StatusOK {
 		t.Fatalf("edit: %d %s", r.Code, r.Body)
 	}
 	// Taking someone else's handle is a field error, not an overwrite.
@@ -393,7 +393,6 @@ func TestProfileEditsAreValidatedAndScoped(t *testing.T) {
 		"empty name":      {"name": "   "},
 		"long name":       {"name": strings.Repeat("n", 101)},
 		"long bio":        {"bio": strings.Repeat("b", 501)},
-		"long faculty":    {"faculty": strings.Repeat("f", 101)},
 		"foreign link":    {"linkedin": "https://evil.example/in/someone"},
 		"script link":     {"instagram": "javascript:alert(1)"},
 		"company page":    {"linkedin": "https://www.linkedin.com/company/naukma"},

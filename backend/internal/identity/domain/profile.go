@@ -9,10 +9,9 @@ import (
 
 // ProfileUpdate is a partial edit of the public profile; nil leaves a field alone.
 type ProfileUpdate struct {
-	Handle  *string
-	Name    *string
-	Bio     *string
-	Faculty *string
+	Handle *string
+	Name   *string
+	Bio    *string
 	// Account names on the networks; "" removes the link. GitHub is linked
 	// through GitHub instead.
 	LinkedIn  *string
@@ -57,13 +56,13 @@ func (p ProfileUpdate) Normalize() ProfileUpdate {
 		return &v
 	}
 	return ProfileUpdate{
-		Handle: lower(p.Handle), Name: trim(p.Name), Bio: trim(p.Bio), Faculty: trim(p.Faculty),
+		Handle: lower(p.Handle), Name: trim(p.Name), Bio: trim(p.Bio),
 		LinkedIn: account(linkedin, p.LinkedIn), Instagram: account(instagram, p.Instagram),
 	}
 }
 
 func (p ProfileUpdate) IsEmpty() bool {
-	return p.Handle == nil && p.Name == nil && p.Bio == nil && p.Faculty == nil &&
+	return p.Handle == nil && p.Name == nil && p.Bio == nil &&
 		p.LinkedIn == nil && p.Instagram == nil
 }
 
@@ -83,13 +82,6 @@ func (p ProfileUpdate) Validate() map[string]string {
 			fields["name"] = "must be 1-100 characters"
 		} else if !plainText(*p.Name, false) {
 			fields["name"] = "contains characters that are not allowed"
-		}
-	}
-	if p.Faculty != nil {
-		if utf8.RuneCountInString(*p.Faculty) > 100 {
-			fields["faculty"] = "must be at most 100 characters"
-		} else if !plainText(*p.Faculty, false) {
-			fields["faculty"] = "contains characters that are not allowed"
 		}
 	}
 	if p.Bio != nil {

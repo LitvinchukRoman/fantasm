@@ -40,7 +40,7 @@ var routes = []route{
 	{Method: "POST", Path: "/api/auth/logout"},
 	{Method: "POST", Path: "/api/auth/logout-all", Access: authed},
 	{Method: "GET", Path: "/api/me", Access: authed},
-	{Method: "PATCH", Path: "/api/me", Access: authed, Fields: []string{"handle", "name", "bio", "faculty", "linkedin", "instagram"}},
+	{Method: "PATCH", Path: "/api/me", Access: authed, Fields: []string{"handle", "name", "bio", "linkedin", "instagram"}},
 	{Method: "GET", Path: "/api/me/github/connect", Access: authed},
 	{Method: "GET", Path: "/api/me/github/callback", Access: authed, Query: []string{"state", "code", "error"}},
 	{Method: "DELETE", Path: "/api/me/github", Access: authed},
@@ -90,6 +90,9 @@ var routes = []route{
 	{Method: "GET", Path: "/api/me/notifications", Access: authed, Query: []string{"unread", "cursor", "limit"}},
 	{Method: "POST", Path: "/api/me/notifications/read", Access: authed, Lists: []string{"ids"}},
 	{Method: "GET", Path: "/api/me/notifications/unread-count", Access: authed},
+	{Method: "GET", Path: "/api/push/vapid-public-key"},
+	{Method: "POST", Path: "/api/me/push-subscriptions", Access: authed, Fields: []string{"endpoint"}},
+	{Method: "DELETE", Path: "/api/me/push-subscriptions", Access: authed, Fields: []string{"endpoint"}},
 }
 
 // params are the values substituted into path placeholders.

@@ -120,7 +120,6 @@ paths:
                 handle: { type: string, pattern: '^[a-z0-9_][a-z0-9_-]{2,39}$' }
                 name: { type: string }
                 bio: { type: string }
-                faculty: { type: string }
                 linkedin: { type: string, description: 'Profile name from linkedin.com/in/<name> or the link itself. Empty removes it.' }
                 instagram: { type: string, description: 'Account name, @name or a link. Empty removes it.' }
       responses:
@@ -988,6 +987,68 @@ paths:
                   unread: { type: integer }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/push/vapid-public-key:
+    get:
+      tags: [notifications]
+      summary: Public key for browser push subscriptions
+      description: The browser uses this key to subscribe. The private key never leaves the server.
+      responses:
+        '200':
+          description: The site's VAPID public key, unpadded base64url.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publicKey]
+                properties:
+                  publicKey: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/me/push-subscriptions:
+    post:
+      tags: [notifications]
+      summary: Register this browser for notifications
+      description: One row per device. The same endpoint moves to the signed-in user. At most eight devices are kept.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string, format: uri }
+                keys:
+                  type: object
+                  additionalProperties: false
+                  required: [p256dh, auth]
+                  properties:
+                    p256dh: { type: string }
+                    auth: { type: string }
+      responses:
+        '204': { description: Stored. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      tags: [notifications]
+      summary: Stop browser notifications on this device
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [endpoint]
+              properties:
+                endpoint: { type: string }
+      responses:
+        '204': { description: Forgotten. A device that was not registered is still a success. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+
 components:
   securitySchemes:
     session:
@@ -1280,7 +1341,6 @@ components:
         email: { type: string, format: email }
         avatarUrl: { type: string, description: 'Path of the uploaded photo (/api/users/{handle}/avatar?v=…); empty without one.' }
         bio: { type: string }
-        faculty: { type: string }
         github: { type: string, description: 'Login of the GitHub account the user linked through GitHub; empty when none is linked.' }
         linkedin: { type: string, description: 'LinkedIn profile name (linkedin.com/in/<name>), empty without a link.' }
         instagram: { type: string, description: 'Instagram account name, empty without a link.' }
@@ -1413,7 +1473,6 @@ components:
         handle: { type: string }
         name: { type: string }
         bio: { type: string }
-        faculty: { type: string }
         github: { type: string, description: 'Login of a GitHub account GitHub confirmed belongs to this user; absent when none is linked.' }
         linkedin: { type: string, description: 'LinkedIn profile name; absent without a link.' }
         instagram: { type: string, description: 'Instagram account name; absent without a link.' }
