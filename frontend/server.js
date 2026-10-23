@@ -48,20 +48,23 @@ app.use(
   express.static(path.join(CLIENT_DIR, "assets"), { immutable: true, maxAge: "1y", index: false, redirect: false }),
 );
 
-// Service worker must stay at this URL and must not sit in the long asset cache.
-app.get("/sw.js", (_req, res) => {
-  res.setHeader("Cache-Control", "no-cache");
-  res.type("application/javascript");
-  res.sendFile(path.resolve("public/sw.js"));
-});
-
 const clientStatic = express.static(CLIENT_DIR, { maxAge: "1h", index: false, redirect: false });
 app.use((req, res, next) => {
   const ext = path.extname(req.path);
-  if (ext === ".html" || ext === ".data") return next();
+  // /sw.js віддає публічна статика нижче. Годинний кеш build/client затримав би оновлення воркера.
+  if (ext === ".html" || ext === ".data" || req.path === "/sw.js") return next();
   clientStatic(req, res, next);
 });
-app.use(express.static("public", { maxAge: "1h", index: false, redirect: false }));
+app.use(
+  express.static("public", {
+    maxAge: "1h",
+    index: false,
+    redirect: false,
+    setHeaders(res, filePath) {
+      if (path.basename(filePath) === "sw.js") res.setHeader("Cache-Control", "no-cache");
+    },
+  }),
+);
 app.use(morgan("tiny"));
 app.all("*", createRequestHandler({ build, mode: process.env.NODE_ENV }));
 
