@@ -24,6 +24,7 @@ type Service struct {
 	inbox  ports.Inbox
 	cursor cursor.Codec
 	now    func() time.Time
+	push   *pushChannel
 }
 
 func NewService(inbox ports.Inbox, secret []byte) *Service {

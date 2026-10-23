@@ -13,11 +13,11 @@ func (r *Repository) UpdateProfile(ctx context.Context, userID string, u domain.
 	user, err := scanUser(r.db.Querier(ctx).QueryRow(ctx, `
 		UPDATE users u SET
 			handle = COALESCE($2, u.handle), name = COALESCE($3, u.name),
-			bio = COALESCE($4, u.bio), faculty = COALESCE($5, u.faculty), updated_at = $6,
-			onboarded_at = COALESCE(u.onboarded_at, $6),
-			linkedin = COALESCE($7, u.linkedin), instagram = COALESCE($8, u.instagram)
+			bio = COALESCE($4, u.bio), updated_at = $5,
+			onboarded_at = COALESCE(u.onboarded_at, $5),
+			linkedin = COALESCE($6, u.linkedin), instagram = COALESCE($7, u.instagram)
 		WHERE u.id = $1
-		RETURNING `+userColumns, userID, u.Handle, u.Name, u.Bio, u.Faculty, now, u.LinkedIn, u.Instagram))
+		RETURNING `+userColumns, userID, u.Handle, u.Name, u.Bio, now, u.LinkedIn, u.Instagram))
 	if postgres.IsUniqueViolation(err, "users_handle_key") {
 		return domain.User{}, domain.ErrHandleTaken
 	}

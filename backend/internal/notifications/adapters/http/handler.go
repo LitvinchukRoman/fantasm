@@ -16,6 +16,9 @@ type Handler struct{ service *notifications.Service }
 func NewHandler(service *notifications.Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/push/vapid-public-key", h.publicKey)
+	mux.HandleFunc("POST /api/me/push-subscriptions", httpx.Authed(h.subscribe))
+	mux.HandleFunc("DELETE /api/me/push-subscriptions", httpx.Authed(h.unsubscribe))
 	mux.HandleFunc("GET /api/me/notifications", httpx.Authed(h.list))
 	mux.HandleFunc("POST /api/me/notifications/read", httpx.Authed(h.read))
 	mux.HandleFunc("GET /api/me/notifications/unread-count", httpx.Authed(h.unreadCount))
@@ -98,4 +101,50 @@ func (h *Handler) unreadCount(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, struct {
 		Unread int `json:"unread"`
 	}{n})
+}
+
+func (h *Handler) publicKey(w http.ResponseWriter, r *http.Request) {
+	key, ok := h.service.PublicKey()
+	if !ok {
+		httpx.WriteError(w, r, apperr.NotFound("browser notifications are not available"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, struct {
+		PublicKey string `json:"publicKey"`
+	}{key})
+}
+
+func (h *Handler) subscribe(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Endpoint string `json:"endpoint"`
+		Keys     struct {
+			P256dh string `json:"p256dh"`
+			Auth   string `json:"auth"`
+		} `json:"keys"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.Subscribe(r.Context(), viewer.From(r.Context()), req.Endpoint, req.Keys.P256dh, req.Keys.Auth); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) unsubscribe(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.Unsubscribe(r.Context(), viewer.From(r.Context()), req.Endpoint); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

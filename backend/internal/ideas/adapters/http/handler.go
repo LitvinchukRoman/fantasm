@@ -421,7 +421,6 @@ type profileDTO struct {
 	Handle     string     `json:"handle"`
 	Name       string     `json:"name"`
 	Bio        string     `json:"bio"`
-	Faculty    string     `json:"faculty,omitempty"`
 	GitHub     string     `json:"github,omitempty"`
 	LinkedIn   string     `json:"linkedin,omitempty"`
 	Instagram  string     `json:"instagram,omitempty"`
@@ -459,7 +458,7 @@ func (h *Handler) user(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := profileDTO{
-		Handle: profile.User.Handle, Name: profile.User.Name, Bio: profile.User.Bio, Faculty: profile.User.Faculty, AvatarURL: profile.User.AvatarPath(),
+		Handle: profile.User.Handle, Name: profile.User.Name, Bio: profile.User.Bio, AvatarURL: profile.User.AvatarPath(),
 		GitHub: profile.User.GitHub, LinkedIn: profile.User.LinkedIn, Instagram: profile.User.Instagram,
 		Verified: profile.Badge != nil, Role: string(profile.User.Role), Karma: profile.User.Karma, JoinedAt: profile.User.CreatedAt,
 		IdeasCount: count, Ideas: make([]cardDTO, len(items)),

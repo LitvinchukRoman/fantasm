@@ -1,6 +1,6 @@
 import type { User } from "./api-types";
 
-export const PROFILE_FIELDS = ["name", "handle", "bio", "faculty", "linkedin", "instagram"] as const;
+export const PROFILE_FIELDS = ["name", "handle", "bio", "linkedin", "instagram"] as const;
 export type ProfileField = (typeof PROFILE_FIELDS)[number];
 export type ProfileUpdate = Partial<Pick<User, ProfileField>>;
 
@@ -32,7 +32,6 @@ const FIELD_ERRORS: Record<ProfileField, string> = {
   name: "Імʼя: від 1 до 100 символів, без < і >.",
   handle: "3–30 символів: малі латинські літери, цифри, «_» або «-», на початку літера чи цифра.",
   bio: "Про себе: до 500 символів, без < і >.",
-  faculty: "Факультет: до 100 символів, без < і >.",
   linkedin: "Посилання на профіль linkedin.com/in/… або його назва.",
   instagram: "Нікнейм в Instagram, @нікнейм або посилання.",
 };

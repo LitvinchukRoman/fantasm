@@ -20,11 +20,10 @@ const form = (values: Record<string, string>) => {
 
 describe("profile settings", () => {
   it("sends only changed, trimmed fields", () => {
-    expect(profileChanges(form({ name: " Роман ", handle: "roman", bio: "", faculty: " ФІ " }), user)).toEqual({
+    expect(profileChanges(form({ name: " Роман ", handle: "roman", bio: "" }), user)).toEqual({
       handle: "roman",
-      faculty: "ФІ",
     });
-    expect(profileChanges(form({ name: "Роман", handle: user.handle, bio: "", faculty: "" }), user)).toEqual({});
+    expect(profileChanges(form({ name: "Роман", handle: user.handle, bio: "" }), user)).toEqual({});
   });
 
   it("leaves links alone when the form has no link fields", () => {

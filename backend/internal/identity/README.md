@@ -41,7 +41,7 @@ Profile links store only the account name. LinkedIn and Instagram are typed in. 
 
 GitHub is never typed in: GitHub vouches for it. `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` belong to a GitHub App with no permissions, no webhook, and callback URLs `${PUBLIC_URL}/api/me/github/callback` for every environment. `GET /api/me/github/connect` starts an attempt bound to the signed-in user and to the browser (cookie `fantasm_github_link`, 10 minutes). It then redirects to GitHub with `state` and PKCE S256. The callback consumes the attempt once, for that same user and browser. It then redeems the code, reads `GET /user`, revokes the token, and stores the numeric `github_id` with the login. A callback planted in someone else's browser therefore links nothing. `github_id` is unique, so one GitHub account backs at most one profile. `DELETE /api/me/github` unlinks it. Without the app, the connect route redirects to `/settings?github=unavailable`.
 
-`/api/me` returns `id`, `handle`, `name`, `email`, `avatarUrl`, `bio`, `faculty`, `github`, `linkedin`, `instagram`, `role`, `createdAt`, and `memberships`. It is private, not a public profile endpoint. Tokens are never included in JSON. Identity responses use `Cache-Control: no-store`.
+`/api/me` returns `id`, `handle`, `name`, `email`, `avatarUrl`, `bio`, `github`, `linkedin`, `instagram`, `role`, `createdAt`, and `memberships`. It is private, not a public profile endpoint. Tokens are never included in JSON. Identity responses use `Cache-Control: no-store`.
 
 ## Sessions and login attempts
 

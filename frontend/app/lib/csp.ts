@@ -8,6 +8,7 @@ import { createContext, useContext } from "react";
  *
  * - style-src з 'unsafe-inline': React рендерить атрибути style, а їх nonce не покриває.
  * - img-src https:: опис ідеї дозволяє HTTPS-картинки з будь-якого сайту (markdown.Idea).
+ * - worker-src 'self': service worker сповіщень лежить на цьому ж хості (/sw.js).
  * - Google-хости взяті з рекомендованої Google CSP для GA4.
  */
 export function contentSecurityPolicy(nonce: string): string {
@@ -18,6 +19,7 @@ export function contentSecurityPolicy(nonce: string): string {
     "font-src 'self'",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
+    "worker-src 'self'",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",

@@ -1,6 +1,8 @@
 package regression_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -366,6 +368,10 @@ func TestHappyPathsMatchTheDocumentation(t *testing.T) {
 	call("notifications", who.Member, "GET", "/api/me/notifications", nil, nil, 200)
 	call("unread count", who.Member, "GET", "/api/me/notifications/unread-count", nil, nil, 200)
 	call("mark read", who.Member, "POST", "/api/me/notifications/read", nil, map[string]any{"all": true}, 200)
+	subscription := pushSubscription()
+	call("push key", who.Anon, "GET", "/api/push/vapid-public-key", nil, nil, 200)
+	call("push on", who.Outsider, "POST", "/api/me/push-subscriptions", nil, subscription, 204)
+	call("push off", who.Outsider, "DELETE", "/api/me/push-subscriptions", nil, map[string]any{"endpoint": subscription["endpoint"]}, 204)
 
 	call("promote", who.Admin, "PATCH", "/api/admin/users/{handle}/role", params{"handle": apptestHandle(env, thirdMail)}, map[string]any{"role": "MODERATOR"}, 200)
 	env.SignIn(outsiderMail) // a second device
@@ -382,4 +388,14 @@ func TestHappyPathsMatchTheDocumentation(t *testing.T) {
 		}
 	}
 	call("logout", who.Mod, "POST", "/api/auth/logout", nil, nil, 204)
+}
+
+func pushSubscription() map[string]any {
+	return map[string]any{
+		"endpoint": "http://127.0.0.1:9/push/contract",
+		"keys": map[string]any{
+			"p256dh": base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 65)),
+			"auth":   base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{2}, 16)),
+		},
+	}
 }

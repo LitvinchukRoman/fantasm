@@ -168,7 +168,6 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 		Handle    *string `json:"handle"`
 		Name      *string `json:"name"`
 		Bio       *string `json:"bio"`
-		Faculty   *string `json:"faculty"`
 		LinkedIn  *string `json:"linkedin"`
 		Instagram *string `json:"instagram"`
 	}
@@ -177,7 +176,7 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := h.service.UpdateProfile(r.Context(), viewer.From(r.Context()).ID(), domain.ProfileUpdate{
-		Handle: body.Handle, Name: body.Name, Bio: body.Bio, Faculty: body.Faculty,
+		Handle: body.Handle, Name: body.Name, Bio: body.Bio,
 		LinkedIn: body.LinkedIn, Instagram: body.Instagram,
 	})
 	if err != nil {
@@ -415,7 +414,6 @@ type userResponse struct {
 	Email       string              `json:"email"`
 	AvatarURL   string              `json:"avatarUrl"`
 	Bio         string              `json:"bio"`
-	Faculty     string              `json:"faculty"`
 	GitHub      string              `json:"github"`
 	LinkedIn    string              `json:"linkedin"`
 	Instagram   string              `json:"instagram"`
@@ -435,7 +433,7 @@ func toUserResponse(u domain.User) userResponse {
 	}
 	resp := userResponse{
 		ID: u.ID, Handle: u.Handle, Name: u.Name, Email: u.Email,
-		AvatarURL: u.AvatarPath(), Bio: u.Bio, Faculty: u.Faculty,
+		AvatarURL: u.AvatarPath(), Bio: u.Bio,
 		GitHub: u.GitHub, LinkedIn: u.LinkedIn, Instagram: u.Instagram,
 		Role: u.Role, Karma: u.Karma, Verified: len(memberships) > 0, Onboarded: u.Onboarded,
 		CreatedAt: u.CreatedAt, Memberships: memberships,

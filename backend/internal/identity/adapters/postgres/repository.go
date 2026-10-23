@@ -112,14 +112,14 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash string) error 
 	return err
 }
 
-const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.faculty, u.github, u.linkedin, u.instagram, u.role, u.karma, u.approved_ideas,
+const userColumns = `u.id, u.handle, u.name, u.email, u.avatar_url, u.bio, u.github, u.linkedin, u.instagram, u.role, u.karma, u.approved_ideas,
 	u.onboarded_at IS NOT NULL,
 	coalesce((SELECT (extract(epoch FROM av.updated_at) * 1000)::bigint FROM user_avatars av WHERE av.user_id = u.id), 0),
 	u.created_at, u.updated_at`
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.Faculty, &user.GitHub, &user.LinkedIn, &user.Instagram, &user.Role, &user.Karma, &user.ApprovedIdeas,
+	err := row.Scan(&user.ID, &user.Handle, &user.Name, &user.Email, &user.AvatarURL, &user.Bio, &user.GitHub, &user.LinkedIn, &user.Instagram, &user.Role, &user.Karma, &user.ApprovedIdeas,
 		&user.Onboarded, &user.AvatarVersion, &user.CreatedAt, &user.UpdatedAt)
 	return user, notFound(err)
 }

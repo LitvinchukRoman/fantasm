@@ -10,7 +10,8 @@ import (
 
 // Publisher records a notification. It runs inside the caller's transaction (the
 // transaction is carried by ctx), so a notification exists if and only if the
-// action it describes was committed. There is no outbox and no e-mail here.
+// action it describes was committed. Browser delivery is a later job: a failed
+// push does not undo the action, and there is no e-mail.
 type Publisher interface {
 	Publish(ctx context.Context, n domain.Notification) error
 }

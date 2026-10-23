@@ -87,7 +87,6 @@ export default function ProfilePage({ loaderData }: Route.ComponentProps) {
               items={[
                 { label: "Ідей", value: <span className="tabular-nums">{ideas.length}</span> },
                 { label: "Карма", value: <span className="tabular-nums">{profile.karma}</span> },
-                { label: "Факультет", value: profile.faculty },
                 { label: "З нами з", value: <time dateTime={profile.joinedAt}>{formatShortDate(profile.joinedAt)}</time> },
               ]}
             />
