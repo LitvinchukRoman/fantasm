@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
-	github.com/coreos/go-oidc/v3 v3.14.1
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
