@@ -19,10 +19,10 @@ export function SiteFooter() {
     <footer className="relative z-10 border-t border-[var(--color-border)] bg-[var(--color-sheet)] px-5 py-12 sm:px-8">
       <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-[1.4fr_1fr]">
         <div>
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex w-fit items-center gap-2">
             <img src={logo96} alt="" width={32} height={32} className="size-8 rounded-lg" />
             <span className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]">Fantasm</span>
-          </div>
+          </Link>
           <p className="mt-3 max-w-xs text-sm text-[var(--color-text-muted)]">
             Платформа ідей спільноти Києво-Могилянської академії. Від іскри до команди.
           </p>

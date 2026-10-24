@@ -42,7 +42,7 @@ export function organization(): JsonLd {
     "@type": "Organization",
     "@id": ORG_ID,
     name: SITE_NAME,
-    alternateName: ["Fantasm NaUKMA", "Ideas NaUKMA"],
+    alternateName: ["Fantasm NaUKMA", "Ideas NaUKMA", "Платформа ідей НаУКМА"],
     url: `${SITE_URL}/`,
     logo: {
       "@type": "ImageObject",
@@ -62,7 +62,7 @@ export function website(): JsonLd {
     "@type": "WebSite",
     "@id": SITE_ID,
     name: SITE_NAME,
-    alternateName: ["NaUKMA Ideas", "ideas.naukma.com"],
+    alternateName: ["Платформа ідей НаУКМА", "NaUKMA Ideas", "ideas.naukma.com"],
     url: `${SITE_URL}/`,
     inLanguage: SITE_LANGUAGE,
     publisher: organizationRef(),

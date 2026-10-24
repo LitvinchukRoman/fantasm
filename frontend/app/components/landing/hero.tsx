@@ -24,7 +24,12 @@ export function Hero() {
     <section className="relative h-dvh">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-[var(--color-bg)]/70 to-transparent" />
       <div className="relative z-10 flex h-full items-center px-6 sm:px-16 lg:px-[7.5rem]">
-        <h1 className="hero-display max-w-[12ch] text-white">Твори ідеї</h1>
+        <h1 className="text-white">
+          <span className="mb-5 block font-mono text-xs font-normal uppercase tracking-[0.2em] text-white/75 sm:text-sm">
+            Платформа ідей НаУКМА
+          </span>
+          <span className="hero-display block max-w-[12ch]">Твори ідеї</span>
+        </h1>
       </div>
     </section>
   );
@@ -43,8 +48,8 @@ export function HeroIntro() {
         Від іскри до команди
       </h2>
       <p className="mt-4 max-w-xl text-lg text-[var(--color-text-muted)]">
-        Публікуй стартап, пет-проєкт, дослідження чи подію. Збирай голоси, обговорення й однодумців, щоб
-        ідея стала командою.
+        Fantasm — платформа ідей Києво-Могилянської академії. Публікуй стартап, пет-проєкт, дослідження чи
+        подію. Збирай голоси, обговорення й однодумців, щоб ідея стала командою.
       </p>
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <Button to="/ideas/new" arrow onClick={() => track("ui.click", { target: "publish" })}>
