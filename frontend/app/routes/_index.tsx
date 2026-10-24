@@ -1,3 +1,4 @@
+import { AboutPlatform, LANDING_FAQ } from "~/components/landing/about-platform";
 import { CtaFooter } from "~/components/landing/cta-footer";
 import { CurvedSheet } from "~/components/landing/curved-sheet";
 import { HeroBackground } from "~/components/landing/hero-background";
@@ -12,7 +13,7 @@ import { PageLoader } from "~/components/ui/page-loader";
 import { getEvents, getIdeas, routeApi } from "~/lib/api.server";
 import { toIdeaCard } from "~/lib/ideas";
 import { seo } from "~/lib/seo";
-import { webPage } from "~/lib/structured-data";
+import { compact, faqPage, webPage } from "~/lib/structured-data";
 import type { Route } from "./+types/_index";
 
 /** Три «гарячі» ідеї для тизера: публічні, не тестові, за активністю, потім за свіжістю. */
@@ -27,22 +28,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+const TITLE = "Платформа ідей НаУКМА: стартапи, проєкти й події | Fantasm";
+const DESCRIPTION =
+  "Fantasm — платформа ідей Києво-Могилянської академії: публікуй стартап, дослідження чи подію, збирай голоси, обговорення й команду однодумців.";
+
 export function meta() {
   return seo({
-    title: "Fantasm, платформа ідей Києво-Могилянської академії",
-    description:
-      "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
+    title: TITLE,
+    description: DESCRIPTION,
     path: "/",
     // organization і website seo() додає сам, у кожен граф.
-    jsonLd: [
-      webPage({
-        path: "/",
-        name: "Fantasm, платформа ідей Києво-Могилянської академії",
-        description:
-          "Публікуй стартап, дослідження, подію чи книжковий клуб. Спільнота НаУКМА голосує, обговорює і формує команди.",
-        breadcrumb: false,
-      }),
-    ],
+    jsonLd: compact([
+      webPage({ path: "/", name: TITLE, description: DESCRIPTION, breadcrumb: false }),
+      faqPage(LANDING_FAQ),
+    ]),
   });
 }
 
@@ -66,6 +65,7 @@ export default function Index({ loaderData }: Route.ComponentProps) {
             <MohylianPerks />
             <IdeaKinds />
             <EventsTeaser events={loaderData.events} />
+            <AboutPlatform />
           </main>
         </CurvedSheet>
         <CtaFooter />
