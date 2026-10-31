@@ -36,6 +36,16 @@ npm run lint
 | `VITE_SITE_URL` | білд (вшивається в клієнт) | абсолютні URL у canonical, OG, sitemap, robots. Типово `https://ideas.naukma.com` |
 | `IDEAS_SEED` | білд і сервер | `true` вмикає тестові картки (`anomalija-bunt`, `zrazok-*`). Без змінної вони є лише в `npm run dev` |
 | `PORT`, `HOST` | `server.js` | адреса прод-сервера, типово `:3000` |
+| `VITE_SUPPORT_API` | білд | API бота підтримки, типово `/api/support` (той самий origin). Абсолютна адреса (`https://support.example.com/api/support`) сама додається в CSP `connect-src`, а запити йдуть з `credentials: "include"`: бот має відповідати CORS із цим origin і дозволяти заголовок `X-Fantasm-Identity` |
+| `VITE_SUPPORT_MOCK` | білд | `true` — сценарії чату без бекенду бота (`app/lib/support/mock.ts`), зокрема підписки |
+
+Плани й спонсорство (`/pricing`, розділ «Підписка» в `/settings`, «Спонсорство» на сторінці ідеї) беруть усе з
+`/api/billing/*` і `/api/me/billing`. Якщо бекенд без білінгу, ці блоки просто не показуються.
+
+Бот підтримки не бачить cookie сесії. Віджет бере у fantasm короткий токен (`POST /api/me/support-token`, 15 хв)
+і шле його з кожним повідомленням у заголовку `X-Fantasm-Identity`. Бот передає його назад у
+`/api/integrations/support/*` (`X-Fantasm-Support-User`) разом зі своїм `SUPPORT_API_TOKEN`; деталі —
+`backend/internal/billing/README.md`.
 
 URL сайту без кінцевого слеша: `server.js` віддає `/ideas` з
 `build/client/ideas/index.html` і редіректить `/ideas/` → `/ideas` (301).

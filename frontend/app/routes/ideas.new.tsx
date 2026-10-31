@@ -12,6 +12,8 @@ import { formatPickedWhen, pickedIsFuture } from "~/lib/when";
 import { CATEGORY_LABELS, type IdeaCategory } from "~/lib/ideas";
 import { ApiError, createIdea, getCurrentUser, routeApi } from "~/lib/api.server";
 import type { IdeaCreate } from "~/lib/api-types";
+import { PAYMENT_REQUIRED, usageText } from "~/lib/billing";
+import { getBilling, optional } from "~/lib/billing.server";
 import type { RootData } from "~/root";
 import {
   IconSpark,
@@ -51,7 +53,8 @@ export async function action({ request }: Route.ActionArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await routeApi(getCurrentUser(request));
   if (!user) throw redirect("/login");
-  return { user };
+  const billing = await optional(getBilling(request));
+  return { user, billing };
 }
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -104,7 +107,7 @@ function publishError(body: { error?: string; fields?: Record<string, string> } 
 export default function IdeaNewPage({ loaderData }: Route.ComponentProps) {
   const root = useRouteLoaderData<RootData>("root");
   const campus = loaderData.user.memberships?.find((item) => item.capabilities?.includes("ideas.create_internal"));
-  const fetcher = useFetcher<{ error?: string; fields?: Record<string, string> }>();
+  const fetcher = useFetcher<{ error?: string; code?: string; fields?: Record<string, string> }>();
   const [step, setStep] = useState(1);
   const [shakeStep, setShakeStep] = useState<number | null>(null);
   const [stepError, setStepError] = useState<number | null>(null);
@@ -474,7 +477,16 @@ export default function IdeaNewPage({ loaderData }: Route.ComponentProps) {
                   </Button>
                 )}
               </motion.div>
-              {publishError(fetcher.data) ? <p role="alert" className="mt-3 text-sm text-red-300">{publishError(fetcher.data)}</p> : null}
+              {fetcher.data?.code === PAYMENT_REQUIRED ? (
+                <p role="alert" className="mt-3 text-sm text-red-300">
+                  Ліміт плану вичерпано
+                  {loaderData.billing ? `: ${usageText(loaderData.billing.usage.activeIdeas, loaderData.billing.usage.limit)}` : ""}. Завершіть
+                  одну з активних ідей або{" "}
+                  <Link to="/pricing" className="text-[var(--color-text)] underline underline-offset-4">оберіть план з більшим лімітом</Link>.
+                </p>
+              ) : publishError(fetcher.data) ? (
+                <p role="alert" className="mt-3 text-sm text-red-300">{publishError(fetcher.data)}</p>
+              ) : null}
             </div>
 
             {/* Right Column: Live Preview */}

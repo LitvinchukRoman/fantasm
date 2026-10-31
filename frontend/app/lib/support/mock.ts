@@ -27,6 +27,11 @@ export type ScenarioId =
   | "S5_howto"
   | "S6_login"
   | "S7_push"
+  | "B1_plans"
+  | "B2_cancel_plan"
+  | "B3_refund"
+  | "B4_cancel_sponsorship"
+  | "billing_signin"
   | "safety"
   | "data_request"
   | "human"
@@ -48,7 +53,11 @@ export interface Scenario {
   autonomy: Autonomy;
   /** Для approve: що напише модератор, коли «схвалить» у демо. */
   approval?: Reply;
+  /** Бот діє з підписками людини: без токена особи (анонім) замість цього просить увійти. */
+  needsIdentity?: boolean;
 }
+
+const BILLING_CONTEXT: [SupportStage, string] = ["context", "Дивлюсь твій план і підписки…"];
 
 const CLASSIFY: [SupportStage, string] = ["classify", "Розбираюсь, про що питання…"];
 const CONTEXT: [SupportStage, string] = ["context", "Дивлюсь твій акаунт…"];
@@ -137,6 +146,63 @@ const SCENARIOS: Record<ScenarioId, Scenario> = {
     status: "awaiting_customer",
     autonomy: "auto",
   },
+  B1_plans: {
+    id: "B1_plans",
+    steps: [CLASSIFY, BILLING_CONTEXT, DECIDE, RENDER, VALIDATE],
+    reply: {
+      text: "Зараз у тебе безкоштовний план «Старт», і всі його активні ідеї вже відкриті. Щоб опублікувати ще одну, заверши одну з них або перейди на «Плюс» чи «Про» (без ліміту). Оплата поки тестова, картка не потрібна.",
+      actions: [{ label: "Плани", to: "/pricing" }],
+    },
+    status: "awaiting_customer",
+    autonomy: "auto",
+    needsIdentity: true,
+  },
+  B2_cancel_plan: {
+    id: "B2_cancel_plan",
+    steps: [CLASSIFY, BILLING_CONTEXT, DECIDE, ["execute", "Вимикаю автопродовження…"], RENDER, VALIDATE],
+    reply: {
+      text: "Готово: план «Плюс» більше не продовжиться. Він діє до кінця оплаченого місяця, а потім ти перейдеш на «Старт». Ідеї понад ліміт лишаться відкритими, просто нові не опублікуєш, поки активних більше, ніж дозволяє «Старт». Передумаєш — план можна відновити в налаштуваннях.",
+      actions: [{ label: "Моя підписка", to: "/settings#pidpyska" }],
+    },
+    status: "awaiting_customer",
+    autonomy: "auto",
+    needsIdentity: true,
+  },
+  B3_refund: {
+    id: "B3_refund",
+    steps: [CLASSIFY, BILLING_CONTEXT, ["investigate", "Перевіряю останні платежі…"], DECIDE, ["execute", "Повертаю платіж…"], RENDER, VALIDATE],
+    reply: {
+      text: "Я знайшов останній платіж за «Плюс» і повернув його: він був менше 14 днів тому, тож повернення доступне одразу. Підписка лишається активною до кінця періоду, якщо хочеш і її скасувати, напиши.",
+      actions: [{ label: "Історія платежів", to: "/settings#pidpyska" }],
+    },
+    status: "awaiting_customer",
+    autonomy: "auto",
+    needsIdentity: true,
+  },
+  B4_cancel_sponsorship: {
+    id: "B4_cancel_sponsorship",
+    steps: [CLASSIFY, BILLING_CONTEXT, DECIDE, ["execute", "Скасовую спонсорство…"], RENDER, VALIDATE],
+    reply: {
+      text: "Скасував твоє спонсорство ідеї «Книжковий клуб Могилянки». Нових списань не буде, а підтримка діє до кінця вже оплаченого місяця. Автор не отримує повідомлення про скасування.",
+      actions: [{ label: "Мої підписки", to: "/settings#pidpyska" }],
+    },
+    status: "awaiting_customer",
+    autonomy: "auto",
+    needsIdentity: true,
+  },
+  billing_signin: {
+    id: "billing_signin",
+    steps: [CLASSIFY, DECIDE, RENDER],
+    reply: {
+      text: "Щоб я міг подивитися чи змінити твій план і підписки, увійди в акаунт і напиши ще раз. Ціни й ліміти планів є на сторінці «Плани».",
+      actions: [
+        { label: "Увійти", to: "/login" },
+        { label: "Плани", to: "/pricing" },
+      ],
+    },
+    status: "awaiting_customer",
+    autonomy: "auto",
+  },
   safety: {
     id: "safety",
     steps: [["prefilter", "Перевіряю повідомлення…"], ["route", "Передаю людині…"]],
@@ -200,14 +266,22 @@ const RULES: [ScenarioId, RegExp][] = [
   ["S4_seal", /печатк|верифік|могилян/i],
   ["S6_login", /увійти|aadsts|вхід|логін|login/i],
   ["S7_push", /сповіщен|push|пуш/i],
+  // Після push: «скасувати підписку на сповіщення» — це про сповіщення, а не про план.
+  ["B4_cancel_sponsorship", /спонсор/i],
+  ["B3_refund", /поверн\S* (мені )?(гроші|кошти|оплат|платіж)|повернення (коштів|грошей|платежу)|refund|списал\S* (гроші|кошти|двічі)/i],
+  ["B2_cancel_plan", /(скасу|відмін|вимкн|зупин|відпис)\S*\s+(\S+\s+)?(підписк|план|плюс|plus|pro|автопродовж)/i],
+  // Без \b: у JS-регулярках воно не бачить меж кириличних слів.
+  ["B1_plans", /тариф|(^|[^а-яіїєґ])план(и|у|ом|і|ів)?([^а-яіїєґ]|$)|ліміт|більше ідей|скільки коштує|оплат|підписк/i],
   ["S5_howto", /як (знайти|створити|написати|зібрати)|команд/i],
   ["thanks", /дякую|спасибі|thank/i],
 ];
 
-export function pickScenario(text: string, hasAttachments = false): Scenario {
+/** `identified` — чи прийшов токен особи: без нього бот не бачить підписок і просить увійти. */
+export function pickScenario(text: string, hasAttachments = false, identified = true): Scenario {
   if (!text.trim() && hasAttachments) return SCENARIOS.screenshot;
   const match = RULES.find(([, pattern]) => pattern.test(text));
-  return SCENARIOS[match ? match[0] : "unclear"];
+  const scenario = SCENARIOS[match ? match[0] : "unclear"];
+  return scenario.needsIdentity && !identified ? SCENARIOS.billing_signin : scenario;
 }
 
 const REDACTIONS: [RegExp, string][] = [
@@ -308,7 +382,7 @@ export function createMockTransport(options: { approveAfterMs?: number; speed?: 
   };
 
   return {
-    async send(input: SendInput) {
+    async send(input: SendInput, identity?: string | null) {
       const ticketId = input.ticketId && tickets.has(input.ticketId) ? input.ticketId : nextId("t");
       const ticket = ticketFor(ticketId);
       const messageId = nextId("m");
@@ -321,7 +395,7 @@ export function createMockTransport(options: { approveAfterMs?: number; speed?: 
         createdAt: now(),
         ...(attachments.length ? { attachments } : {}),
       };
-      const scenario = pickScenario(input.text, attachments.length > 0);
+      const scenario = pickScenario(input.text, attachments.length > 0, Boolean(identity));
       const beats = script(scenario, customer, now, () => nextId("m"));
       if (scenario.approval && approveAfterMs >= 0) {
         // У демо без консолі «модератор» схвалює сам, щоб було видно живу відповідь людини.

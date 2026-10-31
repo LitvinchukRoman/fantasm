@@ -115,7 +115,11 @@ export interface StreamHandlers {
 
 /** Транспорт чату: справжній (fetch + SSE) або mock для демо без бекенду. */
 export interface SupportTransport {
-  send(input: SendInput): Promise<SendResult>;
+  /**
+   * `identity` — токен з `/api/me/support-token` (заголовок `X-Fantasm-Identity`). З ним бот може
+   * подивитися й змінити підписки саме цієї людини; без нього лише відповідає.
+   */
+  send(input: SendInput, identity?: string | null): Promise<SendResult>;
   getTicket(ticketId: string): Promise<TicketSnapshot>;
   /** Підписка на події тікета. Повертає відписку. */
   subscribe(ticketId: string, handlers: StreamHandlers): () => void;

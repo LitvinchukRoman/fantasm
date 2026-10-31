@@ -9,6 +9,7 @@ export default [
   route("events", "routes/events.tsx"),
   route("notifications", "routes/notifications.tsx"),
   route("settings", "routes/settings.tsx"),
+  route("pricing", "routes/pricing.tsx"),
   route("moderation", "routes/moderation.tsx"),
   layout("routes/admin.tsx", [
     route("admin", "routes/admin._index.tsx"),

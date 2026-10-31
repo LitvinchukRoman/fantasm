@@ -17,6 +17,7 @@ import { track } from "~/lib/analytics";
 import { ACCEPT_ATTRIBUTE, checkFiles, formatSize, isImage, MAX_FILES, namePasted, safePreviewUrl } from "~/lib/support/attachments";
 import { errorText, getTransport } from "~/lib/support/client";
 import { DISCLOSURE, isInternalPath, MAX_MESSAGE, promptsFor, STATUS_NOTE, wasRedacted } from "~/lib/support/copy";
+import { supportIdentity } from "~/lib/support/identity";
 import { chatReducer, initialChat, type ChatState } from "~/lib/support/reducer";
 import { readTicketId, saveTicketId } from "~/lib/support/session";
 import type { Attachment, SupportMessage, SupportTransport, TraceStep } from "~/lib/support/types";
@@ -184,14 +185,18 @@ export function SupportChat({
     setSending(true);
     setError(null);
     try {
-      const result = await transport.send({
-        ticketId: state.ticketId,
-        text: message,
-        page: context.page,
-        ...(attachments.length ? { attachmentIds: attachments.map((attachment) => attachment.id) } : {}),
-        ...(context.ideaSlug ? { ideaSlug: context.ideaSlug } : {}),
-        ...(anonymous && email.trim() ? { email: email.trim() } : {}),
-      });
+      const identity = await supportIdentity(root?.currentUser?.id);
+      const result = await transport.send(
+        {
+          ticketId: state.ticketId,
+          text: message,
+          page: context.page,
+          ...(attachments.length ? { attachmentIds: attachments.map((attachment) => attachment.id) } : {}),
+          ...(context.ideaSlug ? { ideaSlug: context.ideaSlug } : {}),
+          ...(anonymous && email.trim() ? { email: email.trim() } : {}),
+        },
+        identity,
+      );
       dispatch({
         kind: "sent",
         ticketId: result.ticketId,
