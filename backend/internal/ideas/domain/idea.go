@@ -48,6 +48,12 @@ func (s Status) Valid() bool {
 	return false
 }
 
+// Active reports whether an idea in status s is live work: published and not
+// finished. Plans limit how many of these an author holds at once.
+func (s Status) Active() bool {
+	return s == Open || s == TeamForming || s == InProgress
+}
+
 // CanMoveTo reports whether an idea in status s may be set to next. A published
 // idea never goes back to draft: people have already voted and read it.
 func (s Status) CanMoveTo(next Status) bool {

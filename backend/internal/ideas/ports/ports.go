@@ -55,6 +55,8 @@ type Repository interface {
 	// serializing concurrent creations by one person.
 	LockAuthor(ctx context.Context, userID string) (approvedIdeas int, err error)
 	CountCreatedSince(ctx context.Context, userID string, since time.Time) (int, error)
+	// CountActive counts the author's live ideas: not deleted, not rejected or hidden, in an active status.
+	CountActive(ctx context.Context, userID string) (int, error)
 	// Insert stores an idea under a free slug derived from SlugBase and returns it.
 	Insert(ctx context.Context, n NewIdea) (id, slug string, err error)
 	OpenModerationCase(ctx context.Context, ideaID string) error

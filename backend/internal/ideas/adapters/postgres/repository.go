@@ -92,6 +92,15 @@ func (r *Repository) CountCreatedSince(ctx context.Context, userID string, since
 	return n, err
 }
 
+func (r *Repository) CountActive(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := r.db.Querier(ctx).QueryRow(ctx, `
+		SELECT count(*) FROM ideas
+		WHERE author_id = $1 AND deleted_at IS NULL
+		  AND status IN ('OPEN', 'TEAM_FORMING', 'IN_PROGRESS') AND moderation_state IN ('PENDING', 'APPROVED')`, userID).Scan(&n)
+	return n, err
+}
+
 func nullIfEmpty(s string) *string {
 	if s == "" {
 		return nil

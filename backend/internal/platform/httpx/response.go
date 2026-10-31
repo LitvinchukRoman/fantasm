@@ -102,6 +102,8 @@ func statusOf(kind apperr.Kind) (int, string) {
 		return http.StatusUnsupportedMediaType, "unsupported_media_type"
 	case apperr.KindMethodNotAllowed:
 		return http.StatusMethodNotAllowed, "method_not_allowed"
+	case apperr.KindPaymentRequired:
+		return http.StatusPaymentRequired, "payment_required"
 	case apperr.KindNotImplemented:
 		return http.StatusNotImplemented, "not_implemented"
 	default:
