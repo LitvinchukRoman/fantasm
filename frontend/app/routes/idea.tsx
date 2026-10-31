@@ -40,6 +40,9 @@ import {
   routeApi,
   vote,
 } from "~/lib/api.server";
+import { SponsorPanel } from "~/components/billing/sponsor-panel";
+import { isTier } from "~/lib/billing";
+import { getBillingCatalog, getIdeaSponsorship, optional, sponsorIdea } from "~/lib/billing.server";
 import type { AuthorPreview } from "~/lib/users.server";
 import type { ForumPost } from "~/lib/forum";
 import { toForumThread } from "~/lib/forum";
@@ -57,11 +60,13 @@ import type { RootData } from "~/root";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   if (!params.slug) throw data("Not found", { status: 404 });
-  const [rawIdea, rawThread, rawNext, participants] = await routeApi(Promise.all([
+  const [rawIdea, rawThread, rawNext, participants, sponsorship, catalog] = await routeApi(Promise.all([
     getIdea(request, params.slug),
     getThread(request, params.slug),
     getNextIdea(request, params.slug),
     getParticipants(request, params.slug),
+    optional(getIdeaSponsorship(request, params.slug)),
+    optional(getBillingCatalog(request)),
   ]));
   const idea = toIdeaView(rawIdea);
   const thread = toForumThread(rawThread);
@@ -108,7 +113,19 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     next,
     participants: people,
     profiles,
+    sponsorship: sponsorship && catalog ? { state: sponsorship, tiers: catalog.tiers, mock: catalog.mock } : null,
   };
+}
+
+/** Відповіді бекенду про спонсорство англійською; людині — що сталося і що робити. */
+function sponsorError(error: ApiError): { error: string; code: string } {
+  const text =
+    error.status === 401 ? "Увійдіть, щоб стати спонсором."
+    : error.status === 404 ? "Ідею не знайдено або вона прихована."
+    : error.status === 409 ? "Ідея більше не приймає спонсорів."
+    : error.status === 422 ? "Оберіть рівень спонсорства."
+    : "Не вдалося оформити спонсорство. Спробуйте ще раз.";
+  return { error: text, code: error.body.code };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -128,6 +145,16 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (intent === "report") {
       await reportIdea(request, params.slug, String(form.get("reason") ?? ""));
       return data({ ok: true });
+    }
+    if (intent === "sponsor") {
+      const tier = form.get("tier");
+      if (!isTier(tier)) return data({ error: "Оберіть рівень спонсорства.", code: "validation_failed" }, { status: 400 });
+      try {
+        return data(await sponsorIdea(request, params.slug, tier));
+      } catch (error) {
+        if (error instanceof ApiError) return data(sponsorError(error), { status: error.status });
+        throw error;
+      }
     }
     return data({ error: "Невідома дія" }, { status: 400 });
   } catch (error) {
@@ -356,13 +383,15 @@ function ReportControl() {
 }
 
 export default function IdeaPage({ loaderData }: Route.ComponentProps) {
-  const { idea, thread, next, participants, profiles } = loaderData;
+  const { idea, thread, next, participants, profiles, sponsorship } = loaderData;
   const isEvent = idea.category === "EVENT" && !!idea.eventAt;
   const root = useRouteLoaderData<RootData>("root");
   const isOwner = root?.currentUser?.handle === idea.author.handle;
   // Поки ідею не схвалили, бекенд не приймає ні голосів, ні дописів: гілку бачить лише автор.
   const live = !idea.moderation || idea.moderation === "APPROVED";
   const requests = isOwner && !isEvent ? participants.filter((p) => p.state === "JOINED" || p.state === "INTERESTED").length : 0;
+  // Розділ «Спонсорство» лише там, де є що показати: прийом спонсорів, своя підписка чи вже наявні спонсори.
+  const sponsors = sponsorship && live && (sponsorship.state.accepting || sponsorship.state.mine || sponsorship.state.sponsors > 0) ? sponsorship : null;
 
   const index = useMemo<IndexItem[]>(() => {
     const parts = idea.toc
@@ -376,9 +405,10 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
       { id: "opys", label: "Про ідею", index: "01" },
       ...parts.map((item) => ({ id: item.id, label: item.text })),
       { id: "komanda", label: isEvent ? "Учасники" : "Команда", index: "02" },
-      { id: "discussion", label: "Обговорення", index: "03" },
+      ...(sponsors ? [{ id: "sponsorstvo", label: "Спонсорство", index: "03" }] : []),
+      { id: "discussion", label: "Обговорення", index: sponsors ? "04" : "03" },
     ];
-  }, [idea.toc, idea.title, isEvent]);
+  }, [idea.toc, idea.title, isEvent, sponsors]);
 
   return (
     <AuthorPopoverProvider profiles={profiles} scope={idea.slug}>
@@ -576,8 +606,19 @@ export default function IdeaPage({ loaderData }: Route.ComponentProps) {
                   </div>
                 </section>
 
+                {sponsors && (
+                  <section aria-labelledby="sponsorstvo">
+                    <SectionLabel index="03" id="sponsorstvo">
+                      Спонсорство
+                    </SectionLabel>
+                    <div className="mt-6">
+                      <SponsorPanel sponsorship={sponsors.state} tiers={sponsors.tiers} signedIn={Boolean(root?.currentUser)} mock={sponsors.mock} />
+                    </div>
+                  </section>
+                )}
+
                 <section aria-labelledby="discussion">
-                  <SectionLabel index="03" id="discussion">
+                  <SectionLabel index={sponsors ? "04" : "03"} id="discussion">
                     Обговорення ·{" "}
                     <span className="tabular-nums">{thread.count}</span>
                   </SectionLabel>

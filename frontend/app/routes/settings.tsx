@@ -4,7 +4,10 @@ import { BrowserNotifications } from "~/components/push/browser-notifications";
 import { Button } from "~/components/ui/button";
 import { AvatarPicker } from "~/components/profile/avatar-picker";
 import { IconCheck, IconGitHub } from "~/components/landing/icons";
+import { SubscriptionPanel } from "~/components/billing/subscription-panel";
 import { ApiError, deleteAvatar, getCurrentUser, routeApi, unlinkGitHub, updateProfile, uploadAvatar } from "~/lib/api.server";
+import { isPaidPlan } from "~/lib/billing";
+import { cancelPlan, cancelSponsorship, choosePlan, getBilling, optional } from "~/lib/billing.server";
 import {
   GITHUB_OUTCOMES,
   profileChanges,
@@ -23,7 +26,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await routeApi(getCurrentUser(request));
   if (!user) throw redirect("/login");
   const github = GITHUB_OUTCOMES[new URL(request.url).searchParams.get("github") ?? ""];
-  return { user, github };
+  const billing = await optional(getBilling(request));
+  return { user, github, billing };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -31,6 +35,20 @@ export async function action({ request }: Route.ActionArgs) {
   const current = await routeApi(getCurrentUser(request));
   if (!current) throw redirect("/login");
   const intent = form.get("intent");
+  if (intent === "plan-cancel" || intent === "plan-resume" || intent === "sponsorship-cancel") {
+    try {
+      if (intent === "plan-cancel") await cancelPlan(request);
+      else if (intent === "sponsorship-cancel") await cancelSponsorship(request, String(form.get("id") ?? ""));
+      else {
+        const { plan } = await getBilling(request);
+        if (isPaidPlan(plan.code)) await choosePlan(request, plan.code);
+      }
+      return data({ billing: { error: undefined } });
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      return data({ billing: { error: "Не вдалося змінити підписку. Оновіть сторінку й спробуйте ще раз." } }, { status: error.status });
+    }
+  }
   if (intent === "github-unlink") {
     await unlinkGitHub(request);
     return redirect("/settings");
@@ -76,7 +94,7 @@ const INPUT =
   "block w-full rounded-[var(--radius-control)] border bg-[var(--color-bg)] px-3 py-2 text-[16px] text-[var(--color-text)] placeholder-[var(--color-text-faint)] transition-all duration-500 hover:border-[var(--color-accent)] input-focus-pulse focus:outline-none sm:text-sm";
 
 export default function Settings({ loaderData, actionData }: Route.ComponentProps) {
-  const { user, github } = loaderData;
+  const { user, github, billing } = loaderData;
   const saving = useNavigation().state === "submitting";
   // Відповіді про фото забирає fetcher в AvatarPicker; тут лише результат форми профілю.
   const profileResult = actionData && "fields" in actionData ? actionData : undefined;
@@ -217,6 +235,7 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
         <Form method="post" id="github-unlink" hidden>
           <input type="hidden" name="intent" value="github-unlink" />
         </Form>
+        {billing && <SubscriptionPanel billing={billing} />}
         <BrowserNotifications />
       </div>
     </GuideFrame>

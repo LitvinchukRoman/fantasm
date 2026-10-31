@@ -39,6 +39,7 @@ export const PROMPTS: readonly Prompt[] = [
   { topic: "team", text: "Як знайти команду для проєкту?" },
   { topic: "login", text: "Не можу увійти через Microsoft" },
   { topic: "push", text: "Не приходять сповіщення на телефон" },
+  { topic: "billing", text: "Хочу скасувати підписку" },
 ];
 
 export function promptsFor(topic: string | null | undefined, limit = 3): Prompt[] {

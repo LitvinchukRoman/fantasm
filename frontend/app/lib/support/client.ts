@@ -8,12 +8,27 @@ import type {
   SupportTransport,
   TicketSnapshot,
 } from "./types";
+import { IDENTITY_HEADER } from "./identity";
 
 /**
  * База API підтримки. За замовчуванням той самий origin, що й сайт: тоді працюють cookie сесії
- * й аноніма, а CSP `connect-src 'self'` уже покриває і fetch, і SSE.
+ * й аноніма, а CSP `connect-src 'self'` уже покриває і fetch, і SSE. Абсолютна адреса окремого
+ * сервера бота (`https://support.example.com/api/support`) потрапляє в CSP сама (lib/csp.ts),
+ * а cookie аноніма тоді ставить уже бот, тож запити йдуть з `credentials: "include"`.
  */
 export const SUPPORT_API = import.meta.env.VITE_SUPPORT_API || "/api/support";
+
+/** Origin сервера бота, якщо він не на домені сайту; інакше null. */
+export function supportOrigin(api: string = SUPPORT_API): string | null {
+  if (!/^https?:\/\//i.test(api)) return null;
+  try {
+    return new URL(api).origin;
+  } catch {
+    return null;
+  }
+}
+
+const CREDENTIALS: RequestCredentials = supportOrigin() ? "include" : "same-origin";
 
 const FALLBACK_ERROR: SupportApiError = { error: "Не вдалося звʼязатися з підтримкою", code: "internal_error" };
 
@@ -31,7 +46,7 @@ async function json<T>(response: Response): Promise<T> {
 /** Мережа впала до відповіді (офлайн, CORS, обрив): той самий формат, що й помилка API. */
 async function request(input: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(input, { credentials: "same-origin", ...init });
+    return await fetch(input, { credentials: CREDENTIALS, ...init });
   } catch (cause) {
     if (init.signal?.aborted) throw cause;
     throw { ...FALLBACK_ERROR, code: "network_error" } satisfies SupportApiError;
@@ -76,7 +91,7 @@ export function subscribeHttp(
     };
   }
 
-  const source = new EventSource(`${ticketPath(ticketId)}/events`);
+  const source = new EventSource(`${ticketPath(ticketId)}/events`, { withCredentials: CREDENTIALS === "include" });
   const onMessage = (raw: MessageEvent<string>) => {
     try {
       handlers.onEvent(JSON.parse(raw.data) as StreamEvent);
@@ -108,10 +123,10 @@ export function subscribeHttp(
 const JSON_HEADERS = { "content-type": "application/json", accept: "application/json" };
 
 export const http: SupportTransport = {
-  async send(input: SendInput) {
+  async send(input: SendInput, identity?: string | null) {
     const response = await request(`${SUPPORT_API}/messages`, {
       method: "POST",
-      headers: JSON_HEADERS,
+      headers: identity ? { ...JSON_HEADERS, [IDENTITY_HEADER]: identity } : JSON_HEADERS,
       body: JSON.stringify(input),
     });
     return json<SendResult>(response);

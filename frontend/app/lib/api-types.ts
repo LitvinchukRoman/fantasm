@@ -251,3 +251,80 @@ export interface IdeaCreate {
   eventCapacity?: number;
   needsRoles?: string[];
 }
+
+/** Плани й спонсорство (backend/internal/billing, тег `billing` у swagger.yaml). Суми в копійках. */
+export type PlanCode = "FREE" | "PLUS" | "PRO";
+export type SponsorTier = "SUPPORTER" | "BACKER" | "PATRON";
+export type SubscriptionStatus = "ACTIVE" | "CANCELED";
+
+export interface Plan {
+  code: PlanCode;
+  name: string;
+  priceMinor: number;
+  /** null — без ліміту. */
+  activeIdeas: number | null;
+  perks: string[];
+}
+
+export interface Tier {
+  code: SponsorTier;
+  name: string;
+  priceMinor: number;
+  perks: string[];
+}
+
+export interface BillingCatalog {
+  currency: "UAH";
+  /** Оплата імітована: картку не беремо. */
+  mock: boolean;
+  plans: Plan[];
+  tiers: Tier[];
+}
+
+export interface PlanState extends Plan {
+  status: SubscriptionStatus | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+export interface Sponsorship {
+  id: string;
+  idea: { slug: string; title: string };
+  tier: SponsorTier;
+  tierName: string;
+  priceMinor: number;
+  status: SubscriptionStatus;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  since: string;
+}
+
+export interface Payment {
+  id: string;
+  kind: "PLAN" | "SPONSORSHIP";
+  amountMinor: number;
+  currency: "UAH";
+  status: "SUCCEEDED" | "REFUNDED";
+  description: string;
+  createdAt: string;
+  refundedAt: string | null;
+}
+
+export interface BillingOverview {
+  mock: boolean;
+  currency: "UAH";
+  plan: PlanState;
+  usage: { activeIdeas: number; limit: number | null };
+  sponsorships: Sponsorship[];
+  payments: Payment[];
+}
+
+export interface IdeaSponsorship {
+  sponsors: number;
+  accepting: boolean;
+  own: boolean;
+  mine: Sponsorship | null;
+  /** Лише автору й staff. */
+  supporters?: { handle: string; name: string; tier: SponsorTier; since: string }[];
+  monthlyMinor?: number;
+}

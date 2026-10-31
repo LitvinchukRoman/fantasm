@@ -23,6 +23,25 @@ describe("pickScenario", () => {
   it("checks safety before product topics", () => {
     expect(pickScenario("ідею сховали і я не хочу жити").id).toBe("safety");
   });
+
+  it.each<[string, ScenarioId]>([
+    ["Не можу опублікувати ще одну ідею, пише про ліміт", "B1_plans"],
+    ["Який план мені взяти?", "B1_plans"],
+    ["Хочу скасувати підписку Plus", "B2_cancel_plan"],
+    ["Вимкни автопродовження плану Плюс", "B2_cancel_plan"],
+    ["Поверніть гроші за останній місяць", "B3_refund"],
+    ["Мені списали гроші двічі", "B3_refund"],
+    ["Більше не хочу бути спонсором ідеї", "B4_cancel_sponsorship"],
+    ["Як скасувати підписку на сповіщення?", "S7_push"],
+    ["Я планую хакатон, як знайти команду?", "S5_howto"],
+  ])("billing: %s → %s", (text, id) => {
+    expect(pickScenario(text).id).toBe(id);
+  });
+
+  it("asks an anonymous visitor to sign in before touching subscriptions", () => {
+    expect(pickScenario("Хочу скасувати підписку Plus", false, false).id).toBe("billing_signin");
+    expect(pickScenario("Як знайти команду?", false, false).id).toBe("S5_howto");
+  });
 });
 
 describe("redact", () => {
@@ -81,6 +100,20 @@ describe("mock transport", () => {
   it("is deterministic for the same text", async () => {
     const shape = (events: StreamEvent[]) => events.map((e) => (e.type === "trace" ? e.step.stage : e.type));
     expect(shape((await run("Як знайти команду?")).events)).toEqual(shape((await run("Як знайти команду?")).events));
+  });
+
+  it("acts on subscriptions only when the widget sent an identity", async () => {
+    const transport = createMockTransport({ approveAfterMs: -1 });
+    const bot = async (identity: string | null) => {
+      const { ticketId } = await transport.send({ ticketId: null, text: "Скасуй мій план", page: "/settings" }, identity);
+      await vi.runAllTimersAsync();
+      const snapshot = await transport.getTicket(ticketId);
+      return { reply: snapshot.messages.at(-1)?.text ?? "", stages: snapshot.trace.map((step) => step.stage) };
+    };
+    const anonymous = await bot(null);
+    expect(anonymous.reply).toMatch(/увійди/);
+    expect(anonymous.stages).not.toContain("execute");
+    expect((await bot("signed-token")).stages).toContain("execute");
   });
 
   it("answers 404 for an unknown ticket", async () => {
