@@ -123,11 +123,15 @@ export function SupportChat({
   }, [state.messages.length, state.trace.length, state.status]);
 
   // Поле росте разом із текстом до FIELD_MAX_PX.
+  // Порожнє поле — природна висота одного рядка (rows=1 + min-h). Міряти не можна, поки панель
+  // закрита: у прихованому <dialog> scrollHeight дорівнює 0 і поле схлопнулось би до курсора.
   useLayoutEffect(() => {
     const node = field.current;
     if (!node) return;
-    node.style.height = "auto";
-    node.style.height = `${Math.min(node.scrollHeight, FIELD_MAX_PX)}px`;
+    node.style.height = "";
+    if (!text) return;
+    const height = node.scrollHeight;
+    if (height > 0) node.style.height = `${Math.min(height, FIELD_MAX_PX)}px`;
   }, [text]);
 
   function addFiles(files: File[]) {
@@ -369,7 +373,7 @@ export function SupportChat({
                 // У панелі фокус ставить сам <dialog>, на /help лише за явним проханням.
                 autoFocus={autoFocus}
                 placeholder={fresh ? "Опиши, що сталося" : "Напиши відповідь"}
-                className="block min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-base leading-6 text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none"
+                className="block min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-base leading-6 text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none"
               />
               <button
                 type="submit"
