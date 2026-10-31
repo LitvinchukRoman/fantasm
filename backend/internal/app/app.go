@@ -16,6 +16,10 @@ import (
 	"github.com/LitvinchukRoman/fantasm/backend/internal/analytics"
 	analyticshttp "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/adapters/http"
 	analyticspg "github.com/LitvinchukRoman/fantasm/backend/internal/analytics/adapters/postgres"
+	"github.com/LitvinchukRoman/fantasm/backend/internal/billing"
+	billinghttp "github.com/LitvinchukRoman/fantasm/backend/internal/billing/adapters/http"
+	billingpostgres "github.com/LitvinchukRoman/fantasm/backend/internal/billing/adapters/postgres"
+	billingdomain "github.com/LitvinchukRoman/fantasm/backend/internal/billing/domain"
 	"github.com/LitvinchukRoman/fantasm/backend/internal/discussion"
 	discussionhttp "github.com/LitvinchukRoman/fantasm/backend/internal/discussion/adapters/http"
 	discussionpostgres "github.com/LitvinchukRoman/fantasm/backend/internal/discussion/adapters/postgres"
@@ -121,6 +125,12 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 	ideasHandler := ideashttp.NewHandler(ideasService, identityService)
 
 	inbox := notificationspostgres.NewRepository(db)
+	billingService := billing.NewService(billingpostgres.NewRepository(db), db, inbox,
+		billingdomain.Limits{FreeActiveIdeas: cfg.PlanFreeActiveIdeas, PlusActiveIdeas: cfg.PlanPlusActiveIdeas}, cfg.AppSecret).
+		WithEvents(analyticsService)
+	ideasService.WithPlanLimits(billingService)
+	billingHandler := billinghttp.NewHandler(billingService)
+
 	engagementService := engagement.NewService(engagementpostgres.NewRepository(db), db, identityService, inbox).WithEvents(analyticsService)
 	engagementHandler := engagementhttp.NewHandler(engagementService)
 
@@ -166,9 +176,27 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 	notificationsHandler.Register(mux)
 	adminHandler.Register(mux)
 	analyticsHandler.Register(mux)
-	access := httpx.AccessOptions{Secret: cfg.AppSecret, Router: mux, Observer: multiObserver(append([]httpx.RequestObserver{tracker}, observers...))}
+	billingHandler.Register(mux)
+	observer := multiObserver(append([]httpx.RequestObserver{tracker}, observers...))
+	access := httpx.AccessOptions{Secret: cfg.AppSecret, Router: mux, Observer: observer}
 
-	api := httpx.Chain(httpx.JSONFallbacks(mux),
+	// Server-to-server routes: no session cookie and no CSRF check, each handler
+	// authenticates its caller. Without a support token there are no routes, so every
+	// path answers 404.
+	integrations := http.NewServeMux()
+	if cfg.SupportAPIToken != "" {
+		supportLimit := httpx.NewLimiter(cfg.RateLimitUserRPS, cfg.RateLimitUserBurst)
+		billinghttp.NewIntegration(billingService, cfg.SupportAPIToken, supportLimit).Register(integrations)
+	}
+	integrationAPI := httpx.Chain(httpx.JSONFallbacks(integrations),
+		httpx.RequestID(proxies),
+		httpx.AccessLog(logger, proxies, httpx.AccessOptions{Secret: cfg.AppSecret, Router: integrations, Observer: observer}),
+		httpx.Recover(),
+		httpx.SecurityHeaders(identityHandler.Secure()),
+		httpx.Limits(httpx.MaxBody, cfg.RequestTimeout),
+	)
+
+	userAPI := httpx.Chain(httpx.JSONFallbacks(mux),
 		httpx.RequestID(proxies),
 		httpx.AccessLog(logger, proxies, access),
 		httpx.Recover(),
@@ -178,6 +206,13 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 		httpx.Auth(identityHandler.SessionCookie(), identityHandler.Resolver()),
 		rateLimit(anonLimit, userLimit, proxies),
 	)
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, integrationsPrefix) {
+			integrationAPI.ServeHTTP(w, r)
+			return
+		}
+		userAPI.ServeHTTP(w, r)
+	})
 
 	return &App{
 		API: api,
@@ -205,6 +240,13 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 				_, err := ideasService.RecomputeHot(ctx)
 				return err
 			}},
+			{Name: "billing-renew", Interval: 10 * time.Minute, Timeout: time.Minute, Run: func(ctx context.Context) error {
+				n, err := billingService.Renew(ctx)
+				if err == nil && n > 0 {
+					logger.Info("renewed subscriptions", "count", n)
+				}
+				return err
+			}},
 			{Name: "analytics-rollup", Interval: 5 * time.Minute, Timeout: 2 * time.Minute, Run: analyticsService.Rollup},
 			{Name: "analytics-purge", Interval: 24 * time.Hour, Timeout: time.Minute, Run: analyticsService.Purge},
 			{Name: "health-flush", Interval: time.Minute, Timeout: 15 * time.Second, Run: func(ctx context.Context) error {
@@ -222,6 +264,9 @@ func Build(cfg config.Config, logger *slog.Logger, db *postgres.DB, policy *orga
 		ObserveJob: tracker.ObserveJob,
 	}, nil
 }
+
+// integrationsPrefix is served by the server-to-server chain, never the browser one.
+const integrationsPrefix = "/api/integrations/"
 
 // rateLimit throttles signed-in viewers by user and everyone else by address.
 func rateLimit(anon, user *httpx.Limiter, proxies httpx.Proxies) httpx.Middleware {

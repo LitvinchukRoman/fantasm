@@ -1,6 +1,6 @@
 # backend
 
-Go-сервер Fantasm: модульний моноліт з гексагональною архітектурою. Контексти: [identity](internal/identity/README.md) (вхід лише через OIDC, сесії), [ideas](internal/ideas/README.md), [engagement](internal/engagement/README.md) (голоси, участь), [discussion](internal/discussion/README.md), [moderation](internal/moderation/README.md), [notifications](internal/notifications/README.md) та [organizations](internal/organizations/README.md). Повний контракт API — `api/swagger.yaml`.
+Go-сервер Fantasm: модульний моноліт з гексагональною архітектурою. Контексти: [identity](internal/identity/README.md) (вхід лише через OIDC, сесії), [ideas](internal/ideas/README.md), [engagement](internal/engagement/README.md) (голоси, участь), [discussion](internal/discussion/README.md), [moderation](internal/moderation/README.md), [notifications](internal/notifications/README.md), [billing](internal/billing/README.md) (плани авторів, спонсорство ідей, бот підтримки; оплата поки імітована) та [organizations](internal/organizations/README.md). Повний контракт API — `api/swagger.yaml`.
 
 Правила продукту — у `../FULL_CONTEXT.md`.
 
@@ -29,7 +29,7 @@ Compose запускає PostgreSQL і API на `http://localhost:8080`, чек�
 cmd/api/           точка входу
 migrations/        golang-migrate
 internal/platform/ apperr, config, postgres, migrate
-internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifications, organizations
+internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifications, billing, organizations
   service.go
   domain/
   ports/
@@ -46,7 +46,7 @@ internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifica
 Коротко, що саме захищає API (деталі — у коді відповідних пакетів):
 
 - **Вхід**: лише OIDC (Google, Entra) з PKCE, `state` і `nonce`; паролів немає. Сесія — непрозорий 256-бітний токен, у базі лише SHA-256, cookie `__Host-…` (HttpOnly, Secure, SameSite=Lax) на https; ротація при вході, idle (7 діб) та абсолютний (30 діб) TTL, відкликання всіх сесій, зміна ролі скидає сесії цілі.
-- **CSRF**: небезпечні методи пропускаються лише з того самого origin (`Origin` / `Sec-Fetch-Site`).
+- **CSRF**: небезпечні методи пропускаються лише з того самого origin (`Origin` / `Sec-Fetch-Site`). Виняток — `/api/integrations/*` для серверів (бот підтримки): там cookie не діють узагалі, а викликача автентифікує bearer-токен.
 - **Ін'єкції**: увесь SQL параметризований (pgx), значення ніколи не вставляються в рядок; keyset-курсори підписані HMAC і прив'язані до списку.
 - **XSS**: Markdown рендериться goldmark без сирого HTML, далі allowlist bluemonday; результат зберігається готовим. Заборонені схеми (`javascript:`, `data:`) та `http`-зображення відхиляються з 422. Усі відповіді мають `nosniff`, CSP та інші заголовки.
 - **Витік існування**: прихований, видалений і неіснуючий контент відповідають однаково (404).
@@ -56,7 +56,7 @@ internal/<ctx>/    identity, ideas, engagement, discussion, moderation, notifica
 
 ## Фонові задачі
 
-Працюють у процесі API (`internal/platform/jobs`): `purge-expired` (сесії та спроби входу, щогодини), `purge-notifications` (прочитані > 30 діб і будь-які > 180 діб, раз на 6 годин), `rank-hot` (перерахунок hot-рейтингу, кожні 10 хв). Збій або паніка однієї задачі лише логуються.
+Працюють у процесі API (`internal/platform/jobs`): `purge-expired` (сесії та спроби входу, щогодини), `purge-notifications` (прочитані > 30 діб і будь-які > 180 діб, раз на 6 годин), `rank-hot` (перерахунок hot-рейтингу, кожні 10 хв), `billing-renew` (продовження планів і спонсорств, кожні 10 хв). Збій або паніка однієї задачі лише логуються.
 
 ## Перевірка
 
@@ -85,6 +85,7 @@ TEST_DATABASE_URL='postgres://fantasm:fantasm@localhost:5432/fantasm_test?sslmod
 | `invariants_test.go` | випадкове навантаження з кількох користувачів одночасно, потім ~17 правил цілісності БД (лічильники = рядки, один відкритий кейс на ідею, аудит рішень, без самоголосів тощо). Зерно виводиться в лог: `REGRESSION_SEED=<n>` відтворює сценарій |
 | `journey_test.go` | повний життєвий цикл ідеї через усі контексти: вхід → ідея → модерація → голоси → обговорення → участь → сповіщення → автоскарги → відновлення → видалення → вихід |
 | `contract_test.go` | `api/swagger.yaml` ↔ реальні маршрути в обидва боки; статуси кожної відповіді задокументовані; тіла успішних відповідей валідуються проти схем (обов'язкові поля, типи, enum, недокументовані поля) |
+| `billing_test.go` | ліміт активних ідей за планом (402, чернетки, staff), скасування діє до кінця періоду, продовження списує кожен період рівно раз, спонсорство (не своє, лише активні ідеї, хто бачить спонсорів), бот підтримки діє лише за користувача з токеном, ідемпотентність `actionId`, cookie не відкривають `/api/integrations/*` |
 | `pagination_test.go` | усі списки без пропусків і повторів при будь-якому `limit` і зі збігами ключів; зміна списку під час обходу; підписані курсори прив'язані до списку й стійкі до підробки; клемпінг `limit` |
 | `migrations_test.go` | нумерація і пари up/down; кожна міграція відкочується до точно тієї ж схеми й накочується знову; дані попередніх версій правильно переносяться; конвенції схеми (PK, `timestamptz`, індекси під FK, жодних токенів у відкритому вигляді) |
 | `bench_test.go` | бенчмарки шляху запиту (`task bench`); не є бар'єром CI |
@@ -127,6 +128,8 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub App, через яку людина підтверджує свій GitHub у профілі (це не вхід). Значення лежать у SSM `/fantasm/<env>/app/github-client-{id,secret}`. Поки там `unset`, кнопка «Підключити GitHub» веде на `/settings?github=unavailable` |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | необовʼязкова пара для браузерних сповіщень. Порожні — API сам створює пару і тримає її в таблиці `push_keys` |
 | `ANALYTICS_RETENTION_DAYS`, `ANALYTICS_RATE_LIMIT_PER_MIN` | скільки днів тримати сирі події (180) і скільки пачок маяка з однієї адреси за хвилину (60) |
+| `PLAN_FREE_ACTIVE_IDEAS`, `PLAN_PLUS_ACTIVE_IDEAS` | ліміти активних ідей на планах Старт (3) і Плюс (15); 0 — без ліміту. Діють одразу після деплою |
+| `SUPPORT_API_TOKEN` | bearer-токен бота підтримки (≥ 32 символи), окремий для кожного середовища. Порожній — інтеграційні маршрути вимкнені |
 
 Після Caddy і CloudFront API бачить правильну адресу клієнта лише через `TRUSTED_PROXY_CIDRS`. Без нього всі запити виглядатимуть як одна адреса проксі, і ліміти по IP спрацьовуватимуть на всіх одразу.
 

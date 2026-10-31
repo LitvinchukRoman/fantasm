@@ -28,6 +28,9 @@ import (
 // Origin is the public origin of the test deployment.
 const Origin = "http://localhost:8080"
 
+// SupportAPIToken is the support bot's bearer credential in the test deployment.
+const SupportAPIToken = "test-support-bot-token-test-support-bot"
+
 // Organizations is the default policy: one organization whose members read and
 // create internal ideas, skip premoderation and carry weight.
 const Organizations = `{"version":1,"organizations":[{"id":"naukma","name":"NaUKMA","badge":"Могилянка",
@@ -95,6 +98,8 @@ func New(t testing.TB, opts ...Option) *Env {
 		RateLimitAnonRPS: 10_000, RateLimitAnonBurst: 10_000, RateLimitUserRPS: 10_000, RateLimitUserBurst: 10_000, RateLimitLoginPerMin: 10_000, RateLimitPostsPerMin: 10_000,
 		AnalyticsRetentionDays: 180, AnalyticsRatePerMin: 10_000,
 		SessionAbsoluteTTL: 24 * time.Hour, SessionIdleTTL: 12 * time.Hour, RequestTimeout: 10 * time.Second,
+		SupportAPIToken: SupportAPIToken,
+		// The plan limits stay 0 (no limit) unless a test sets them, so other suites create freely.
 	}
 	if s.cfg != nil {
 		s.cfg(&cfg)
@@ -265,3 +270,16 @@ func (c *Client) SetCookie(name, value string) {
 
 // Forget drops every cookie, like closing the browser profile.
 func (c *Client) Forget() { c.cookies = nil }
+
+// SupportHeaders are what the support bot sends when it acts for this signed-in user:
+// its own credential and the identity token the user's browser obtained.
+func (c *Client) SupportHeaders() map[string]string {
+	c.env.T.Helper()
+	r := c.Do(http.MethodPost, "/api/me/support-token", nil)
+	if r.Code != http.StatusOK {
+		c.env.T.Fatalf("support token: %d %s", r.Code, r.Body)
+	}
+	var out struct{ Token string }
+	r.Decode(&out)
+	return map[string]string{"Authorization": "Bearer " + SupportAPIToken, "X-Fantasm-Support-User": out.Token}
+}

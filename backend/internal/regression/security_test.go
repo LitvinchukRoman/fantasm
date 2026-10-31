@@ -35,6 +35,18 @@ func TestEveryRouteEnforcesItsAccessLevel(t *testing.T) {
 		if rt.Path == "/api/auth/logout-all" {
 			continue // ends the very sessions this loop reuses; sessions_test.go covers it
 		}
+		if rt.Access == service {
+			// A session is no credential here: every browser viewer is unauthenticated.
+			for _, l := range levels {
+				if r := send(l.client, rt, p, nil, nil); r.Code != http.StatusUnauthorized {
+					t.Errorf("%s %s as %s: %d, want 401 (needs %s)", rt.Method, rt.Path, l.name, r.Code, rt.Access)
+				}
+			}
+			if r := send(who.Anon, rt, p, nil, who.Outsider.SupportHeaders()); r.Code >= 500 || r.Code == http.StatusUnauthorized || r.Code == http.StatusForbidden {
+				t.Errorf("%s %s as the support bot: %d %s", rt.Method, rt.Path, r.Code, r.Body)
+			}
+			continue
+		}
 		for _, l := range levels {
 			r := send(l.client, rt, p, nil, nil)
 			allowed := l.rank >= rt.Access
@@ -71,8 +83,8 @@ func TestCSRFOnEveryUnsafeRoute(t *testing.T) {
 		"cross-site, no origin": {"Origin": "", "Sec-Fetch-Site": "cross-site"},
 	}
 	for _, rt := range routes {
-		if !rt.unsafe() {
-			continue
+		if !rt.unsafe() || rt.Access == service {
+			continue // service routes take no ambient credential to forge; see TestSupportRoutesIgnoreBrowserCredentials
 		}
 		for name, h := range attacks {
 			// A fresh client each time: an attack that got through must not hide behind an earlier one.
@@ -136,6 +148,14 @@ func TestHostileInputNeverCausesAServerError(t *testing.T) {
 	slug, _ := idea(t, env, who.Member, map[string]any{"title": "Hostile target", "eventLocation": "Library"})
 	tablesBefore := count(env, `SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema()`)
 	usersBefore := count(env, `SELECT count(*) FROM users`)
+	// Service routes are probed as the bot, so the hostile values reach the handlers.
+	bot := who.Admin.SupportHeaders()
+	headersFor := func(rt route) map[string]string {
+		if rt.Access == service {
+			return bot
+		}
+		return nil
+	}
 
 	check := func(rt route, what string, r *apptest.Response, took time.Duration) {
 		t.Helper()
@@ -172,7 +192,7 @@ func TestHostileInputNeverCausesAServerError(t *testing.T) {
 			label := strings.ToValidUTF8(h[:min(len(h), 24)], "?")
 			// 1. every placeholder at once
 			p := params{"slug": h, "id": h, "handle": h, "decision": h, "provider": h}
-			r, took := timed(func() *apptest.Response { return send(who.Admin, rt, p, nil, nil) })
+			r, took := timed(func() *apptest.Response { return send(who.Admin, rt, p, nil, headersFor(rt)) })
 			check(rt, "path="+label, r, took)
 
 			// 2. every query parameter
@@ -189,7 +209,7 @@ func TestHostileInputNeverCausesAServerError(t *testing.T) {
 
 			// 3. every body field (valid UTF-8 only: JSON cannot carry anything else)
 			if rt.unsafe() && (len(rt.Fields) > 0 || len(rt.Lists) > 0) && strings.ToValidUTF8(h, "") == h {
-				r, took := timed(func() *apptest.Response { return send(who.Admin, rt, plain(slug), bodyFor(rt, h), nil) })
+				r, took := timed(func() *apptest.Response { return send(who.Admin, rt, plain(slug), bodyFor(rt, h), headersFor(rt)) })
 				check(rt, "body="+label, r, took)
 			}
 		}

@@ -265,7 +265,7 @@ func TestEveryRouteIsDocumentedAndEveryDocumentedRouteExists(t *testing.T) {
 		if rt.Access >= authed && !slices.Contains(sp.statuses(op), http.StatusUnauthorized) {
 			t.Errorf("%s: protected but 401 is not documented", key)
 		}
-		if rt.Access >= staff && !slices.Contains(sp.statuses(op), http.StatusForbidden) {
+		if rt.Access >= staff && rt.Access != service && !slices.Contains(sp.statuses(op), http.StatusForbidden) {
 			t.Errorf("%s: staff only but 403 is not documented", key)
 		}
 	}
@@ -289,6 +289,8 @@ func TestProbedAnswersMatchTheDocumentation(t *testing.T) {
 	env := apptest.New(t)
 	who := cast(env)
 	slug, _ := idea(t, env, who.Member, map[string]any{"title": "Documented idea", "summary": "s"})
+	// Taken up front: probing the logout routes ends the cast's sessions.
+	bot := env.SignIn("support-probe@example.com").SupportHeaders()
 
 	for _, rt := range routes {
 		if rt.Path == "/api/auth/logout-all" || strings.HasPrefix(rt.Path, "/api/auth/{provider}") {
@@ -296,6 +298,9 @@ func TestProbedAnswersMatchTheDocumentation(t *testing.T) {
 		}
 		for name, c := range map[string]*apptest.Client{"anonymous": who.Anon, "user": who.Third, "moderator": who.Mod, "admin": who.Admin} {
 			verify(t, sp, rt, send(c, rt, plain(slug), nil, nil), name)
+		}
+		if rt.Access == service {
+			verify(t, sp, rt, send(who.Anon, rt, plain(slug), nil, bot), "support bot")
 		}
 	}
 }
@@ -311,7 +316,7 @@ func TestHappyPathsMatchTheDocumentation(t *testing.T) {
 	for _, rt := range routes {
 		byKey[rt.Method+" "+rt.Path] = rt
 	}
-	call := func(label string, c *apptest.Client, method, tmpl string, p params, body any, want int) *apptest.Response {
+	call := func(label string, c *apptest.Client, method, tmpl string, p params, body any, want int, headers ...map[string]string) *apptest.Response {
 		t.Helper()
 		route, _, _ := strings.Cut(tmpl, "?") // the query string rides along but is not part of the route
 		rt, ok := byKey[method+" "+route]
@@ -320,7 +325,11 @@ func TestHappyPathsMatchTheDocumentation(t *testing.T) {
 		}
 		sent := rt
 		sent.Path = tmpl
-		r := send(c, sent, p, body, nil)
+		var h map[string]string
+		if len(headers) > 0 {
+			h = headers[0]
+		}
+		r := send(c, sent, p, body, h)
 		if r.Code != want {
 			t.Errorf("%s: %s %s = %d, want %d: %.200s", label, method, p.fill(tmpl), r.Code, want, r.Body)
 			return r
@@ -372,6 +381,22 @@ func TestHappyPathsMatchTheDocumentation(t *testing.T) {
 	call("push key", who.Anon, "GET", "/api/push/vapid-public-key", nil, nil, 200)
 	call("push on", who.Outsider, "POST", "/api/me/push-subscriptions", nil, subscription, 204)
 	call("push off", who.Outsider, "DELETE", "/api/me/push-subscriptions", nil, map[string]any{"endpoint": subscription["endpoint"]}, 204)
+
+	call("plans", who.Anon, "GET", "/api/billing/plans", nil, nil, 200)
+	call("billing", who.Outsider, "GET", "/api/me/billing", nil, nil, 200)
+	call("upgrade", who.Outsider, "PUT", "/api/me/billing/plan", nil, map[string]any{"plan": "PLUS"}, 200)
+	call("cancel plan", who.Outsider, "DELETE", "/api/me/billing/plan", nil, nil, 200)
+	call("sponsorship", who.Anon, "GET", "/api/ideas/{slug}/sponsorship", p, nil, 200)
+	sponsored := call("sponsor", who.Outsider, "PUT", "/api/ideas/{slug}/sponsorship", p, map[string]any{"tier": "BACKER"}, 200)
+	call("sponsorship as author", who.Member, "GET", "/api/ideas/{slug}/sponsorship", p, nil, 200)
+	call("support token", who.Outsider, "POST", "/api/me/support-token", nil, nil, 200)
+	bot := who.Outsider.SupportHeaders()
+	call("bot snapshot", who.Anon, "GET", "/api/integrations/support/billing", nil, nil, 200, bot)
+	call("bot resume", who.Anon, "POST", "/api/integrations/support/billing/actions", nil, map[string]any{"actionId": "contract-resume-1", "action": "RESUME_PLAN"}, 200, bot)
+	call("bot extend", who.Anon, "POST", "/api/integrations/support/billing/actions", nil, map[string]any{"actionId": "contract-extend-1", "action": "EXTEND_PLAN", "days": 7}, 200, bot)
+	var mine struct{ Mine struct{ ID string } }
+	sponsored.Decode(&mine)
+	call("cancel sponsorship", who.Outsider, "DELETE", "/api/me/billing/sponsorships/{id}", params{"id": mine.Mine.ID}, nil, 200)
 
 	call("promote", who.Admin, "PATCH", "/api/admin/users/{handle}/role", params{"handle": apptestHandle(env, thirdMail)}, map[string]any{"role": "MODERATOR"}, 200)
 	env.SignIn(outsiderMail) // a second device

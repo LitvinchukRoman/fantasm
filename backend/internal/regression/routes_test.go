@@ -15,9 +15,14 @@ const (
 	authed
 	staff
 	admin
+	// service routes are called by another server with its bearer credential; no
+	// browser session, whatever its role, opens them.
+	service
 )
 
-func (a access) String() string { return [...]string{"public", "authed", "staff", "admin"}[a] }
+func (a access) String() string {
+	return [...]string{"public", "authed", "staff", "admin", "service"}[a]
+}
 
 // route describes one endpoint of the API for the cross-cutting tests. The table
 // is checked against the real routers and against swagger.yaml by the contract
@@ -93,6 +98,17 @@ var routes = []route{
 	{Method: "GET", Path: "/api/push/vapid-public-key"},
 	{Method: "POST", Path: "/api/me/push-subscriptions", Access: authed, Fields: []string{"endpoint"}},
 	{Method: "DELETE", Path: "/api/me/push-subscriptions", Access: authed, Fields: []string{"endpoint"}},
+
+	{Method: "GET", Path: "/api/billing/plans"},
+	{Method: "GET", Path: "/api/me/billing", Access: authed},
+	{Method: "PUT", Path: "/api/me/billing/plan", Access: authed, Fields: []string{"plan"}},
+	{Method: "DELETE", Path: "/api/me/billing/plan", Access: authed},
+	{Method: "DELETE", Path: "/api/me/billing/sponsorships/{id}", Access: authed},
+	{Method: "GET", Path: "/api/ideas/{slug}/sponsorship"},
+	{Method: "PUT", Path: "/api/ideas/{slug}/sponsorship", Access: authed, Fields: []string{"tier"}},
+	{Method: "POST", Path: "/api/me/support-token", Access: authed},
+	{Method: "GET", Path: "/api/integrations/support/billing", Access: service},
+	{Method: "POST", Path: "/api/integrations/support/billing/actions", Access: service, Fields: []string{"actionId", "action", "subject"}},
 }
 
 // params are the values substituted into path placeholders.

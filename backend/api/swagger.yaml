@@ -32,6 +32,10 @@ tags:
   - name: notifications
   - name: admin
   - name: analytics
+  - name: billing
+    description: Author plans and idea sponsorships. Payments are simulated (no card is taken) while `mock` is true.
+  - name: support
+    description: The support bot's server-to-server access, scoped to the user who is talking to it.
 
 paths:
   /api/auth/providers:
@@ -422,7 +426,8 @@ paths:
       description: |
         Authors with at least three approved ideas, or an organization benefit that skips premoderation, are
         approved at once; everyone else enters the moderation queue as PENDING. Drafts are not moderated until
-        published. At most five ideas a day for users without that benefit.
+        published. At most five ideas a day for users without that benefit. A published idea that would exceed the
+        author's plan limit on active ideas (OPEN, TEAM_FORMING, IN_PROGRESS) is a 402; staff have no limit.
       security: [{ session: [] }]
       requestBody:
         required: true
@@ -438,6 +443,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/IdeaView' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/PaymentRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Validation' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -487,7 +493,9 @@ paths:
     post:
       tags: [ideas]
       summary: Move an idea through its lifecycle
-      description: Publishing a DRAFT sends it to premoderation unless the author is trusted.
+      description: |
+        Publishing a DRAFT sends it to premoderation unless the author is trusted. Moving an idea into an active
+        status (OPEN, TEAM_FORMING, IN_PROGRESS) past the author's plan limit is a 402.
       security: [{ session: [] }]
       parameters:
         - $ref: '#/components/parameters/Slug'
@@ -508,6 +516,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/IdeaView' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/PaymentRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Validation' }
@@ -1049,6 +1058,198 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/Validation' }
 
+  /api/billing/plans:
+    get:
+      tags: [billing]
+      summary: Author plans and idea sponsorship tiers
+      description: Prices are in minor units (kopiyky). `mock` is true while payments are simulated and no card is taken.
+      responses:
+        '200':
+          description: The catalog.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCatalog' }
+  /api/me/billing:
+    get:
+      tags: [billing]
+      summary: My plan, usage, sponsorships and payments
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Overview. Sponsorships that ended are left out; the last 20 payments are listed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/me/billing/plan:
+    put:
+      tags: [billing]
+      summary: Choose a paid plan
+      description: |
+        Charges a (mock) month and starts a new period at once. Choosing the plan you already have is a no-op;
+        choosing it while it is canceled but still running resumes it without a charge.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [plan]
+              properties:
+                plan: { type: string, enum: [PLUS, PRO] }
+      responses:
+        '200':
+          description: Overview after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      tags: [billing]
+      summary: Cancel my plan at the end of the paid period
+      description: Idempotent. The plan keeps working until `currentPeriodEnd`, then the free plan applies.
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Overview after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/me/billing/sponsorships/{id}:
+    delete:
+      tags: [billing]
+      summary: Stop sponsoring an idea at the end of the paid month
+      security: [{ session: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Overview after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ideas/{slug}/sponsorship:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    get:
+      tags: [billing]
+      summary: Sponsorship state of an idea
+      description: Everybody sees the number of sponsors; only the author and staff see who they are and the monthly total.
+      responses:
+        '200':
+          description: State.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaSponsorship' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [billing]
+      summary: Sponsor an idea, or change my tier
+      description: |
+        Charges a (mock) month. Only published, approved ideas that are OPEN, TEAM_FORMING or IN_PROGRESS accept
+        sponsors (409 otherwise); you cannot sponsor your own idea (422). The author is notified of a new sponsor.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tier]
+              properties:
+                tier: { $ref: '#/components/schemas/SponsorTier' }
+      responses:
+        '200':
+          description: State after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdeaSponsorship' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api/me/support-token:
+    post:
+      tags: [support]
+      summary: Identity token for the support bot
+      description: |
+        A signed token, valid for 15 minutes, that the browser hands to the support bot so the bot can act for this
+        user and nobody else. Request a new one when it expires.
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: The token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt]
+                properties:
+                  token: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/integrations/support/billing:
+    get:
+      tags: [support]
+      summary: Billing of the user talking to the support bot
+      description: Server to server. Needs the bot's bearer credential and the user's identity token in `X-Fantasm-Support-User`.
+      security: [{ supportBot: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SupportUser'
+      responses:
+        '200':
+          description: Snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/integrations/support/billing/actions:
+    post:
+      tags: [support]
+      summary: Change the user's billing on their behalf
+      description: |
+        `actionId` is the bot's idempotency key: repeating it returns the current state with `replayed: true` and
+        applies nothing; reusing it for a different action is a 409. Every applied action is recorded.
+
+        - `CANCEL_PLAN`, `RESUME_PLAN`: cancel at period end, or undo that. Resuming a plan that already ended is a 409.
+        - `EXTEND_PLAN` with `days` (1-31): move the end of the running period, free of charge.
+        - `CANCEL_SPONSORSHIP` with `subject` = sponsorship id.
+        - `REFUND_PAYMENT` with `subject` = payment id: only paid, not yet refunded payments of the last 14 days (409 otherwise).
+          A refund does not cancel the plan or sponsorship it paid for.
+      security: [{ supportBot: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SupportUser'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [actionId, action]
+              properties:
+                actionId: { type: string, pattern: '^[A-Za-z0-9_.:-]{8,100}$' }
+                action: { type: string, enum: [CANCEL_PLAN, RESUME_PLAN, EXTEND_PLAN, CANCEL_SPONSORSHIP, REFUND_PAYMENT] }
+                subject: { type: string, format: uuid }
+                days: { type: integer, minimum: 1, maximum: 31 }
+      responses:
+        '200':
+          description: Snapshot after the action.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+
 components:
   securitySchemes:
     session:
@@ -1056,7 +1257,17 @@ components:
       in: cookie
       name: __Host-fantasm_session
       description: Opaque session token set by the OIDC callback. Only its SHA-256 hash is stored.
+    supportBot:
+      type: http
+      scheme: bearer
+      description: The support bot's credential (`SUPPORT_API_TOKEN`). Sessions and cookies are ignored on these routes.
   parameters:
+    SupportUser:
+      name: X-Fantasm-Support-User
+      in: header
+      required: true
+      description: The identity token from `POST /api/me/support-token` of the user the bot is talking to.
+      schema: { type: string, maxLength: 200 }
     Provider:
       name: provider
       in: path
@@ -1089,6 +1300,9 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Conflict:
       description: The request conflicts with the current state.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    PaymentRequired:
+      description: The author's plan allows no more active ideas; finish or archive one, or choose a higher plan.
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Validation:
       description: The input is well-formed but not acceptable; `fields` names what to fix.
@@ -1300,7 +1514,7 @@ components:
         error: { type: string }
         code:
           type: string
-          enum: [invalid_request, unauthorized, forbidden, not_found, conflict, rate_limited, payload_too_large, validation_failed, unsupported_media_type, method_not_allowed, not_implemented, internal_error]
+          enum: [invalid_request, unauthorized, payment_required, forbidden, not_found, conflict, rate_limited, payload_too_large, validation_failed, unsupported_media_type, method_not_allowed, not_implemented, internal_error]
         fields: { type: object, additionalProperties: { type: string } }
         requestId: { type: string }
     Category: { type: string, enum: [STARTUP, PROJECT, EVENT, COMMUNITY, VOLUNTEERING, OTHER] }
@@ -1561,3 +1775,124 @@ components:
           description: Ids and short display strings only, for example `ideaSlug`, `ideaTitle`, `actorHandle`.
         read: { type: boolean }
         createdAt: { type: string, format: date-time }
+    PlanCode: { type: string, enum: [FREE, PLUS, PRO] }
+    SponsorTier: { type: string, enum: [SUPPORTER, BACKER, PATRON] }
+    SubscriptionStatus: { type: string, enum: [ACTIVE, CANCELED], description: CANCELED still runs until the period ends. }
+    Plan:
+      type: object
+      required: [code, name, priceMinor, activeIdeas, perks]
+      properties:
+        code: { $ref: '#/components/schemas/PlanCode' }
+        name: { type: string }
+        priceMinor: { type: integer, description: Monthly price in kopiyky. }
+        activeIdeas: { type: integer, nullable: true, description: Active ideas allowed at once; null means no limit. }
+        perks: { type: array, items: { type: string } }
+    Tier:
+      type: object
+      required: [code, name, priceMinor, perks]
+      properties:
+        code: { $ref: '#/components/schemas/SponsorTier' }
+        name: { type: string }
+        priceMinor: { type: integer }
+        perks: { type: array, items: { type: string } }
+    BillingCatalog:
+      type: object
+      required: [currency, mock, plans, tiers]
+      properties:
+        currency: { type: string, enum: [UAH] }
+        mock: { type: boolean }
+        plans: { type: array, items: { $ref: '#/components/schemas/Plan' } }
+        tiers: { type: array, items: { $ref: '#/components/schemas/Tier' } }
+    PlanState:
+      allOf:
+        - $ref: '#/components/schemas/Plan'
+        - type: object
+          required: [status, currentPeriodEnd, cancelAtPeriodEnd]
+          properties:
+            status:
+              type: string
+              nullable: true
+              enum: [ACTIVE, CANCELED]
+              description: Null on the free plan.
+            currentPeriodEnd: { type: string, format: date-time, nullable: true }
+            cancelAtPeriodEnd: { type: boolean }
+    Sponsorship:
+      type: object
+      required: [id, idea, tier, tierName, priceMinor, status, currentPeriodEnd, cancelAtPeriodEnd, since]
+      properties:
+        id: { type: string, format: uuid }
+        idea:
+          type: object
+          required: [slug, title]
+          properties:
+            slug: { type: string }
+            title: { type: string }
+        tier: { $ref: '#/components/schemas/SponsorTier' }
+        tierName: { type: string }
+        priceMinor: { type: integer }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+        currentPeriodEnd: { type: string, format: date-time }
+        cancelAtPeriodEnd: { type: boolean }
+        since: { type: string, format: date-time }
+    Payment:
+      type: object
+      required: [id, kind, amountMinor, currency, status, description, createdAt, refundedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [PLAN, SPONSORSHIP] }
+        amountMinor: { type: integer }
+        currency: { type: string, enum: [UAH] }
+        status: { type: string, enum: [SUCCEEDED, REFUNDED] }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+        refundedAt: { type: string, format: date-time, nullable: true }
+    BillingOverview:
+      type: object
+      required: [mock, currency, plan, usage, sponsorships, payments]
+      properties:
+        mock: { type: boolean }
+        currency: { type: string, enum: [UAH] }
+        plan: { $ref: '#/components/schemas/PlanState' }
+        usage:
+          type: object
+          required: [activeIdeas, limit]
+          properties:
+            activeIdeas: { type: integer }
+            limit: { type: integer, nullable: true }
+        sponsorships: { type: array, items: { $ref: '#/components/schemas/Sponsorship' } }
+        payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+    IdeaSponsorship:
+      type: object
+      required: [sponsors, accepting, own, mine]
+      properties:
+        sponsors: { type: integer }
+        accepting: { type: boolean, description: Whether the idea takes new sponsors now. }
+        own: { type: boolean }
+        mine:
+          allOf: [{ $ref: '#/components/schemas/Sponsorship' }]
+          nullable: true
+        supporters:
+          type: array
+          description: Author and staff only.
+          items:
+            type: object
+            required: [handle, name, tier, since]
+            properties:
+              handle: { type: string }
+              name: { type: string }
+              tier: { $ref: '#/components/schemas/SponsorTier' }
+              since: { type: string, format: date-time }
+        monthlyMinor: { type: integer, description: Author and staff only. Sum of the running sponsorships per month. }
+    SupportSnapshot:
+      allOf:
+        - $ref: '#/components/schemas/BillingOverview'
+        - type: object
+          required: [user, replayed]
+          properties:
+            user:
+              type: object
+              required: [handle, name]
+              properties:
+                handle: { type: string }
+                name: { type: string }
+            replayed: { type: boolean }

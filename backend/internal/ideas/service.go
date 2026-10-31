@@ -30,12 +30,19 @@ type Gate interface {
 	RequireReview(ctx context.Context) (bool, error)
 }
 
+// PlanLimits tells how many active ideas an author's plan allows. Zero means no limit.
+// Nil leaves authors unlimited.
+type PlanLimits interface {
+	ActiveIdeaLimit(ctx context.Context, userID string) (int, error)
+}
+
 type Service struct {
 	repo   ports.Repository
 	tx     ports.Transactor
 	badges viewer.BadgeLookup
 	orgs   Organizations
 	gate   Gate
+	plans  PlanLimits
 	events anports.Recorder
 	cursor cursorCodec
 	now    func() time.Time
@@ -47,6 +54,9 @@ func NewService(repo ports.Repository, tx ports.Transactor, badges viewer.BadgeL
 
 // WithGate attaches the premoderation switch.
 func (s *Service) WithGate(g Gate) *Service { s.gate = g; return s }
+
+// WithPlanLimits caps the number of active ideas per author by their plan.
+func (s *Service) WithPlanLimits(p PlanLimits) *Service { s.plans = p; return s }
 
 // WithEvents records product events in the same transaction as the change.
 func (s *Service) WithEvents(r anports.Recorder) *Service { s.events = r; return s }
@@ -169,6 +179,11 @@ func (s *Service) Create(ctx context.Context, v viewer.Viewer, in CreateInput) (
 				return apperr.RateLimited("daily limit of new ideas reached")
 			}
 		}
+		if in.Status.Active() && !v.IsStaff() {
+			if err := s.withinPlan(ctx, v.ID()); err != nil {
+				return err
+			}
+		}
 		needCase := false
 		n.Moderation, needCase = moderationFor(v, approved, in.Status, reviewAll)
 		id, created, err := s.repo.Insert(ctx, n)
@@ -215,6 +230,29 @@ func moderationFor(v viewer.Viewer, approvedIdeas int, status domain.Status, rev
 	default:
 		return domain.Pending, true
 	}
+}
+
+// withinPlan refuses one more active idea once the author holds as many as their plan allows.
+// The caller holds the author's row lock, so concurrent creations cannot both slip under the cap.
+func (s *Service) withinPlan(ctx context.Context, authorID string) error {
+	if s.plans == nil {
+		return nil
+	}
+	limit, err := s.plans.ActiveIdeaLimit(ctx, authorID)
+	if err != nil {
+		return fmt.Errorf("plan limit: %w", err)
+	}
+	if limit <= 0 {
+		return nil
+	}
+	active, err := s.repo.CountActive(ctx, authorID)
+	if err != nil {
+		return fmt.Errorf("count active ideas: %w", err)
+	}
+	if active >= limit {
+		return apperr.PaymentRequired("your plan allows " + strconv.Itoa(limit) + " active ideas; finish or archive one, or choose a higher plan")
+	}
+	return nil
 }
 
 func (s *Service) reviewAll(ctx context.Context) (bool, error) {
@@ -416,6 +454,17 @@ func (s *Service) ChangeStatus(ctx context.Context, v viewer.Viewer, slug string
 				actor = viewer.Viewer{} // staff publishing someone's draft does not lend them staff privileges
 			}
 			moderation, openCase = moderationFor(actor, approved, next, reviewAll)
+		}
+		// Publishing a draft or reopening finished work adds an active idea; staff are not bound by plans.
+		if next.Active() && !idea.Status.Active() && !v.IsStaff() {
+			if !publishing {
+				if _, err := s.repo.LockAuthor(ctx, idea.Author.ID); err != nil {
+					return fmt.Errorf("lock author: %w", err)
+				}
+			}
+			if err := s.withinPlan(ctx, idea.Author.ID); err != nil {
+				return err
+			}
 		}
 		if err := s.repo.SetStatus(ctx, idea.ID, next, moderation, now); err != nil {
 			return fmt.Errorf("set status: %w", err)

@@ -17,6 +17,7 @@ const (
 	KindUnprocessable
 	KindUnsupportedMedia
 	KindMethodNotAllowed
+	KindPaymentRequired
 )
 
 type Error struct {
@@ -46,6 +47,9 @@ func NotFound(msg string) error     { return New(KindNotFound, msg) }
 func Conflict(msg string) error     { return New(KindConflict, msg) }
 func RateLimited(msg string) error  { return New(KindRateLimited, msg) }
 func TooLarge(msg string) error     { return New(KindTooLarge, msg) }
+
+// PaymentRequired reports that the caller's plan does not cover the request; a higher plan would.
+func PaymentRequired(msg string) error { return New(KindPaymentRequired, msg) }
 
 // Validation reports well-formed input that breaks a domain rule. Fields maps
 // a request field name to a message that is safe to show the client.

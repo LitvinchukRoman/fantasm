@@ -59,6 +59,14 @@ type Config struct {
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
 
+	// SupportAPIToken is the bearer credential of the support bot. Empty turns the
+	// support integration routes off.
+	SupportAPIToken string
+	// Active ideas an author may have on the free and Plus plans; 0 means no limit.
+	// Pro is always unlimited.
+	PlanFreeActiveIdeas int
+	PlanPlusActiveIdeas int
+
 	DBMaxConns         int
 	DBStatementTimeout time.Duration
 	ShutdownTimeout    time.Duration
@@ -147,6 +155,10 @@ func Load() (Config, error) {
 		VAPIDPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
 		VAPIDPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
 
+		SupportAPIToken:     strings.TrimSpace(os.Getenv("SUPPORT_API_TOKEN")),
+		PlanFreeActiveIdeas: integer("PLAN_FREE_ACTIVE_IDEAS", 3, 0, 10_000),
+		PlanPlusActiveIdeas: integer("PLAN_PLUS_ACTIVE_IDEAS", 15, 0, 10_000),
+
 		DBMaxConns:         integer("DB_MAX_CONNS", 20, 1, 500),
 		DBStatementTimeout: duration("DB_STATEMENT_TIMEOUT", 10*time.Second, 100*time.Millisecond, 5*time.Minute),
 		ShutdownTimeout:    duration("SHUTDOWN_TIMEOUT", 20*time.Second, time.Second, 5*time.Minute),
@@ -187,6 +199,13 @@ func Load() (Config, error) {
 	}
 	if (cfg.VAPIDPublicKey == "") != (cfg.VAPIDPrivateKey == "") {
 		errs = append(errs, errors.New("VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together"))
+	}
+	if cfg.SupportAPIToken != "" && len(cfg.SupportAPIToken) < 32 {
+		errs = append(errs, errors.New("SUPPORT_API_TOKEN must be at least 32 characters"))
+	}
+	if unlimited := 0; cfg.PlanPlusActiveIdeas != unlimited &&
+		(cfg.PlanFreeActiveIdeas == unlimited || cfg.PlanPlusActiveIdeas < cfg.PlanFreeActiveIdeas) {
+		errs = append(errs, errors.New("PLAN_PLUS_ACTIVE_IDEAS must allow at least as many ideas as PLAN_FREE_ACTIVE_IDEAS (0 means no limit)"))
 	}
 
 	for key, raw := range map[string]string{"GITHUB_URL": cfg.GitHubURL, "GITHUB_API_URL": cfg.GitHubAPIURL} {
