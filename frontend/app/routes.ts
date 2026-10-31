@@ -24,6 +24,7 @@ export default [
     route("welcome", "routes/welcome.tsx"),
   ]),
   route("cookies", "routes/cookies.tsx"),
+  route("help", "routes/help.tsx"),
   route("sitemap.xml", "routes/sitemap.ts"),
   route("robots.txt", "routes/robots.ts"),
   route("u/:handle", "routes/profile.tsx"),
