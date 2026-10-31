@@ -1485,3 +1485,234 @@ html.ideas-curved body {
     animation: none;
   }
 }
+
+/*
+ * Чат підтримки: бічна панель на всю висоту праворуч (формат помічника в Google Workspace),
+ * на телефоні на весь екран. <dialog> + showModal() дає top layer над банером згоди й доком,
+ * фокус-трап і Esc. Сторінка лишається видимою: асистент працює поруч із нею.
+ */
+.support-panel {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+  overflow: hidden;
+}
+
+.support-panel[open] {
+  display: flex;
+  flex-direction: column;
+  animation: support-panel-in 0.28s var(--ease-out-expo);
+}
+
+.support-panel::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+@media (min-width: 640px) {
+  .support-panel {
+    inset: 0.75rem 0.75rem 0.75rem auto;
+    /* Ширину задає панель (перетягування, кнопка в шапці); межі рахує clampPanelWidth. */
+    width: min(var(--support-width, 30rem), calc(100vw - 1.5rem));
+    height: calc(100dvh - 1.5rem);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-card);
+    /* Панель літає над сторінкою: це один із двох шарів, яким дозволена тінь. */
+    box-shadow: 0 32px 80px -24px rgb(0 0 0 / 80%);
+  }
+
+  .support-panel::backdrop {
+    background: rgb(0 0 0 / 30%);
+  }
+
+  .support-panel[open] {
+    animation-name: support-panel-slide;
+  }
+}
+
+@keyframes support-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@keyframes support-panel-slide {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+
+/* Лівий край панелі: тягнеш мишею або стрілками з фокусом. На телефоні панель на весь екран, краю немає. */
+.support-resize {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .support-resize {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 2;
+    display: block;
+    width: 0.75rem;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+
+  .support-resize::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0.3125rem;
+    width: 3px;
+    height: 2.75rem;
+    border-radius: 999px;
+    background: var(--color-text-faint);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity var(--duration-ui), background-color var(--duration-ui);
+  }
+
+  .support-resize:hover::after,
+  .support-resize:focus-visible::after,
+  .support-panel[data-dragging] .support-resize::after {
+    opacity: 1;
+  }
+
+  .support-resize:focus-visible {
+    outline: none;
+  }
+
+  .support-resize:focus-visible::after,
+  .support-panel[data-dragging] .support-resize::after {
+    background: var(--color-accent);
+  }
+}
+
+/* Поки тягнемо, текст не виділяється, а курсор не мерехтить над вмістом. */
+.support-panel[data-dragging] {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+/* Файл тягнуть над чатом: уся панель стає зоною скидання. */
+.support-drop {
+  outline: 1.5px dashed var(--color-accent);
+  outline-offset: -0.75rem;
+  border-radius: var(--radius-card);
+}
+
+/* Тиха червона заграва вгорі панелі, як на hero: панель — частина того самого простору. */
+.support-glow {
+  background: radial-gradient(120% 60% at 85% 0%, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 60%);
+}
+
+/*
+ * Кнопка «Допомога»: є в SSR-HTML кожної сторінки, тож лише CSS, без motion.
+ * Помітна, але не червона: червоним лише іконка чату.
+ */
+.support-launcher {
+  position: fixed;
+  right: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem 0.75rem 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-strong) 92%, transparent);
+  color: var(--color-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 10%, transparent),
+    0 16px 40px -12px rgb(0 0 0 / 80%);
+  transition:
+    background-color var(--duration-ui),
+    border-color var(--duration-ui),
+    transform var(--duration-ui);
+}
+
+.support-launcher:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .support-launcher {
+    right: 1.5rem;
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* У curved-стрічці праворуч знизу плаває панель фільтрів (right-6 bottom-6): стаємо над нею, по її краю. */
+html.ideas-curved .support-launcher {
+  right: 1.5rem;
+  bottom: 5.25rem;
+}
+
+@media (hover: hover) {
+  .support-launcher:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    transform: translateY(-2px);
+  }
+}
+
+.support-log {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.support-link {
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 3px;
+  transition: color var(--duration-ui);
+}
+
+.support-link:hover,
+.support-link:focus-visible {
+  color: var(--color-text);
+}
+
+/* Поле вводу: одна пігулка-картка з кнопкою всередині, фокус підсвічує рамку. */
+.support-composer {
+  border-color: var(--color-text-faint);
+}
+
+.support-composer:focus-within {
+  border-color: var(--color-text-muted);
+}
+
+/* Поточний крок бота: тихий пульс, не цикл того, що читають. */
+.support-pulse {
+  animation: support-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes support-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-panel[open],
+  .support-pulse {
+    animation: none;
+  }
+
+  .support-launcher {
+    transition: none;
+  }
+}

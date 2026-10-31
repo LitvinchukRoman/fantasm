@@ -12,6 +12,7 @@ const PRODUCT_LINKS = [
   { href: "/events", label: "Події" },
   { href: "/guides", label: "Гайди" },
   { href: "/ideas/new", label: "Запропонувати ідею" },
+  { href: "/help", label: "Допомога" },
 ];
 
 export function SiteFooter() {

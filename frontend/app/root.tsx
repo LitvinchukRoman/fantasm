@@ -1,6 +1,7 @@
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, redirect, Scripts, ScrollRestoration } from "react-router";
 import { usePageViews } from "~/lib/analytics";
 import { GuideFrame } from "~/components/guides/frame";
+import { SupportLauncher } from "~/components/support/launcher";
 import { ConsentBanner } from "~/components/ui/consent-banner";
 import { api, getCurrentUser, routeApi } from "~/lib/api.server";
 import type { User } from "~/lib/api-types";
@@ -89,7 +90,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   usePageViews();
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <SupportLauncher />
+    </>
+  );
 }
 
 export type RootData = { currentUser: User | null; unread: number };
