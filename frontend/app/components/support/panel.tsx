@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type SyntheticEvent,
+} from "react";
 import { clampPanelWidth, isWide, PANEL_WIDTH } from "~/lib/support/placement";
 import { SupportChat, type SupportContext } from "./support-chat";
 
@@ -34,12 +43,39 @@ export default function SupportPanel({ open, onClose, context }: { open: boolean
   const [width, setWidth] = useState(readWidth);
   const [dragging, setDragging] = useState(false);
 
+  // Відкриття запускає CSS-анімацію саме. Закриття спершу програє анімацію виходу (data-closing)
+  // і лише після неї закриває <dialog>; запасний таймер — якщо анімації немає (reduced motion).
   useEffect(() => {
     const node = dialog.current;
     if (!node) return;
-    if (open && !node.open) node.showModal();
-    if (!open && node.open) node.close();
+    if (open) {
+      delete node.dataset.closing;
+      if (!node.open) node.showModal();
+      return;
+    }
+    if (!node.open) return;
+    node.dataset.closing = "";
+    const finish = () => {
+      if (!node.hasAttribute("data-closing")) return;
+      delete node.dataset.closing;
+      node.close();
+    };
+    const onEnd = (event: AnimationEvent) => {
+      if (event.target === node && event.animationName === "support-panel-out") finish();
+    };
+    node.addEventListener("animationend", onEnd);
+    const fallback = window.setTimeout(finish, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320);
+    return () => {
+      node.removeEventListener("animationend", onEnd);
+      window.clearTimeout(fallback);
+    };
   }, [open]);
+
+  // Esc: замість миттєвого закриття браузером — та сама анімація, що й для хрестика.
+  const onCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
+    event.preventDefault();
+    onClose();
+  };
 
   // Вікно звузили: панель не має вилізти за екран.
   useEffect(() => {
@@ -91,6 +127,7 @@ export default function SupportPanel({ open, onClose, context }: { open: boolean
     <dialog
       ref={dialog}
       onClose={onClose}
+      onCancel={onCancel}
       onClick={onBackdrop}
       aria-labelledby="support-title"
       className="support-panel"

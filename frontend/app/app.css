@@ -1506,14 +1506,33 @@ html.ideas-curved body {
   overflow: hidden;
 }
 
+/*
+ * Поява й зникнення. Відкриття — м'який виїзд (на телефоні знизу, на desktop справа) з
+ * легким масштабом; закриття — коротший зворотний рух. Панель ставить data-closing, чекає
+ * кінця анімації й лише тоді закриває <dialog>, інакше браузер сховав би її миттєво.
+ */
+.support-panel {
+  --support-from: translateY(1.5rem) scale(0.985);
+}
+
 .support-panel[open] {
   display: flex;
   flex-direction: column;
-  animation: support-panel-in 0.28s var(--ease-out-expo);
+  transform-origin: bottom center;
+  animation: support-panel-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.support-panel[open][data-closing] {
+  animation: support-panel-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 .support-panel::backdrop {
   background: rgb(0 0 0 / 50%);
+  animation: support-backdrop-in 0.3s ease-out both;
+}
+
+.support-panel[data-closing]::backdrop {
+  animation: support-backdrop-out 0.22s ease-in both;
 }
 
 @media (min-width: 640px) {
@@ -1532,22 +1551,38 @@ html.ideas-curved body {
     background: rgb(0 0 0 / 30%);
   }
 
+  .support-panel {
+    --support-from: translateX(2rem) scale(0.985);
+  }
+
   .support-panel[open] {
-    animation-name: support-panel-slide;
+    transform-origin: right center;
   }
 }
 
 @keyframes support-panel-in {
   from {
     opacity: 0;
-    transform: translateY(1rem);
+    transform: var(--support-from);
   }
 }
 
-@keyframes support-panel-slide {
+@keyframes support-panel-out {
+  to {
+    opacity: 0;
+    transform: var(--support-from);
+  }
+}
+
+@keyframes support-backdrop-in {
   from {
     opacity: 0;
-    transform: translateX(1.5rem);
+  }
+}
+
+@keyframes support-backdrop-out {
+  to {
+    opacity: 0;
   }
 }
 
@@ -1708,6 +1743,9 @@ html.ideas-curved .support-launcher {
 
 @media (prefers-reduced-motion: reduce) {
   .support-panel[open],
+  .support-panel[open][data-closing],
+  .support-panel::backdrop,
+  .support-panel[data-closing]::backdrop,
   .support-pulse {
     animation: none;
   }
